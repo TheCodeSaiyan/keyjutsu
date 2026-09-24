@@ -140,3 +140,18 @@ collectors yet, so every named fact is undecided and a step whose precondition
 needs one goes to review. Collectors belong with agent integration (Milestone
 6), where an investigating agent can propose them and KeyJutsu can run the
 read-only ones itself.
+
+## D17. The Cursor adapter is unverified
+
+The Cursor agent CLI (`cursor-agent`) was not installed on the machine the
+adapters were written on; only the Cursor editor was. Its invocation follows
+Cursor's published usage but has not been checked against its `--help`.
+`keyjutsu agents` reports it as unverified until it has been.
+
+## D18. No adapter has been exercised against a live agent
+
+Building Milestone 6 without the owner present, calling Codex, Claude Code,
+Gemini or Copilot would have sent requests on their accounts without their
+agreement. The adapters are tested against recorded answers in each CLI's
+documented output shape. `keyjutsu agents check --live` is the live check, run
+when the owner chooses.

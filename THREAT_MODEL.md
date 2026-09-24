@@ -6,7 +6,7 @@ this document says where it is held, what could break it, and what is done
 about each threat, including the ones that are not dealt with yet.
 
 It is kept current with the code. Each invariant below carries its actual
-status. At Milestone 5 several of them are still **planned**: the table says so rather
+status. At Milestone 6 several of them are still **planned**: the table says so rather
 than implying protection that does not exist yet.
 
 ## What is being protected
@@ -51,8 +51,8 @@ it is; **planned** names the milestone.
 
 | # | Invariant | Status | Where, and the test |
 | --- | --- | --- | --- |
-| 1 | Agent output is never execution authority. | Partial: M3 held, M6 planned | No agent integration exists yet, so nothing an agent says can run. What an agent returns can only enter as a proposal: `parse_proposal` refuses any claim of readiness, proof, hashes or approval (`an_agent_cannot_claim_readiness_but_a_stored_plan_may_record_it`), and KeyJutsu, not the plan, decides control flow (`keyjutsu_plan::frontier`). |
-| 2 | Secrets never enter agent context. | Planned, M6 and M9 | |
+| 1 | Agent output is never execution authority. | Held for everything built so far | Agents run in their read-only modes (`every_invocation_asks_for_read_only_investigation`, `no_invocation_ever_bypasses_the_agents_own_safeguards`); what they return is a proposal that must pass `parse_proposal`, which refuses any claim of readiness, proof, hashes or approval; KeyJutsu decides control flow and validates independently; the agent's identity is KeyJutsu's to state. Nothing executes approved plans until M8. |
+| 2 | Secrets never enter agent context. | Partial | Files and pasted text are redacted by pattern before sending (`a_secret_in_pasted_context_never_reaches_the_agent`) and the manifest is shown before anything is sent. Unrecognisable secrets are not caught, and a folder the agent investigates is read by the agent, not KeyJutsu; the manifest warns about secret-looking files there. |
 | 3 | Approved execution snapshots are immutable. | Partial: held against accident, not a local forger | `ApprovedSnapshot` has no mutating methods and re-checks every hash on load; `any_edit_to_a_stored_snapshot_is_refused` (ten kinds of edit). The hashes are unkeyed: someone who can write the file can recompute them (deviation D14; keyed MAC with M10 and M14). |
 | 4 | Plan mutation invalidates affected approval. | Held | Approvals bind to step hashes that chain through predecessors ([ADR 0010](docs/architecture/adr/0010-plan-hashing.md)); `changing_a_step_invalidates_it_and_everything_after_it`; property test `hashes_and_diff_agree_on_what_a_change_affects`. |
 | 5 | The elevated broker accepts only authorised structured operations. | Planned, M10 | Nothing runs elevated today; there is no elevated code path at all. |
@@ -91,6 +91,12 @@ it is; **planned** names the milestone.
 | Looking commands up imports a module whose loading code runs. | `Get-Command` may import modules from the machine's module path to answer. Those modules are already installed; the plan cannot add one. | Accepted, stated. |
 | A profile alias or function hides what a command really is. | Validation runs without the profile and reports such names as not found. | Held, at the cost of blocking steps that rely on a profile. |
 | A stored snapshot is edited to run something else. | Every hash is re-checked on load. | Partial: stops accidental and naive edits; a forger with write access can recompute unkeyed hashes (D14). |
+
+| An agent claims to be another agent, or claims KeyJutsu's authority. | The plan's `agent` field is overwritten with the agent actually run; KeyJutsu-owned fields are refused in any proposal. | Held (`a_proposal_is_accepted_and_stamped_with_the_agent_that_really_wrote_it`). |
+| A revision quietly changes steps it was not asked to. | A step revision may return one step, with the same id; the rest of the plan is KeyJutsu's copy. | Held (`a_step_revision_changes_that_step_only_and_discards_validation`). |
+| Validation from before a revision is taken to still apply. | Revisions discard validation results. | Held (same test). |
+| An agent is run with its safeguards off. | No invocation passes bypass, auto-approve or full-access options. | Held (`no_invocation_ever_bypasses_the_agents_own_safeguards`). |
+| An agent investigating a folder reads secrets there. | The manifest names secret-looking files and nothing is sent without `--send`. | **Partial**: the agent's read-only mode still lets it read. |
 
 ## Not covered yet
 

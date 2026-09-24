@@ -5,6 +5,7 @@ members = [
     "crates/keyjutsu-execution",
     "crates/keyjutsu-plan",
     "crates/keyjutsu-validation",
+    "crates/keyjutsu-agent",
     "crates/keyjutsu-core",
     "cli/keyjutsu",
     "apps/desktop/src-tauri",
@@ -17,6 +18,7 @@ default-members = [
     "crates/keyjutsu-execution",
     "crates/keyjutsu-plan",
     "crates/keyjutsu-validation",
+    "crates/keyjutsu-agent",
     "crates/keyjutsu-core",
     "cli/keyjutsu",
 ]
@@ -34,6 +36,7 @@ keyjutsu-execution = { path = "crates/keyjutsu-execution" }
 keyjutsu-core = { path = "crates/keyjutsu-core" }
 keyjutsu-plan = { path = "crates/keyjutsu-plan" }
 keyjutsu-validation = { path = "crates/keyjutsu-validation" }
+keyjutsu-agent = { path = "crates/keyjutsu-agent" }
 
 clap = { version = "4.5", features = ["derive"] }
 crossterm = "0.29"
@@ -43,6 +46,7 @@ getrandom = "0.4"
 jsonschema = { version = "0.57", default-features = false }
 portable-pty = "0.9"
 proptest = "1.11"
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

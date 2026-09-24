@@ -657,4 +657,53 @@ pub struct KeyJutsuState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub snapshot_hash: Option<String>,
+    /// Who did what to which step, in order (§7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provenance: Vec<ProvenanceEvent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "plan/")]
+pub enum ActorKind {
+    Agent,
+    Operator,
+    Keyjutsu,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "plan/")]
+pub struct Actor {
+    pub kind: ActorKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub agent: Option<Agent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "plan/")]
+pub enum ProvenanceAction {
+    Authored,
+    Challenged,
+    Revised,
+    Edited,
+    Validated,
+    Approved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "plan/")]
+pub struct ProvenanceEvent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub step: Option<StepId>,
+    pub actor: Actor,
+    pub action: ProvenanceAction,
+    pub at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub note: Option<String>,
 }

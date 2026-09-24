@@ -135,7 +135,8 @@ pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool, d
         print_report(&draft, &report);
         return ExitCode::FAILURE;
     }
-    let plan = match ValidPlan::revalidate(report.record_in(draft.plan()), false) {
+    let plan = match ValidPlan::revalidate(report.record_in(draft.plan(), &fingerprint::now_rfc3339()), false)
+    {
         Ok(p) => p,
         Err(e) => {
             eprintln!("keyjutsu: recording the validation failed: {e}");

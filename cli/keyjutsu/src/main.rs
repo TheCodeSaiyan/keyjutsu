@@ -4,6 +4,7 @@
 //! input and the rules about what reaches a shell come from keyjutsu-core,
 //! the same code the desktop app uses.
 
+mod agent_cli;
 mod console;
 mod plans;
 
@@ -26,6 +27,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// List the supported AI agents: installed, version, sign-in, read-only mode.
+    Agents {
+        #[command(subcommand)]
+        action: Option<AgentsCommand>,
+        /// Print the list as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Check this machine is ready: Windows, ConPTY, shells and staged input.
     Doctor {
         /// Print the full report as JSON.
@@ -59,7 +68,71 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+enum AgentsCommand {
+    /// Send each installed agent a tiny request and check the adapter still
+    /// works with its version. This uses your agents' accounts.
+    Check {
+        /// Required: confirms you mean to send requests to the agents.
+        #[arg(long)]
+        live: bool,
+    },
+}
+
+#[derive(clap::Args)]
+struct AgentArgs {
+    /// Which agent: codex, claude, gemini, copilot or cursor.
+    #[arg(long)]
+    agent: String,
+    /// Actually send the request. Without it, KeyJutsu shows what would be
+    /// sent and stops (§9: the context manifest comes before submission).
+    #[arg(long)]
+    send: bool,
+}
+
+#[derive(Subcommand)]
 enum PlanCommand {
+    /// Ask an agent to investigate (read-only) and propose a plan.
+    Propose {
+        /// What you want done.
+        task: String,
+        #[command(flatten)]
+        agent: AgentArgs,
+        /// A file to include, redacted. Repeatable.
+        #[arg(long = "file")]
+        files: Vec<std::path::PathBuf>,
+        /// A folder for the agent to investigate; it is started there.
+        #[arg(long)]
+        folder: Option<std::path::PathBuf>,
+        /// Where to write the proposed plan.
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
+    /// Ask an agent to revise one step, with your guidance.
+    Revise {
+        file: std::path::PathBuf,
+        #[arg(long)]
+        step: String,
+        #[arg(long)]
+        guidance: String,
+        /// The task, if the plan's title does not say it well enough.
+        #[arg(long)]
+        task: Option<String>,
+        #[command(flatten)]
+        agent: AgentArgs,
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
+    /// Ask a second agent to challenge a plan. It cannot change it.
+    Review {
+        file: std::path::PathBuf,
+        #[arg(long)]
+        task: Option<String>,
+        #[command(flatten)]
+        agent: AgentArgs,
+        /// Write the plan with the review recorded in its provenance.
+        #[arg(long)]
+        record: Option<std::path::PathBuf>,
+    },
     /// Check a plan file against the schema and its structure, and show the
     /// order its steps would run in.
     Check {
@@ -192,6 +265,17 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Doctor { json } => doctor(json),
+        Command::Agents { action: None, json } => agent_cli::list(json),
+        Command::Agents { action: Some(AgentsCommand::Check { live }), .. } => agent_cli::check(live),
+        Command::Plan(PlanCommand::Propose { task, agent, files, folder, out }) => {
+            agent_cli::propose(&task, &agent.agent, agent.send, &files, folder.as_deref(), &out)
+        }
+        Command::Plan(PlanCommand::Revise { file, step, guidance, task, agent, out }) => {
+            agent_cli::revise(&file, &step, &guidance, task.as_deref(), &agent.agent, agent.send, &out)
+        }
+        Command::Plan(PlanCommand::Review { file, task, agent, record }) => {
+            agent_cli::review(&file, task.as_deref(), &agent.agent, agent.send, record.as_deref())
+        }
         Command::Shell(shell) => session(shell.options(), None),
         Command::Demo { shell, performance } => {
             let options = shell.options();

@@ -18,6 +18,7 @@
 
 pub mod judge;
 pub mod powershell;
+pub mod probe;
 pub mod process;
 pub mod risk;
 
@@ -27,7 +28,8 @@ use std::path::Path;
 use keyjutsu_plan::ValidPlan;
 use keyjutsu_plan::condition::{Facts, StepResult, Truth, evaluate};
 use keyjutsu_plan::model::{
-    Check, Condition, FactValue, KeyJutsuState, Plan, Readiness, ServiceState, ShellName, StepState,
+    Actor, ActorKind, Check, Condition, FactValue, KeyJutsuState, Plan, ProvenanceAction, ProvenanceEvent,
+    Readiness, ServiceState, ShellName, StepState,
 };
 use keyjutsu_plan::version::{Constraint, Version};
 use keyjutsu_terminal::{ShellKind, shell};
@@ -81,12 +83,25 @@ impl Report {
             .collect()
     }
 
-    /// The plan with this report recorded as KeyJutsu's own state.
-    pub fn record_in(&self, plan: &Plan) -> Plan {
+    /// The plan with this report recorded as KeyJutsu's own state, keeping
+    /// its provenance and adding that KeyJutsu validated it at `at`.
+    pub fn record_in(&self, plan: &Plan, at: &str) -> Plan {
         let mut out = plan.clone();
         let revision = plan.keyjutsu.as_ref().and_then(|k| k.revision).unwrap_or(0) + 1;
-        out.keyjutsu =
-            Some(KeyJutsuState { revision: Some(revision), steps: self.steps.clone(), snapshot_hash: None });
+        let mut provenance = plan.keyjutsu.as_ref().map(|k| k.provenance.clone()).unwrap_or_default();
+        provenance.push(ProvenanceEvent {
+            step: None,
+            actor: Actor { kind: ActorKind::Keyjutsu, agent: None },
+            action: ProvenanceAction::Validated,
+            at: at.to_owned(),
+            note: None,
+        });
+        out.keyjutsu = Some(KeyJutsuState {
+            revision: Some(revision),
+            steps: self.steps.clone(),
+            snapshot_hash: None,
+            provenance,
+        });
         out
     }
 }

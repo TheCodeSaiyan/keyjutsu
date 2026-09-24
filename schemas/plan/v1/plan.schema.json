@@ -836,6 +836,47 @@
         },
         "snapshot_hash": {
           "$ref": "#/$defs/sha256"
+        },
+        "provenance": {
+          "description": "Who did what to which step, in order: authored, challenged, revised, edited, validated, approved (§7). Recorded by KeyJutsu; never taken from an agent.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/provenance_event"
+          }
+        }
+      }
+    },
+    "provenance_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "action", "at"],
+      "properties": {
+        "step": {
+          "$ref": "#/$defs/id"
+        },
+        "actor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": ["agent", "operator", "keyjutsu"]
+            },
+            "agent": {
+              "$ref": "#/$defs/agent"
+            }
+          }
+        },
+        "action": {
+          "enum": ["authored", "challenged", "revised", "edited", "validated", "approved"]
+        },
+        "at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "note": {
+          "$ref": "#/$defs/text"
         }
       }
     }

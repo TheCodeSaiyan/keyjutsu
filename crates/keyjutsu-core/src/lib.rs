@@ -12,6 +12,7 @@ pub mod ipc;
 pub mod readiness;
 pub mod session;
 
+pub use keyjutsu_agent as agent;
 pub use keyjutsu_execution as execution;
 pub use keyjutsu_plan as plan;
 pub use keyjutsu_terminal as terminal;

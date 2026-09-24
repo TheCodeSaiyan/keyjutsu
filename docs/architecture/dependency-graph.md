@@ -36,7 +36,7 @@ flowchart TD
     M16 --> M17
 
     classDef done fill:#1e6f3d,color:#fff,stroke:#1e6f3d
-    class M0,M1,M2,M3,M4,M5 done
+    class M0,M1,M2,M3,M4,M5,M6 done
 ```
 
 ## Reading it
@@ -49,8 +49,10 @@ flowchart TD
   the next unblocker: four milestones need it directly.
 - **M4 (approval) is done** ([milestone-4.md](milestone-4.md)).
 - **M5 (validation) is done** ([milestone-5.md](milestone-5.md)).
-- **M6 (agent integration) is next**, then M7 (the plan workspace) and M8,
-  where approved snapshots finally run.
+- **M6 (agent integration) is done** ([milestone-6.md](milestone-6.md)).
+- **M8 (execution) comes before M7 (the plan workspace).** M8 needs only M2,
+  M4 and M5, all done, and can be proven headless against real shells; M7 is
+  desktop UI that could not be checked on screen while it was built.
 - **M5 and M6 can run in parallel** once M3 lands. Validation needs the plan
   model and the terminal (to run native dry-runs through a real shell); agent
   integration needs only the plan model.

@@ -2046,6 +2046,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyjutsu-agent"
+version = "0.1.0"
+dependencies = [
+ "keyjutsu-plan",
+ "keyjutsu-validation",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "ts-rs",
+]
+
+[[package]]
 name = "keyjutsu-cli"
 version = "0.1.0"
 dependencies = [
@@ -2060,6 +2073,7 @@ dependencies = [
 name = "keyjutsu-core"
 version = "0.1.0"
 dependencies = [
+ "keyjutsu-agent",
  "keyjutsu-execution",
  "keyjutsu-plan",
  "keyjutsu-terminal",

@@ -1,6 +1,6 @@
 [package]
-name = "keyjutsu-core"
-description = "The KeyJutsu application core shared by the desktop app and the CLI"
+name = "keyjutsu-agent"
+description = "Lite adapters for installed AI coding agents: detection, proposals, revisions and reviews"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,17 +8,13 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-keyjutsu-terminal.workspace = true
-keyjutsu-execution.workspace = true
 keyjutsu-plan.workspace = true
 keyjutsu-validation.workspace = true
-keyjutsu-agent.workspace = true
+regex.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [lints]
 workspace = true

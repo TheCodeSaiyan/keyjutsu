@@ -266,7 +266,7 @@ fn recovery_commands_are_checked_too() {
 fn the_report_can_be_recorded_in_a_stored_plan() {
     let p = plan(json!([step("a", "pwsh", "Get-Date")]));
     let r = validate(&p, Options::default());
-    let recorded = r.record_in(p.plan());
+    let recorded = r.record_in(p.plan(), "2026-09-25T02:00:00Z");
     let text = serde_json::to_string(&recorded).unwrap();
     let back = parse_plan(&text).expect("a recorded report is a valid stored plan");
     assert_eq!(back.plan().keyjutsu.as_ref().unwrap().steps["a"].readiness, Readiness::Ready);
