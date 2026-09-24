@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keyjutsu:schema:plan-proposal:1.0",
+  "title": "KeyJutsu plan proposal, version 1.0",
+  "description": "What an agent may return: a plan without the KeyJutsu-owned `keyjutsu` section. Readiness, proof, assessed risk, hashes and approval are never taken from an agent.",
+  "allOf": [
+    { "$ref": "urn:keyjutsu:schema:plan:1.0" },
+    { "not": { "type": "object", "required": ["keyjutsu"] } }
+  ]
+}

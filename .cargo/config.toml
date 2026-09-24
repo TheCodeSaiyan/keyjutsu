@@ -1,0 +1,4 @@
+[env]
+# ts-rs writes the TypeScript bindings for IPC types here during `cargo test`.
+# CI fails if the committed copies differ from what the Rust types produce.
+TS_RS_EXPORT_DIR = { value = "packages/types/src/generated", relative = true }

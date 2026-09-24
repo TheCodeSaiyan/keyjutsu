@@ -1,0 +1,21 @@
+[package]
+name = "keyjutsu-core"
+description = "The KeyJutsu application core shared by the desktop app and the CLI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+keyjutsu-terminal.workspace = true
+keyjutsu-execution.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

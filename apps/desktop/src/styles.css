@@ -1,0 +1,431 @@
+/* KeyJutsu's workspace, in the canonical colour system
+   (docs/brand/colour-system.md). The terminal itself is styled from the
+   user's own Windows Terminal profile, never from these tokens: once armed,
+   KeyJutsu's branding has to disappear. */
+
+:root {
+  /* Brand palette */
+  --kj-black: #0f1317;
+  --kj-obsidian: #090b0d;
+  --kj-graphite: #1a1e23;
+  --kj-gunmetal: #35373e;
+  --kj-steel: #62666d;
+  --kj-mist: #a6a8ac;
+  --kj-white: #f7f7f5;
+  --kj-paper: #fdfcf9;
+  --kj-red: #e32226;
+  --kj-red-hover: #f0393d;
+  --kj-red-pressed: #be1c20;
+
+  /* Semantic colours: never the brand red */
+  --kj-success: #3fa66b;
+  --kj-info: #4c8ddb;
+  --kj-warning: #d89a31;
+  --kj-error: #d84a4a;
+  --kj-critical: #b72c3b;
+  --kj-user-input: #af78d2;
+
+  /* Light theme */
+  color-scheme: light dark;
+  --background: #fdfcf9;
+  --surface-1: #f7f7f5;
+  --surface-2: #eeedea;
+  --surface-3: #e5e4e1;
+  --surface-hover: #ffffff;
+  --border: #d4d3d0;
+  --border-subtle: #e5e4e1;
+  --text-primary: #0f1317;
+  --text-secondary: #555a61;
+  --text-muted: #747980;
+  --text-disabled: #a6a8ac;
+  --accent: #d51e22;
+  --accent-hover: var(--kj-red-hover);
+  --accent-pressed: var(--kj-red-pressed);
+  --accent-text: var(--kj-white);
+  --accent-tint: #e3222618;
+
+  --radius: 6px;
+  --focus: 2px solid var(--accent);
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  background: var(--background);
+  color: var(--text-primary);
+  accent-color: var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #090b0d;
+    --surface-1: #0f1317;
+    --surface-2: #1a1e23;
+    --surface-3: #23282e;
+    --surface-hover: #2c3138;
+    --border: #353a41;
+    --border-subtle: #252a30;
+    --text-primary: #f7f7f5;
+    --text-secondary: #a6a8ac;
+    --text-muted: #747980;
+    --text-disabled: #555a61;
+    --accent: #e32226;
+  }
+}
+
+/* Older names used below, kept as aliases of the tokens above. */
+:root {
+  --bg: var(--background);
+  --surface: var(--surface-1);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --ok: var(--kj-success);
+  --warn: var(--kj-warning);
+  --bad: var(--kj-error);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+button,
+select,
+textarea,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button,
+select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled),
+select:hover {
+  background: var(--surface-hover);
+}
+
+button:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+::selection {
+  background: var(--accent-tint);
+}
+
+/* Brand red is for deliberate actions only: Arm KeyJutsu and the first-run
+   call to action. */
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+button.primary:active:not(:disabled) {
+  background: var(--accent-pressed);
+  border-color: var(--accent-pressed);
+}
+
+button.primary:disabled {
+  background: var(--surface-3);
+  border-color: var(--border);
+  color: var(--text-disabled);
+}
+
+/* Disarm stops a performance; it destroys nothing, so it gets neither the
+   brand red nor the critical colour, only a stronger border. */
+button.danger {
+  border-color: var(--text-secondary);
+  font-weight: 600;
+}
+
+:focus-visible {
+  outline: var(--focus);
+  outline-offset: 2px;
+}
+
+textarea {
+  width: 100%;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+h2 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+legend {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+label.choice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.error {
+  color: var(--bad);
+}
+
+.notice {
+  border-left: 3px solid var(--kj-info);
+  padding-left: 8px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* First run */
+
+.first-run {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+.lede {
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+.checks {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.checks th,
+.checks td {
+  text-align: left;
+  vertical-align: top;
+  padding: 4px 8px 4px 0;
+  font-weight: normal;
+}
+
+.checks th {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.check-glyph {
+  width: 1.5em;
+  font-weight: 700;
+}
+
+.checks [data-status="ok"] .check-glyph {
+  color: var(--ok);
+}
+.checks [data-status="warning"] .check-glyph {
+  color: var(--warn);
+}
+.checks [data-status="unavailable"] .check-glyph {
+  color: var(--bad);
+}
+.checks [data-status="not_yet_built"] {
+  color: var(--text-muted);
+}
+
+/* Workspace */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.topbar label {
+  margin: 0;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-right: auto;
+}
+
+/* The mark is decorative (empty alt): the name beside it is the label. */
+.brand-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.side {
+  width: 340px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.side section + section {
+  margin-top: 24px;
+}
+
+.side .checks {
+  font-size: 12px;
+}
+
+/* The sidebar is too narrow for three columns: the detail goes under the name. */
+.side .checks tr {
+  display: grid;
+  grid-template-columns: 1.5em 1fr;
+  margin-bottom: 6px;
+}
+
+.side .checks td:last-child {
+  grid-column: 2;
+  padding-top: 0;
+}
+
+button.arm {
+  width: 100%;
+  padding: 8px;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.term-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.terminal-frame {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.terminal-host {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Armed: nothing of KeyJutsu is left on screen but the terminal. */
+.app[data-armed="true"] .terminal-frame {
+  height: 100vh;
+}
+
+.overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 280px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(9 11 13 / 0.4);
+  font-size: 13px;
+}
+
+.overlay p {
+  margin: 0 0 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  button.primary {
+    forced-color-adjust: none;
+    background: ButtonText;
+    color: ButtonFace;
+  }
+  .overlay {
+    border: 2px solid CanvasText;
+  }
+}

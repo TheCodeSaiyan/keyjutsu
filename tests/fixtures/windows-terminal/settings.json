@@ -1,0 +1,51 @@
+// A trimmed Windows Terminal settings file, shaped like the one the Store
+// release writes, with comments and trailing commas as users leave them.
+{
+  "$schema": "https://aka.ms/terminal-profiles-schema",
+  "defaultProfile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+  "profiles": {
+    "defaults": {
+      "font": { "face": "JetBrains Mono", "size": 11 },
+      "cursorShape": "filledBox",
+      "padding": "6, 4"
+    },
+    "list": [
+      {
+        "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+        "name": "Windows PowerShell",
+        "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      {
+        "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+        "name": "PowerShell",
+        "source": "Windows.Terminal.PowershellCore",
+        "colorScheme": "Dusk" /* a custom scheme */
+      }
+    ]
+  },
+  "schemes": [
+    {
+      "name": "Dusk",
+      "background": "#1B1D23",
+      "foreground": "#D8DEE9",
+      "cursorColor": "#E5E9F0",
+      "selectionBackground": "#434C5E",
+      "black": "#1B1D23",
+      "red": "#BF616A",
+      "green": "#A3BE8C",
+      "yellow": "#EBCB8B",
+      "blue": "#81A1C1",
+      "purple": "#B48EAD",
+      "cyan": "#88C0D0",
+      "white": "#E5E9F0",
+      "brightBlack": "#4C566A",
+      "brightRed": "#BF616A",
+      "brightGreen": "#A3BE8C",
+      "brightYellow": "#EBCB8B",
+      "brightBlue": "#81A1C1",
+      "brightPurple": "#B48EAD",
+      "brightCyan": "#8FBCBB",
+      "brightWhite": "#ECEFF4"
+    }
+  ]
+}
