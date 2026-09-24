@@ -407,3 +407,14 @@ fn the_overlay_chord_is_reported_and_types_nothing() {
     let out = press(&mut e, overlay);
     assert_eq!(out, vec![Action::OverlayRequested]);
 }
+
+#[test]
+fn the_snapshot_names_the_next_step_for_the_overlay() {
+    let mut e = engine(&["first", "second"], PerformanceConfig::default());
+    mash(&mut e, "a");
+    assert_eq!(e.snapshot().next_step_title.as_deref(), Some("Step 1"));
+    mash(&mut e, "aaaaa");
+    e.handle(finished(Some(0)));
+    assert_eq!(e.snapshot().step_index, 1);
+    assert_eq!(e.snapshot().next_step_title, None, "the last step has nothing after it");
+}

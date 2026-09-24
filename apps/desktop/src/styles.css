@@ -1,86 +1,12 @@
-/* KeyJutsu's workspace, in the canonical colour system
-   (docs/brand/colour-system.md). The terminal itself is styled from the
-   user's own Windows Terminal profile, never from these tokens: once armed,
-   KeyJutsu's branding has to disappear. */
+/* KeyJutsu's workspace, following the design kit in
+   docs/brand/KeyJutsu-Design-Kit. Every colour, size, radius and duration here
+   is a token from tokens.css, which is generated from the kit's
+   design-tokens.json; this file adds no values of its own (§28).
 
-:root {
-  /* Brand palette */
-  --kj-black: #0f1317;
-  --kj-obsidian: #090b0d;
-  --kj-graphite: #1a1e23;
-  --kj-gunmetal: #35373e;
-  --kj-steel: #62666d;
-  --kj-mist: #a6a8ac;
-  --kj-white: #f7f7f5;
-  --kj-paper: #fdfcf9;
-  --kj-red: #e32226;
-  --kj-red-hover: #f0393d;
-  --kj-red-pressed: #be1c20;
+   The terminal itself is styled from the user's Windows Terminal profile,
+   never from these tokens: once armed, KeyJutsu's branding disappears (§18). */
 
-  /* Semantic colours: never the brand red */
-  --kj-success: #3fa66b;
-  --kj-info: #4c8ddb;
-  --kj-warning: #d89a31;
-  --kj-error: #d84a4a;
-  --kj-critical: #b72c3b;
-  --kj-user-input: #af78d2;
-
-  /* Light theme */
-  color-scheme: light dark;
-  --background: #fdfcf9;
-  --surface-1: #f7f7f5;
-  --surface-2: #eeedea;
-  --surface-3: #e5e4e1;
-  --surface-hover: #ffffff;
-  --border: #d4d3d0;
-  --border-subtle: #e5e4e1;
-  --text-primary: #0f1317;
-  --text-secondary: #555a61;
-  --text-muted: #747980;
-  --text-disabled: #a6a8ac;
-  --accent: #d51e22;
-  --accent-hover: var(--kj-red-hover);
-  --accent-pressed: var(--kj-red-pressed);
-  --accent-text: var(--kj-white);
-  --accent-tint: #e3222618;
-
-  --radius: 6px;
-  --focus: 2px solid var(--accent);
-  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.45;
-  background: var(--background);
-  color: var(--text-primary);
-  accent-color: var(--accent);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #090b0d;
-    --surface-1: #0f1317;
-    --surface-2: #1a1e23;
-    --surface-3: #23282e;
-    --surface-hover: #2c3138;
-    --border: #353a41;
-    --border-subtle: #252a30;
-    --text-primary: #f7f7f5;
-    --text-secondary: #a6a8ac;
-    --text-muted: #747980;
-    --text-disabled: #555a61;
-    --accent: #e32226;
-  }
-}
-
-/* Older names used below, kept as aliases of the tokens above. */
-:root {
-  --bg: var(--background);
-  --surface: var(--surface-1);
-  --text: var(--text-primary);
-  --muted: var(--text-secondary);
-  --ok: var(--kj-success);
-  --warn: var(--kj-warning);
-  --bad: var(--kj-error);
-}
+@import "./tokens.css";
 
 * {
   box-sizing: border-box;
@@ -93,6 +19,19 @@ body,
   margin: 0;
 }
 
+body {
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  background: var(--bg);
+  color: var(--text);
+  accent-color: var(--accent);
+}
+
+::selection {
+  background: var(--kj-red-tint);
+}
+
 button,
 select,
 textarea,
@@ -101,13 +40,22 @@ input {
   color: inherit;
 }
 
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Controls: Windows-native density, one-pixel borders (§8). */
+
 button,
 select {
-  background: var(--surface);
+  height: var(--control-default);
+  padding: 0 var(--sp-3);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 5px 12px;
+  border-radius: var(--r-md);
   cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard);
 }
 
 button:hover:not(:disabled),
@@ -116,121 +64,123 @@ select:hover {
 }
 
 button:disabled {
-  color: var(--text-disabled);
+  color: var(--disabled);
   cursor: not-allowed;
 }
 
-::selection {
-  background: var(--accent-tint);
-}
-
-/* Brand red is for deliberate actions only: Arm KeyJutsu and the first-run
-   call to action. */
+/* Vermilion only for deliberate, high-value actions: Arm KeyJutsu and the
+   first-run call to action (§7). */
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent-text);
-  font-weight: 600;
+  color: var(--kj-white);
+  font-weight: var(--fw-semibold);
 }
 
 button.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--kj-red-hover);
+  border-color: var(--kj-red-hover);
 }
 
 button.primary:active:not(:disabled) {
-  background: var(--accent-pressed);
-  border-color: var(--accent-pressed);
+  background: var(--kj-red-pressed);
+  border-color: var(--kj-red-pressed);
 }
 
 button.primary:disabled {
   background: var(--surface-3);
   border-color: var(--border);
-  color: var(--text-disabled);
+  color: var(--disabled);
 }
 
-/* Disarm stops a performance; it destroys nothing, so it gets neither the
-   brand red nor the critical colour, only a stronger border. */
+/* Disarm abandons a performance. It destroys nothing on the machine, so it is
+   outlined in the critical colour, as the kit's overlay mockup shows, rather
+   than filled like a destructive action. */
 button.danger {
-  border-color: var(--text-secondary);
-  font-weight: 600;
-}
-
-:focus-visible {
-  outline: var(--focus);
-  outline-offset: 2px;
+  border-color: var(--kj-critical);
+  color: var(--text);
+  font-weight: var(--fw-semibold);
 }
 
 textarea {
   width: 100%;
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px 8px;
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
   resize: vertical;
 }
 
+/* Type scale (§4). */
+
 h1 {
-  font-size: 22px;
-  font-weight: 600;
-  margin: 0 0 8px;
+  font-size: var(--fs-heading1);
+  line-height: var(--lh-heading1);
+  font-weight: var(--fw-semibold);
+  margin: 0 0 var(--sp-2);
 }
 
-h2 {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+/* Short structural labels: uppercase with 0.08em tracking (§4). */
+h2,
+.label-caps {
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
-  color: var(--muted);
-  margin: 0 0 8px;
+  color: var(--text-2);
+  margin: 0 0 var(--sp-2);
 }
 
 fieldset {
   border: none;
   padding: 0;
-  margin: 0 0 12px;
+  margin: 0 0 var(--sp-3);
 }
 
 legend {
-  font-weight: 600;
-  margin-bottom: 4px;
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--sp-1);
 }
 
 label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-2);
 }
 
 label.choice {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   align-items: center;
-  margin-bottom: 4px;
+  min-height: var(--control-compact);
+  margin-bottom: 0;
 }
 
 .row {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .small {
-  font-size: 12px;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
 }
 
 .error {
-  color: var(--bad);
+  color: var(--kj-error);
 }
 
 .notice {
   border-left: 3px solid var(--kj-info);
-  padding-left: 8px;
+  padding-left: var(--sp-2);
 }
 
 .visually-hidden {
@@ -247,52 +197,54 @@ label.choice {
 .first-run {
   max-width: 760px;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: var(--sp-10) var(--sp-6);
 }
 
 .lede {
-  color: var(--muted);
-  margin-bottom: 20px;
+  color: var(--text-2);
+  font-size: var(--fs-body-large);
+  line-height: var(--lh-body-large);
+  margin-bottom: var(--sp-5);
 }
 
 .checks {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 20px;
+  margin-bottom: var(--sp-5);
 }
 
 .checks th,
 .checks td {
   text-align: left;
   vertical-align: top;
-  padding: 4px 8px 4px 0;
-  font-weight: normal;
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) 0;
+  font-weight: var(--fw-regular);
 }
 
 .checks th {
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 
 .check-glyph {
   width: 1.5em;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 
 .checks [data-status="ok"] .check-glyph {
-  color: var(--ok);
+  color: var(--state-ready);
 }
 .checks [data-status="warning"] .check-glyph {
-  color: var(--warn);
+  color: var(--state-review);
 }
 .checks [data-status="unavailable"] .check-glyph {
-  color: var(--bad);
+  color: var(--state-blocked);
 }
 .checks [data-status="not_yet_built"] {
-  color: var(--text-muted);
+  color: var(--text-3);
 }
 
-/* Workspace */
+/* Workspace: continuous surfaces separated by hairlines, not nested cards (§6). */
 
 .app {
   display: flex;
@@ -303,10 +255,10 @@ label.choice {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-1);
 }
 
 .topbar label {
@@ -316,9 +268,8 @@ label.choice {
 .wordmark {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  gap: var(--sp-2);
+  font-weight: var(--fw-bold);
   margin-right: auto;
 }
 
@@ -326,7 +277,7 @@ label.choice {
 .brand-heading {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
 }
 
 .body {
@@ -336,27 +287,28 @@ label.choice {
 }
 
 .side {
-  width: 340px;
+  width: var(--layout-inspector);
   flex-shrink: 0;
   overflow-y: auto;
-  padding: 16px;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
+  padding: var(--sp-4);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--surface-1);
 }
 
 .side section + section {
-  margin-top: 24px;
+  margin-top: var(--sp-6);
 }
 
 .side .checks {
-  font-size: 12px;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
 }
 
 /* The sidebar is too narrow for three columns: the detail goes under the name. */
 .side .checks tr {
   display: grid;
   grid-template-columns: 1.5em 1fr;
-  margin-bottom: 6px;
+  margin-bottom: var(--sp-2);
 }
 
 .side .checks td:last-child {
@@ -366,10 +318,10 @@ label.choice {
 
 button.arm {
   width: 100%;
-  padding: 8px;
-  margin-top: 4px;
+  height: var(--control-large);
+  margin-top: var(--sp-1);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-caps);
 }
 
 .term-area {
@@ -395,21 +347,92 @@ button.arm {
   height: 100vh;
 }
 
+/* Operator overlay (§19): small, private, clear of the output. */
+
 .overlay {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 280px;
-  padding: 12px 14px;
-  background: var(--surface-2);
+  top: var(--sp-4);
+  right: var(--sp-4);
+  width: 320px;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-1);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px rgb(9 11 13 / 0.4);
-  font-size: 13px;
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-raised);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
 }
 
-.overlay p {
-  margin: 0 0 8px;
+.overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: var(--fw-semibold);
+}
+
+.chip {
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-caption);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.overlay dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+
+.overlay dt {
+  color: var(--text-2);
+}
+
+.overlay dd {
+  margin: 0;
+  text-align: right;
+  font-weight: var(--fw-semibold);
+}
+
+.overlay .state {
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.overlay progress {
+  width: 100%;
+  height: 4px;
+  margin: 0 0 var(--sp-3);
+  appearance: none;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.overlay progress::-webkit-progress-bar {
+  background: var(--surface-3);
+}
+
+.overlay progress::-webkit-progress-value {
+  background: var(--state-typing);
+}
+
+.overlay .row {
+  justify-content: flex-end;
+}
+
+.overlay .hint {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
 }
 
 @media (prefers-reduced-motion: reduce) {

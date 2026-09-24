@@ -6,4 +6,8 @@ import type { StepOutcome } from "./StepOutcome";
 /**
  * What the operator overlay and the front ends show.
  */
-export type PerformanceSnapshot = { state: ExecutionState, step_index: number, step_count: number, step_title: string, step_mode: ExecutionMode, typed_chars: number, total_chars: number, owns_input: boolean, outcomes: Array<StepOutcome>, };
+export type PerformanceSnapshot = { state: ExecutionState, step_index: number, step_count: number, step_title: string, 
+/**
+ * What comes after this step, for the operator overlay.
+ */
+next_step_title: string | null, step_mode: ExecutionMode, typed_chars: number, total_chars: number, owns_input: boolean, outcomes: Array<StepOutcome>, };

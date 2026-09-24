@@ -16,7 +16,9 @@
     "types:index": "node packages/types/scripts/write-index.mjs",
     "schemas:check": "node schemas/check.mjs",
     "desktop:dev": "pnpm --filter @keyjutsu/desktop tauri dev",
-    "desktop:build": "pnpm --filter @keyjutsu/desktop tauri build"
+    "desktop:build": "pnpm --filter @keyjutsu/desktop tauri build",
+    "tokens": "node scripts/design-tokens.mjs",
+    "tokens:check": "node scripts/design-tokens.mjs --check"
   },
   "devDependencies": {
     "ajv": "^8.20.0",

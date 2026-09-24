@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/keyjutsu-stacked-white.png">
-    <img src="assets/brand/keyjutsu-stacked-black.png" alt="KeyJutsu" width="320">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/KeyJutsu-Design-Kit/assets/brand/keyjutsu_monogram_logo.png">
+    <img src="docs/brand/KeyJutsu-Design-Kit/assets/brand/keyjutsu_keycap_logo.png" alt="KeyJutsu" width="420">
   </picture>
 </h1>
 

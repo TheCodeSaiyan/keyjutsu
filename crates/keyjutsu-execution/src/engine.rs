@@ -121,6 +121,8 @@ pub struct PerformanceSnapshot {
     pub step_index: usize,
     pub step_count: usize,
     pub step_title: String,
+    /// What comes after this step, for the operator overlay.
+    pub next_step_title: Option<String>,
     pub step_mode: ExecutionMode,
     pub typed_chars: usize,
     pub total_chars: usize,
@@ -185,6 +187,7 @@ impl PerformanceEngine {
             step_index: self.step,
             step_count: self.script.steps.len(),
             step_title: step.title.clone(),
+            next_step_title: self.script.steps.get(self.step + 1).map(|s| s.title.clone()),
             step_mode: self.mode(),
             typed_chars: self.typed,
             total_chars: self.chars.len(),

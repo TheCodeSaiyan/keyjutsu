@@ -7,3 +7,5 @@ apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/icons/
 *.md
 LICENSE
+apps/desktop/src/tokens.css
+docs/brand/KeyJutsu-Design-Kit/

@@ -52,6 +52,7 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
       - run: pnpm schemas:check
+      - run: pnpm tokens:check
       - run: pnpm --filter @keyjutsu/desktop build
 
   # The desktop binary, built against the frontend. Unbundled: installers and
