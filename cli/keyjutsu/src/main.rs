@@ -69,6 +69,18 @@ enum PlanCommand {
         #[arg(long)]
         stored: bool,
     },
+    /// Validate a plan against this machine: syntax, commands, parameters,
+    /// tools, preconditions, privilege, risk and, where trustworthy, a
+    /// -WhatIf dry run. Nothing the plan names is run.
+    Validate {
+        file: std::path::PathBuf,
+        /// Skip -WhatIf dry runs.
+        #[arg(long)]
+        no_dry_run: bool,
+        /// Print the full report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print each step's hash: what an approval of that step binds to.
     Hash { file: std::path::PathBuf },
     /// Approve a plan and seal it into an immutable snapshot. Every step is
@@ -85,6 +97,9 @@ enum PlanCommand {
         /// Replace an existing file at --out.
         #[arg(long)]
         force: bool,
+        /// Skip -WhatIf dry runs during the validation that precedes sealing.
+        #[arg(long)]
+        no_dry_run: bool,
     },
     /// Check a sealed snapshot has not been altered.
     Verify {
@@ -185,8 +200,11 @@ fn main() -> ExitCode {
         }
         Command::Plan(PlanCommand::Check { file, stored }) => plan_check(&file, stored),
         Command::Plan(PlanCommand::Hash { file }) => plans::hash(&file),
-        Command::Plan(PlanCommand::Approve { file, out, confirmations, force }) => {
-            plans::approve(&file, &out, &confirmations, force)
+        Command::Plan(PlanCommand::Validate { file, no_dry_run, json }) => {
+            plans::validate(&file, !no_dry_run, json)
+        }
+        Command::Plan(PlanCommand::Approve { file, out, confirmations, force, no_dry_run }) => {
+            plans::approve(&file, &out, &confirmations, force, !no_dry_run)
         }
         Command::Plan(PlanCommand::Verify { snapshot, environment }) => plans::verify(&snapshot, environment),
         Command::Plan(PlanCommand::Diff { old, new }) => plans::diff(&old, &new),

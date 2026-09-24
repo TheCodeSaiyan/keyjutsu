@@ -15,6 +15,7 @@ pub mod session;
 pub use keyjutsu_execution as execution;
 pub use keyjutsu_plan as plan;
 pub use keyjutsu_terminal as terminal;
+pub use keyjutsu_validation as validation;
 pub use session::{Session, SessionEvent, SessionOptions, SessionSink};
 
 #[derive(Debug, thiserror::Error)]

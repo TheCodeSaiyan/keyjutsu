@@ -2063,6 +2063,7 @@ dependencies = [
  "keyjutsu-execution",
  "keyjutsu-plan",
  "keyjutsu-terminal",
+ "keyjutsu-validation",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -2113,6 +2114,18 @@ dependencies = [
  "thiserror 2.0.21",
  "ts-rs",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "keyjutsu-validation"
+version = "0.1.0"
+dependencies = [
+ "keyjutsu-plan",
+ "keyjutsu-terminal",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "ts-rs",
 ]
 
 [[package]]

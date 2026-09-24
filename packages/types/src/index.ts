@@ -35,3 +35,4 @@ export type { TerminalSize } from "./generated/TerminalSize";
 export type { WindowsInfo } from "./generated/WindowsInfo";
 export type * as plan from "./plan";
 export type * as serde_json from "./serde_json";
+export type * as validation from "./validation";

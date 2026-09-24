@@ -35,7 +35,7 @@ keyjutsu/
 │   ├── keyjutsu-core/            ✓ sessions, readiness scan, safe demo, IPC types
 │   ├── keyjutsu-plan/            ✓ plan model, graph, conditions, walk, diff,
 │   │                               hashing, approval and sealed snapshots
-│   ├── keyjutsu-validation/        M5: layered validation, proof levels
+│   ├── keyjutsu-validation/      ✓ readiness, proof, evidence, risk, dry runs
 │   ├── keyjutsu-agent/             M6: Codex, Claude Code, Gemini, Copilot, Cursor
 │   ├── keyjutsu-security/          M9: credential gates, classified logging
 │   ├── keyjutsu-broker/            M10: elevated broker binary and protocol
@@ -62,6 +62,9 @@ flowchart LR
     core["keyjutsu-core"] --> execution
     core --> terminal
     core --> plan["keyjutsu-plan"]
+    core --> validation["keyjutsu-validation"]
+    validation --> plan
+    validation --> terminal
     execution["keyjutsu-execution"] --> terminal["keyjutsu-terminal"]
 ```
 

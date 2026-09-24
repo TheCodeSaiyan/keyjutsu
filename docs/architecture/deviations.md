@@ -107,6 +107,10 @@ Milestone 17.
 
 ## D13. Critical steps are identified from the agent's risk label until Milestone 5
 
+**Resolved in Milestone 5.** KeyJutsu now assesses risk itself and seals the
+assessment with the plan; the agent's label can raise it but never lower it.
+The original note follows.
+
 §27 says risk must not rely solely on agent-provided labels. At Milestone 4 a
 step needs its own typed confirmation when the agent proposed it as critical
 or when KeyJutsu's recorded assessment says so, but KeyJutsu does not yet
@@ -120,3 +124,19 @@ someone with write access to the file, who can recompute them. Resisting that
 needs a keyed MAC under a DPAPI-protected key (Milestone 14) checked by the
 elevated broker (Milestone 10). Until then, a snapshot is only as trustworthy
 as the folder it is stored in. See [ADR 0010](adr/0010-plan-hashing.md).
+
+## D15. No file-copy staging
+
+§13 lists "disposable copy testing": transform a copy of a configuration file,
+parse the result, check required properties and that unrelated ones survive.
+The plan schema has no structured way to express such a transform, so there is
+nothing to stage. It needs a schema addition (a `transform` step kind with an
+input file, an operation and a result check) before validation can do it.
+
+## D16. Named facts are not collected
+
+Conditions may name facts such as `docker.backend`. Validation has no fact
+collectors yet, so every named fact is undecided and a step whose precondition
+needs one goes to review. Collectors belong with agent integration (Milestone
+6), where an investigating agent can propose them and KeyJutsu can run the
+read-only ones itself.

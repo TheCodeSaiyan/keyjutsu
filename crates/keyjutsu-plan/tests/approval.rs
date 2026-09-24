@@ -320,3 +320,46 @@ proptest! {
         prop_assert_eq!(changed, d.affected);
     }
 }
+
+fn with_validation(mut v: Value, readiness: &[(&str, &str, &str)]) -> Value {
+    let mut steps = serde_json::Map::new();
+    for (id, ready, risk) in readiness {
+        steps.insert(
+            (*id).into(),
+            json!({"readiness": ready, "proof_level": "MEDIUM", "assessed_risk": risk}),
+        );
+    }
+    v["keyjutsu"] = json!({"revision": 1, "steps": steps});
+    v
+}
+
+#[test]
+fn a_validated_plan_only_seals_when_every_step_is_ready() {
+    let mut rows: Vec<(&str, &str, &str)> =
+        ["s1", "s2", "s3", "s4", "s5", "s6", "s7"].iter().map(|s| (*s, "READY", "low")).collect();
+    rows[3].1 = "BLOCKED";
+    let p = plan(&with_validation(chain(), &rows));
+    let book = approved(&p);
+    assert_eq!(seal(&p, &book, None, AT), Err(SealError::NotReady(vec!["s4".into()])));
+}
+
+#[test]
+fn keyjutsus_own_critical_rating_needs_the_typed_phrase_even_if_the_agent_said_low() {
+    let rows: Vec<(&str, &str, &str)> = ["s1", "s2", "s3", "s4", "s5", "s6", "s7"]
+        .iter()
+        .map(|s| (*s, "READY", if *s == "s5" { "critical" } else { "low" }))
+        .collect();
+    let mut v = with_validation(chain(), &rows);
+    v["steps"][4]["proposed_risk"] = json!({"level": "low", "rationale": "Harmless."});
+    let p = plan(&v);
+    let mut book = ApprovalBook::new();
+    assert_eq!(book.approve_all_except_critical(&p, AT), ["s5"]);
+    book.approve(&p, "s5", AT, Some("STEP 5")).unwrap();
+    let snap = seal(&p, &book, None, AT).unwrap();
+    // The assessment is sealed with the plan, so the check survives a reload.
+    let loaded = ApprovedSnapshot::from_json(&snap.to_json()).unwrap();
+    assert_eq!(
+        loaded.plan().keyjutsu.as_ref().unwrap().steps["s5"].assessed_risk,
+        Some(keyjutsu_plan::model::RiskLevel::Critical)
+    );
+}

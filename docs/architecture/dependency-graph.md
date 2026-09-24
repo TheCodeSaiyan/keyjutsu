@@ -36,7 +36,7 @@ flowchart TD
     M16 --> M17
 
     classDef done fill:#1e6f3d,color:#fff,stroke:#1e6f3d
-    class M0,M1,M2,M3,M4 done
+    class M0,M1,M2,M3,M4,M5 done
 ```
 
 ## Reading it
@@ -48,8 +48,9 @@ flowchart TD
 - **M3 (plan model) is done** ([milestone-3.md](milestone-3.md)). It was
   the next unblocker: four milestones need it directly.
 - **M4 (approval) is done** ([milestone-4.md](milestone-4.md)).
-- **M5 (validation) is next.** It adds the readiness gate and KeyJutsu's own
-  risk rules, both of which M4 leans on.
+- **M5 (validation) is done** ([milestone-5.md](milestone-5.md)).
+- **M6 (agent integration) is next**, then M7 (the plan workspace) and M8,
+  where approved snapshots finally run.
 - **M5 and M6 can run in parallel** once M3 lands. Validation needs the plan
   model and the terminal (to run native dry-runs through a real shell); agent
   integration needs only the plan model.

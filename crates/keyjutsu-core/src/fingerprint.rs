@@ -3,9 +3,8 @@
 //!
 //! The fingerprint records what the plan's commands will meet: the Windows
 //! build, the architecture, each shell's path and version, and where each
-//! executable the plan names resolves. It deliberately does not record tool
-//! versions yet: running a tool to ask its version is validation's job
-//! (Milestone 5), which will fill them in.
+//! executable the plan names resolves, with its version read from the file's
+//! version resource. The tool itself is never run to ask.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -72,14 +71,28 @@ pub fn collect(plan: Option<&Plan>) -> EnvironmentFingerprint {
         .into_iter()
         .map(|s| FingerprintEntry { name: shell_name(s.kind).into(), path: Some(s.path), version: s.version })
         .collect();
-    let tools = plan
-        .map(named_executables)
-        .unwrap_or_default()
+    let names = plan.map(named_executables).unwrap_or_default();
+    // One PowerShell lookup reads every tool's file version at once.
+    let versions = shell::locate(ShellKind::Pwsh)
+        .or_else(|| shell::locate(ShellKind::WindowsPowershell))
+        .filter(|_| !names.is_empty())
+        .and_then(|ps| {
+            let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+            keyjutsu_validation::powershell::analyse(&ps, &[], &refs, &[]).ok()
+        });
+    let tools = names
         .into_iter()
-        .map(|name| FingerprintEntry {
-            path: resolve_executable(&name).map(|p| p.display().to_string()),
-            name,
-            version: None,
+        .map(|name| {
+            let version = versions
+                .as_ref()
+                .and_then(|a| a.tools.get(&name))
+                .and_then(Option::as_ref)
+                .and_then(|t| t.file_version.clone());
+            FingerprintEntry {
+                path: resolve_executable(&name).map(|p| p.display().to_string()),
+                name,
+                version,
+            }
         })
         .collect();
     EnvironmentFingerprint {

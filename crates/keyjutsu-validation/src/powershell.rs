@@ -1,0 +1,243 @@
+//! Asking PowerShell about staged commands without running them, and the one
+//! kind of dry run KeyJutsu trusts.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::process::Command;
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+use crate::process::{self, RunError, base64_decode, base64_encode};
+
+const ANALYSE: &str = include_str!("analyse.ps1");
+const ANALYSIS_LIMIT: Duration = Duration::from_secs(60);
+const WHAT_IF_LIMIT: Duration = Duration::from_secs(30);
+
+#[derive(Debug, Serialize)]
+struct Request<'a> {
+    commands: Vec<CommandText<'a>>,
+    tools: Vec<&'a str>,
+    services: Vec<&'a str>,
+}
+
+#[derive(Debug, Serialize)]
+struct CommandText<'a> {
+    id: String,
+    text: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct SyntaxError {
+    pub message: String,
+    pub line: u32,
+    pub column: u32,
+}
+
+/// One command name found in a command line.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CommandUse {
+    pub name: Option<String>,
+    /// `Cmdlet`, `Function`, `Alias`, `Application`, `ExternalScript`, or
+    /// `None` when nothing by that name exists.
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+    pub module: Option<String>,
+    pub path: Option<String>,
+    pub file_version: Option<String>,
+    #[serde(default)]
+    pub arguments: Vec<String>,
+    pub static_arguments: bool,
+    #[serde(default)]
+    pub parameters_used: Vec<String>,
+    #[serde(default)]
+    pub parameters_resolved: Vec<String>,
+    #[serde(default)]
+    pub unknown_parameters: Vec<String>,
+    #[serde(default)]
+    pub ambiguous_parameters: Vec<String>,
+    pub supports_what_if: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct LineAnalysis {
+    pub id: String,
+    #[serde(default)]
+    pub syntax_errors: Vec<SyntaxError>,
+    pub single_command: bool,
+    #[serde(default)]
+    pub commands: Vec<CommandUse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ToolInfo {
+    pub path: String,
+    pub file_version: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Analysis {
+    pub edition: String,
+    pub version: String,
+    pub elevated: bool,
+    #[serde(default)]
+    pub results: Vec<LineAnalysis>,
+    #[serde(default)]
+    pub tools: BTreeMap<String, Option<ToolInfo>>,
+    #[serde(default)]
+    pub services: BTreeMap<String, String>,
+}
+
+impl Analysis {
+    pub fn line(&self, id: &str) -> Option<&LineAnalysis> {
+        self.results.iter().find(|r| r.id == id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum AnalysisError {
+    #[error(transparent)]
+    Run(#[from] RunError),
+    #[error("the analysis shell failed: {0}")]
+    Failed(String),
+    #[error("the analysis shell's answer could not be read: {0}")]
+    Unreadable(String),
+    #[error("not dry-run: {0}")]
+    NotDryRunnable(&'static str),
+}
+
+fn powershell(program: &Path, script: &str) -> Command {
+    let mut c = Command::new(program);
+    c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+    c.arg(keyjutsu_terminal::shell::encode_powershell_command(script));
+    c
+}
+
+/// Analyse `lines` (id, text) in the PowerShell at `program`, and look up
+/// `tools` and `services` while there. Nothing in `lines` is executed.
+pub fn analyse(
+    program: &Path,
+    lines: &[(String, &str)],
+    tools: &[&str],
+    services: &[&str],
+) -> Result<Analysis, AnalysisError> {
+    let request = Request {
+        commands: lines.iter().map(|(id, text)| CommandText { id: id.clone(), text }).collect(),
+        tools: tools.to_vec(),
+        services: services.to_vec(),
+    };
+    let json = serde_json::to_string(&request).map_err(|e| AnalysisError::Unreadable(e.to_string()))?;
+    let done = process::run(powershell(program, ANALYSE), &base64_encode(json.as_bytes()), ANALYSIS_LIMIT)?;
+    if !done.success {
+        return Err(AnalysisError::Failed(done.stderr.trim().chars().take(500).collect()));
+    }
+    let bytes = base64_decode(done.stdout.trim())
+        .ok_or_else(|| AnalysisError::Unreadable("the response was not base64".into()))?;
+    serde_json::from_slice(&bytes).map_err(|e| AnalysisError::Unreadable(e.to_string()))
+}
+
+/// The one module whose cmdlets' `-WhatIf` KeyJutsu relies on. Its cmdlets
+/// are compiled, ship with PowerShell, and route every change through
+/// ShouldProcess; a function or third-party cmdlet may declare `-WhatIf` and
+/// still act.
+pub const TRUSTED_WHAT_IF_MODULE: &str = "Microsoft.PowerShell.Management";
+
+/// Why a line cannot be dry-run, or `None` if it can.
+pub fn what_if_blocker(line: &LineAnalysis) -> Option<&'static str> {
+    if !line.syntax_errors.is_empty() {
+        return Some("it does not parse");
+    }
+    if !line.single_command {
+        return Some("it is more than one command, and -WhatIf covers only one");
+    }
+    let c = line.commands.first()?;
+    if c.kind.as_deref() != Some("Cmdlet") || c.module.as_deref() != Some(TRUSTED_WHAT_IF_MODULE) {
+        return Some("only built-in management cmdlets are trusted to honour -WhatIf");
+    }
+    if !c.supports_what_if {
+        return Some("the cmdlet has no -WhatIf");
+    }
+    if !c.static_arguments {
+        return Some("its arguments contain expressions, which a dry run would evaluate");
+    }
+    if c.parameters_resolved.iter().any(|p| p == "WhatIf" || p == "Confirm") {
+        return Some("it already sets -WhatIf or -Confirm");
+    }
+    None
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WhatIf {
+    pub ran: bool,
+    /// The "What if:" lines, which name the exact targets, with wildcards and
+    /// relative paths expanded.
+    pub operations: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+/// Run `text` in a throwaway shell with `$WhatIfPreference` set for the whole
+/// session. Only call this for a line that [`what_if_blocker`] clears.
+///
+/// The preference is set, rather than ` -WhatIf` appended to the text,
+/// because appending does nothing when the line ends in a comment:
+/// `Remove-Item x # note -WhatIf` would really delete `x`. The preference
+/// covers the command however it is written, and the blocker has already
+/// refused any line that sets `-WhatIf` itself.
+pub fn what_if(program: &Path, line: &LineAnalysis, text: &str) -> Result<WhatIf, AnalysisError> {
+    // Checked here as well as by callers: this is the only function in
+    // validation that runs anything a plan contains.
+    if let Some(reason) = what_if_blocker(line) {
+        return Err(AnalysisError::NotDryRunnable(reason));
+    }
+    if text.chars().any(char::is_control) {
+        return Err(AnalysisError::NotDryRunnable("it contains a control character"));
+    }
+    let script = format!(
+        "$WhatIfPreference = $true\n$ErrorActionPreference = 'Continue'\n$WarningPreference = 'SilentlyContinue'\n{text}"
+    );
+    let done = process::run(powershell(program, &script), "", WHAT_IF_LIMIT)?;
+    let mut operations = Vec::new();
+    let mut errors = Vec::new();
+    for line in done.stdout.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        if line.starts_with("What if:") {
+            operations.push(line.to_owned());
+        } else {
+            errors.push(line.to_owned());
+        }
+    }
+    errors.extend(done.stderr.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_owned));
+    Ok(WhatIf { ran: true, operations, errors })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn line(json: serde_json::Value) -> LineAnalysis {
+        serde_json::from_value(json).unwrap()
+    }
+
+    fn cmdlet(module: &str, what_if: bool, static_args: bool) -> serde_json::Value {
+        serde_json::json!({
+            "id": "x", "single_command": true, "syntax_errors": [],
+            "commands": [{
+                "name": "Remove-Item", "type": "Cmdlet", "module": module, "static_arguments": static_args,
+                "supports_what_if": what_if, "parameters_resolved": ["Recurse"]
+            }]
+        })
+    }
+
+    #[test]
+    fn only_static_built_in_management_cmdlets_are_dry_run() {
+        assert_eq!(what_if_blocker(&line(cmdlet(TRUSTED_WHAT_IF_MODULE, true, true))), None);
+        assert!(what_if_blocker(&line(cmdlet("SomeVendor.Module", true, true))).is_some());
+        assert!(what_if_blocker(&line(cmdlet(TRUSTED_WHAT_IF_MODULE, false, true))).is_some());
+        assert!(what_if_blocker(&line(cmdlet(TRUSTED_WHAT_IF_MODULE, true, false))).is_some(), "expressions");
+        let mut multi = cmdlet(TRUSTED_WHAT_IF_MODULE, true, true);
+        multi["single_command"] = false.into();
+        assert!(what_if_blocker(&line(multi)).is_some());
+        let mut confirm = cmdlet(TRUSTED_WHAT_IF_MODULE, true, true);
+        confirm["commands"][0]["parameters_resolved"] = serde_json::json!(["WhatIf"]);
+        assert!(what_if_blocker(&line(confirm)).is_some(), "-WhatIf:$false must not be overridden");
+    }
+}

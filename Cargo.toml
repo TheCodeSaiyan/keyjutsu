@@ -4,6 +4,7 @@ members = [
     "crates/keyjutsu-terminal",
     "crates/keyjutsu-execution",
     "crates/keyjutsu-plan",
+    "crates/keyjutsu-validation",
     "crates/keyjutsu-core",
     "cli/keyjutsu",
     "apps/desktop/src-tauri",
@@ -15,6 +16,7 @@ default-members = [
     "crates/keyjutsu-terminal",
     "crates/keyjutsu-execution",
     "crates/keyjutsu-plan",
+    "crates/keyjutsu-validation",
     "crates/keyjutsu-core",
     "cli/keyjutsu",
 ]
@@ -31,6 +33,7 @@ keyjutsu-terminal = { path = "crates/keyjutsu-terminal" }
 keyjutsu-execution = { path = "crates/keyjutsu-execution" }
 keyjutsu-core = { path = "crates/keyjutsu-core" }
 keyjutsu-plan = { path = "crates/keyjutsu-plan" }
+keyjutsu-validation = { path = "crates/keyjutsu-validation" }
 
 clap = { version = "4.5", features = ["derive"] }
 crossterm = "0.29"

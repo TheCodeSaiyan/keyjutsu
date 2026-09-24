@@ -1,5 +1,5 @@
-//! `keyjutsu plan hash | approve | verify | diff`: approval from the command
-//! line. Running `approve` is the operator's explicit act; nothing here
+//! `keyjutsu plan validate | hash | approve | verify | diff`: validation and
+//! approval from the command line. Running `approve` is the operator's explicit act; nothing here
 //! approves anything on its own.
 
 use std::path::Path;
@@ -8,9 +8,11 @@ use std::process::ExitCode;
 use keyjutsu_core::fingerprint;
 use keyjutsu_core::plan::approval::{ApprovalError, confirmation_phrase, is_critical};
 use keyjutsu_core::plan::hash::affected_by_drift;
+use keyjutsu_core::plan::model::{EvidenceResult, Readiness};
 use keyjutsu_core::plan::{
     ApprovalBook, ApprovedSnapshot, ValidPlan, diff as plan_diff, parse_plan, seal, step_hashes,
 };
+use keyjutsu_core::validation::{self, Options, Report};
 
 fn read(path: &Path) -> Result<String, ExitCode> {
     std::fs::read_to_string(path).map_err(|e| {
@@ -31,6 +33,77 @@ fn short(hash: &str) -> &str {
     &hash[..hash.len().min(16)]
 }
 
+fn readiness_label(r: Readiness) -> &'static str {
+    match r {
+        Readiness::Ready => "READY",
+        Readiness::Blocked => "BLOCKED",
+        Readiness::Invalid => "INVALID",
+        Readiness::NeedsReview => "REVIEW",
+        Readiness::RevalidationRequired => "REVALIDATION REQUIRED",
+    }
+}
+
+fn print_report(plan: &ValidPlan, report: &Report) {
+    for id in plan.graph().topological_order() {
+        let Some(s) = report.steps.get(id) else { continue };
+        let risk = s.assessed_risk.map(|r| format!("{r:?}")).unwrap_or_else(|| "?".into());
+        println!(
+            "  {:<10} {:<7} risk {:<8} {id}",
+            readiness_label(s.readiness),
+            format!("{:?}", s.proof_level),
+            risk
+        );
+        for e in s.evidence.iter().filter(|e| e.result == EvidenceResult::Failed) {
+            println!("      ✕ {}: {}", e.check, e.detail.as_deref().unwrap_or(""));
+        }
+        if s.readiness == Readiness::Ready {
+            for e in s.evidence.iter().filter(|e| e.check == "dry run" && e.result == EvidenceResult::Passed)
+            {
+                println!("      ✓ {}", e.detail.as_deref().unwrap_or(""));
+            }
+        }
+        for u in &s.remaining_uncertainty {
+            println!("      ? {u}");
+        }
+    }
+    for a in &report.assumptions {
+        let state = match a.holds {
+            Some(true) => "holds",
+            Some(false) => "DOES NOT HOLD",
+            None => "undecided",
+        };
+        println!("  assumption {state}: {}", a.description);
+    }
+    for p in &report.problems {
+        println!("  problem: {p}");
+    }
+}
+
+pub fn validate(file: &Path, dry_run: bool, json: bool) -> ExitCode {
+    let plan = match load_plan(file) {
+        Ok(p) => p,
+        Err(c) => return c,
+    };
+    let report = validation::validate(&plan, Options { dry_run, ..Options::default() });
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
+    } else {
+        print_report(&plan, &report);
+        let not_ready = report.not_ready(&plan);
+        println!();
+        if not_ready.is_empty() {
+            println!("All {} steps are ready.", report.steps.len());
+        } else {
+            println!("{} of {} steps are not ready.", not_ready.len(), report.steps.len());
+        }
+    }
+    if report.not_ready(&plan).is_empty() && report.problems.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
 pub fn hash(file: &Path) -> ExitCode {
     let plan = match load_plan(file) {
         Ok(p) => p,
@@ -43,14 +116,31 @@ pub fn hash(file: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool) -> ExitCode {
+pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool, dry_run: bool) -> ExitCode {
     if out.exists() && !force {
         eprintln!("keyjutsu: {} already exists; pass --force to replace it", out.display());
         return ExitCode::from(2);
     }
-    let plan = match load_plan(file) {
+    let draft = match load_plan(file) {
         Ok(p) => p,
         Err(c) => return c,
+    };
+    // Validate first: nothing is approved that this machine cannot run, and
+    // KeyJutsu's own risk assessment decides which steps are critical.
+    let report = validation::validate(&draft, Options { dry_run, ..Options::default() });
+    let not_ready = report.not_ready(&draft);
+    if !not_ready.is_empty() || !report.problems.is_empty() {
+        eprintln!("Not sealed: validation found steps that are not ready.");
+        eprintln!();
+        print_report(&draft, &report);
+        return ExitCode::FAILURE;
+    }
+    let plan = match ValidPlan::revalidate(report.record_in(draft.plan()), false) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("keyjutsu: recording the validation failed: {e}");
+            return ExitCode::FAILURE;
+        }
     };
     let at = fingerprint::now_rfc3339();
     let mut book = ApprovalBook::new();
@@ -94,6 +184,14 @@ pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool) -
                     }
                     if let Some(risk) = &step.proposed_risk {
                         eprintln!("    impact:        {}", risk.rationale);
+                    }
+                    if let Some(state) = plan.plan().keyjutsu.as_ref().and_then(|k| k.steps.get(id)) {
+                        for reason in &state.risk_reasons {
+                            eprintln!("    why critical:  {reason}");
+                        }
+                        for e in state.evidence.iter().filter(|e| e.check == "dry run") {
+                            eprintln!("    dry run:       {}", e.detail.as_deref().unwrap_or(""));
+                        }
                     }
                     match &step.reversibility {
                         Some(r) => eprintln!(

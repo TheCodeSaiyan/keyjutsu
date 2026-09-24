@@ -172,6 +172,10 @@ impl ApprovalBook {
 pub enum SealError {
     #[error("{} step(s) are not approved as they stand: {}", .0.len(), .0.join(", "))]
     NotApproved(Vec<String>),
+    /// Validation found these steps not READY (§12: a plan must not arm with
+    /// a step that is blocked, invalid, awaiting review or awaiting revalidation).
+    #[error("{} step(s) are not ready: {}", .0.len(), .0.join(", "))]
+    NotReady(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -200,8 +204,10 @@ pub struct ApprovedSnapshot {
 }
 
 /// Seal a fully approved draft. Every step must be approved at its current
-/// hash; KeyJutsu's own state section is left out, because the snapshot
-/// records hashes and approvals itself.
+/// hash. If the draft carries validation results (KeyJutsu's own state
+/// section), every step must be READY, and the results are sealed with it:
+/// they are the evidence the approval was given on, and they are where
+/// KeyJutsu's own risk assessment lives.
 pub fn seal(
     draft: &ValidPlan,
     book: &ApprovalBook,
@@ -218,8 +224,26 @@ pub fn seal(
     if !missing.is_empty() {
         return Err(SealError::NotApproved(missing));
     }
+    if let Some(state) = &draft.plan().keyjutsu {
+        let not_ready: Vec<String> = draft
+            .graph()
+            .topological_order()
+            .filter(|id| state.steps.get(*id).map(|s| s.readiness) != Some(crate::model::Readiness::Ready))
+            .map(str::to_owned)
+            .collect();
+        if !not_ready.is_empty() {
+            return Err(SealError::NotReady(not_ready));
+        }
+    }
     let mut plan = draft.plan().clone();
-    plan.keyjutsu = None;
+    if let Some(state) = &mut plan.keyjutsu {
+        // Hashes and approvals live in the snapshot itself, not in the plan.
+        state.snapshot_hash = None;
+        for s in state.steps.values_mut() {
+            s.step_hash = None;
+            s.approved = None;
+        }
+    }
     // Re-checking cannot fail: the draft already passed every gate.
     let plan = ValidPlan::revalidate(plan, false).map_err(|_| SealError::NotApproved(Vec::new()))?;
     let step_hashes = step_hashes(plan.plan(), plan.graph());
@@ -323,9 +347,6 @@ impl ApprovedSnapshot {
         let file: SnapshotFile =
             serde_json::from_value(value).map_err(|e| SnapshotError::NotASnapshot(e.to_string()))?;
         let plan = crate::parse::parse_plan(&file.plan.to_string()).map_err(SnapshotError::Plan)?;
-        if plan.plan().keyjutsu.is_some() {
-            return Err(SnapshotError::Tampered("the plan carries a KeyJutsu state section".into()));
-        }
 
         let recomputed = step_hashes(plan.plan(), plan.graph());
         if recomputed != file.step_hashes {
