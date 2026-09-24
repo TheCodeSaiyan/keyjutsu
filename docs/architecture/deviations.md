@@ -104,3 +104,19 @@ is refused cleanly, never with a panic; the same input always gets the same
 answer) but they are not coverage-guided. cargo-fuzz needs nightly Rust and
 its own harness; it is scheduled with the rest of the adversarial testing in
 Milestone 17.
+
+## D13. Critical steps are identified from the agent's risk label until Milestone 5
+
+§27 says risk must not rely solely on agent-provided labels. At Milestone 4 a
+step needs its own typed confirmation when the agent proposed it as critical
+or when KeyJutsu's recorded assessment says so, but KeyJutsu does not yet
+assess risk itself. An agent that labels `Remove-Item -Recurse` as low risk is
+not caught until the risk rules arrive with validation in Milestone 5.
+
+## D14. Snapshot hashes are unkeyed until Milestones 10 and 14
+
+A sealed snapshot's hashes detect accidental and naive edits. They cannot stop
+someone with write access to the file, who can recompute them. Resisting that
+needs a keyed MAC under a DPAPI-protected key (Milestone 14) checked by the
+elevated broker (Milestone 10). Until then, a snapshot is only as trustworthy
+as the folder it is stored in. See [ADR 0010](adr/0010-plan-hashing.md).

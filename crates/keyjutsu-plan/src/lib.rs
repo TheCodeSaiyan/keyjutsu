@@ -10,17 +10,22 @@
 //!
 //! It has no I/O. Facts come in through the [`condition::Facts`] trait.
 
+pub mod approval;
+pub mod canonical;
 pub mod condition;
 pub mod diff;
 pub mod graph;
+pub mod hash;
 pub mod model;
 pub mod parse;
 pub mod version;
 pub mod walk;
 
+pub use approval::{Approval, ApprovalBook, ApprovedSnapshot, StepApproval, seal};
 pub use condition::{Facts, KnownFacts, Missing, StepResult, Truth, evaluate};
 pub use diff::{PlanDiff, StepChange, diff};
 pub use graph::{PlanGraph, Problem};
+pub use hash::{EnvironmentFingerprint, step_hashes};
 pub use model::{Condition, Plan, Step};
 pub use parse::{PlanError, ValidPlan, parse_plan, parse_proposal};
 pub use walk::{Frontier, frontier};

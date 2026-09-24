@@ -14,8 +14,7 @@ use serde_json::{Map, Value};
 use crate::graph::PlanGraph;
 use crate::model::{Plan, Step};
 
-/// Fields that describe a step without affecting what runs.
-const DESCRIPTIVE: &[&str] = &["title", "objective", "reason"];
+use crate::hash::DESCRIPTIVE_FIELDS as DESCRIPTIVE;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[ts(export, export_to = "plan/")]

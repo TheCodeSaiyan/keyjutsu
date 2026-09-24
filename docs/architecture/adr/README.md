@@ -15,7 +15,7 @@ the code looks the way it does stays readable.
 | [0007](0007-typescript-generated-from-rust.md) | TypeScript IPC types are generated from Rust | Accepted |
 | [0008](0008-restore-ctrl-c-for-shells.md) | Clear the inherited Ctrl+C-ignore flag before starting shells | Accepted |
 | [0009](0009-clean-profile-hides-history.md) | The clean profile turns off history predictions and saving | Accepted |
-| [0010](0010-plan-hashing.md) | Canonical JSON and SHA-256 for plan and step hashes | Proposed (M4) |
+| [0010](0010-plan-hashing.md) | Canonical JSON and SHA-256 for plan and step hashes | Accepted (M4) |
 | [0011](0011-elevation-broker.md) | A separate, narrowly scoped elevation broker | Proposed (M10) |
 | [0012](0012-gpl-3-licence.md) | KeyJutsu is licensed GPL-3.0-only | Accepted |
 | [0013](0013-design-kit-is-canonical.md) | The design kit is canonical; the app's tokens are generated from it | Accepted |

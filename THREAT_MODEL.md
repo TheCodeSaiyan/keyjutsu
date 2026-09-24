@@ -6,7 +6,7 @@ this document says where it is held, what could break it, and what is done
 about each threat, including the ones that are not dealt with yet.
 
 It is kept current with the code. Each invariant below carries its actual
-status. At Milestone 3 most of them are still **planned**: the table says so rather
+status. At Milestone 4 many of them are still **planned**: the table says so rather
 than implying protection that does not exist yet.
 
 ## What is being protected
@@ -53,10 +53,10 @@ it is; **planned** names the milestone.
 | --- | --- | --- | --- |
 | 1 | Agent output is never execution authority. | Partial: M3 held, M6 planned | No agent integration exists yet, so nothing an agent says can run. What an agent returns can only enter as a proposal: `parse_proposal` refuses any claim of readiness, proof, hashes or approval (`an_agent_cannot_claim_readiness_but_a_stored_plan_may_record_it`), and KeyJutsu, not the plan, decides control flow (`keyjutsu_plan::frontier`). |
 | 2 | Secrets never enter agent context. | Planned, M6 and M9 | |
-| 3 | Approved execution snapshots are immutable. | Planned, M4 | Hashing approach proposed in [ADR 0010](docs/architecture/adr/0010-plan-hashing.md). Today's staged scripts are validated once and never modified by the engine. |
-| 4 | Plan mutation invalidates affected approval. | Planned, M4 | |
+| 3 | Approved execution snapshots are immutable. | Partial: held against accident, not a local forger | `ApprovedSnapshot` has no mutating methods and re-checks every hash on load; `any_edit_to_a_stored_snapshot_is_refused` (ten kinds of edit). The hashes are unkeyed: someone who can write the file can recompute them (deviation D14; keyed MAC with M10 and M14). |
+| 4 | Plan mutation invalidates affected approval. | Held | Approvals bind to step hashes that chain through predecessors ([ADR 0010](docs/architecture/adr/0010-plan-hashing.md)); `changing_a_step_invalidates_it_and_everything_after_it`; property test `hashes_and_diff_agree_on_what_a_change_affects`. |
 | 5 | The elevated broker accepts only authorised structured operations. | Planned, M10 | Nothing runs elevated today; there is no elevated code path at all. |
-| 6 | Critical actions need dedicated semantic confirmation. | Planned, M8 | |
+| 6 | Critical actions need dedicated semantic confirmation. | Partial: M4 held, M5 and M8 planned | Whole-plan approval never covers a critical step; each needs its typed phrase, also checked on load (`whole_plan_approval_never_covers_a_critical_step`). "Critical" still comes from the agent's label (deviation D13) until KeyJutsu's risk rules in M5; the execution-time gate is M8. |
 | 7 | Credential entry cannot be staged typing. | Partial | The plan schema forbids commands on a credential step and forces user-input mode (fixture `staged-credential`). The engine has a user-input mode that forwards real keys. Secure credential handling is M9. |
 | 8 | Telemetry cannot contain task or terminal contents. | Held, trivially | KeyJutsu has no telemetry, crash reporting or network code of any kind. |
 | 9 | Only staged text reaches the shell while a performance owns the keyboard. | Held | `PerformanceEngine`; `mashing_arbitrary_keys_delivers_exactly_the_staged_command`, `keys_mashed_while_a_command_runs_do_not_reach_it`; end to end in `mashed_keys_type_and_run_exactly_the_staged_command` and the CLI test. |
@@ -85,6 +85,9 @@ it is; **planned** names the milestone.
 | Commands typed in a performance end up in the user's shell history. | Not saved with the clean profile. Saved with the detected profile, as the user's own commands would be. | Accepted for the detected profile; stated here so it is a choice, not a surprise. |
 | The shell ignores Ctrl+C because of how KeyJutsu was launched. | The inherited ignore flag is cleared before shells start. | Held. |
 | Keys typed during a running command are fed into it. | Swallowed while executing, apart from Ctrl+C and Esc. | Held. |
+
+| An agent labels a destructive step as low risk to slip it through whole-plan approval. | Not yet: critical is the agent's own label (D13). | **Planned, M5.** |
+| A stored snapshot is edited to run something else. | Every hash is re-checked on load. | Partial: stops accidental and naive edits; a forger with write access can recompute unkeyed hashes (D14). |
 
 ## Not covered yet
 

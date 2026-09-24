@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-docker-reset",
+  "task_id": "task-docker-reset",
+  "title": "Reset Docker's local data after a corrupted image store",
+  "target": {
+    "id": "local",
+    "kind": "local_windows"
+  },
+  "agent": {
+    "name": "claude_code",
+    "version": "2.1.0"
+  },
+  "steps": [
+    {
+      "id": "stop-docker",
+      "title": "Stop the Docker service",
+      "objective": "Nothing may hold the data directory open.",
+      "kind": "command",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Stop-Service -Name com.docker.service"
+        }
+      ],
+      "privilege": "administrator",
+      "proposed_risk": {
+        "level": "high",
+        "rationale": "Stops every running container."
+      },
+      "reversibility": {
+        "level": "full",
+        "notes": "Start-Service brings it back."
+      },
+      "expected_effects": [
+        {
+          "kind": "service_state",
+          "target": "com.docker.service",
+          "detail": "Stopped"
+        }
+      ],
+      "internal_validation": [
+        {
+          "service_state": {
+            "name": "com.docker.service",
+            "state": "stopped"
+          }
+        }
+      ],
+      "recovery": {
+        "strategy": "commands",
+        "commands": [
+          {
+            "text": "Start-Service -Name com.docker.service"
+          }
+        ]
+      }
+    },
+    {
+      "id": "remove-data",
+      "title": "Remove local Docker data",
+      "objective": "Start from an empty data directory.",
+      "kind": "command",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Remove-Item -Recurse -Force -LiteralPath C:/ProgramData/Docker/data"
+        }
+      ],
+      "privilege": "administrator",
+      "proposed_risk": {
+        "level": "critical",
+        "rationale": "Deletes every local container, image and volume."
+      },
+      "reversibility": {
+        "level": "none",
+        "notes": "Images can be pulled again; volumes are gone."
+      },
+      "expected_effects": [
+        {
+          "kind": "file_deleted",
+          "target": "C:/ProgramData/Docker/data"
+        }
+      ],
+      "recovery": {
+        "strategy": "none"
+      }
+    },
+    {
+      "id": "start-docker",
+      "title": "Start the Docker service",
+      "objective": "Docker recreates its data directory.",
+      "kind": "command",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Start-Service -Name com.docker.service"
+        }
+      ],
+      "privilege": "administrator",
+      "internal_validation": [
+        {
+          "service_state": {
+            "name": "com.docker.service",
+            "state": "running"
+          }
+        }
+      ]
+    }
+  ]
+}

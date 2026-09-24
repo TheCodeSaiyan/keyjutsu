@@ -33,8 +33,8 @@ keyjutsu/
 │   │                               key encoding, terminal profile detection
 │   ├── keyjutsu-execution/       ✓ state machine, Performance Mode engine
 │   ├── keyjutsu-core/            ✓ sessions, readiness scan, safe demo, IPC types
-│   ├── keyjutsu-plan/            ✓ plan model, graph, conditions, walk, diff
-│   │                               (hashing and approval arrive with M4)
+│   ├── keyjutsu-plan/            ✓ plan model, graph, conditions, walk, diff,
+│   │                               hashing, approval and sealed snapshots
 │   ├── keyjutsu-validation/        M5: layered validation, proof levels
 │   ├── keyjutsu-agent/             M6: Codex, Claude Code, Gemini, Copilot, Cursor
 │   ├── keyjutsu-security/          M9: credential gates, classified logging

@@ -5,6 +5,7 @@
 //! the same code the desktop app uses.
 
 mod console;
+mod plans;
 
 use std::process::ExitCode;
 
@@ -68,6 +69,32 @@ enum PlanCommand {
         #[arg(long)]
         stored: bool,
     },
+    /// Print each step's hash: what an approval of that step binds to.
+    Hash { file: std::path::PathBuf },
+    /// Approve a plan and seal it into an immutable snapshot. Every step is
+    /// approved except critical ones, which each need --confirm with their
+    /// typed phrase.
+    Approve {
+        file: std::path::PathBuf,
+        /// Where to write the snapshot.
+        #[arg(long)]
+        out: std::path::PathBuf,
+        /// Approve a critical step: STEP="TYPED PHRASE".
+        #[arg(long = "confirm", value_name = "STEP=PHRASE")]
+        confirmations: Vec<String>,
+        /// Replace an existing file at --out.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Check a sealed snapshot has not been altered.
+    Verify {
+        snapshot: std::path::PathBuf,
+        /// Also compare this machine with the one the plan was approved on.
+        #[arg(long)]
+        environment: bool,
+    },
+    /// Show what changed between two versions of a plan, and what that affects.
+    Diff { old: std::path::PathBuf, new: std::path::PathBuf },
 }
 
 #[derive(clap::Args)]
@@ -157,6 +184,12 @@ fn main() -> ExitCode {
             session(options, Some(console::Performance { script, config: performance.config() }))
         }
         Command::Plan(PlanCommand::Check { file, stored }) => plan_check(&file, stored),
+        Command::Plan(PlanCommand::Hash { file }) => plans::hash(&file),
+        Command::Plan(PlanCommand::Approve { file, out, confirmations, force }) => {
+            plans::approve(&file, &out, &confirmations, force)
+        }
+        Command::Plan(PlanCommand::Verify { snapshot, environment }) => plans::verify(&snapshot, environment),
+        Command::Plan(PlanCommand::Diff { old, new }) => plans::diff(&old, &new),
         Command::Perform { commands, shell, performance } => {
             let script = StagedScript {
                 steps: commands

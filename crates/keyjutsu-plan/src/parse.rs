@@ -123,6 +123,13 @@ impl ValidPlan {
     }
 }
 
+/// Two valid plans are equal when their plans are; the graph follows from the plan.
+impl PartialEq for ValidPlan {
+    fn eq(&self, other: &Self) -> bool {
+        self.plan == other.plan
+    }
+}
+
 /// Parse a stored plan, which may carry KeyJutsu's own state.
 pub fn parse_plan(text: &str) -> Result<ValidPlan, PlanError> {
     parse(text, false)
