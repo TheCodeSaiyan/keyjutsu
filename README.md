@@ -14,10 +14,13 @@ agent proposes a plan, KeyJutsu checks it against your actual machine, you
 review and approve it, and only then does anything run, with each step checked
 after it runs.
 
-> **Status: early.** Milestones 0 to 2 of 17 are built: the real terminal and
-> the performance engine. There are no plans, agents, approval or validation
-> yet, so today KeyJutsu performs a built-in read-only demo or commands you
-> type in yourself. [What exists and what does not](docs/architecture/milestones-0-2.md).
+> **Status: early.** Milestones 0 to 3 of 17 are built: the real terminal, the
+> performance engine and the plan model. There are no agents, approval or
+> validation yet, so today KeyJutsu performs a built-in read-only demo or
+> commands you type in yourself, and can check a plan file with
+> `keyjutsu plan check`. What exists and what does not:
+> [milestones 0 to 2](docs/architecture/milestones-0-2.md),
+> [milestone 3](docs/architecture/milestone-3.md).
 
 Windows 11 x64 only for now.
 

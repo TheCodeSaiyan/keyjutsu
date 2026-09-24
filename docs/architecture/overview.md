@@ -33,7 +33,8 @@ keyjutsu/
 │   │                               key encoding, terminal profile detection
 │   ├── keyjutsu-execution/       ✓ state machine, Performance Mode engine
 │   ├── keyjutsu-core/            ✓ sessions, readiness scan, safe demo, IPC types
-│   ├── keyjutsu-plan/              M3–M4: plan model, graph, hashing, approval
+│   ├── keyjutsu-plan/            ✓ plan model, graph, conditions, walk, diff
+│   │                               (hashing and approval arrive with M4)
 │   ├── keyjutsu-validation/        M5: layered validation, proof levels
 │   ├── keyjutsu-agent/             M6: Codex, Claude Code, Gemini, Copilot, Cursor
 │   ├── keyjutsu-security/          M9: credential gates, classified logging
@@ -60,6 +61,7 @@ flowchart LR
     cli["cli/keyjutsu"] --> core
     core["keyjutsu-core"] --> execution
     core --> terminal
+    core --> plan["keyjutsu-plan"]
     execution["keyjutsu-execution"] --> terminal["keyjutsu-terminal"]
 ```
 
@@ -74,7 +76,10 @@ Dependencies point one way, towards the platform:
   machine with no I/O ([ADR 0004](adr/0004-pure-performance-engine.md)); it
   borrows vocabulary types (`KeyChord`, `ShellMark`) from the terminal crate
   and nothing else.
-- **`keyjutsu-core`** joins the two: it runs a real session, feeds its marks
+- **`keyjutsu-plan`** knows what a plan is: its shape, its graph, how its
+  conditions evaluate and which step comes next. It depends on nothing else in
+  the workspace and has no I/O; facts reach it through a trait.
+- **`keyjutsu-core`** joins the terminal and the engine: it runs a real session, feeds its marks
   and the operator's keys into the engine, and carries out the engine's
   actions against the pseudo-console. It is the only public surface the front
   ends use.

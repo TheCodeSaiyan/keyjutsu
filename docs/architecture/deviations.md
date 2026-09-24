@@ -94,3 +94,13 @@ punctuation and boundary pauses are implemented.
 modified versions cannot be distributed closed while KeyJutsu stays open
 source and keeps every dependency it uses. Reasoning and the dependency check
 are in [ADR 0012](adr/0012-gpl-3-licence.md).
+
+## D12. Property tests stand in for fuzzing until Milestone 17
+
+§55 asks for fuzzing of JSON and schema parsing and of the condition parser.
+Milestone 3 has property tests instead: 8 properties, 2,000 generated cases
+each, run on every `cargo test`. They check the same promises (hostile input
+is refused cleanly, never with a panic; the same input always gets the same
+answer) but they are not coverage-guided. cargo-fuzz needs nightly Rust and
+its own harness; it is scheduled with the rest of the adversarial testing in
+Milestone 17.

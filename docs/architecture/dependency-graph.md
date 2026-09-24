@@ -36,7 +36,7 @@ flowchart TD
     M16 --> M17
 
     classDef done fill:#1e6f3d,color:#fff,stroke:#1e6f3d
-    class M0,M1,M2 done
+    class M0,M1,M2,M3 done
 ```
 
 ## Reading it
@@ -45,8 +45,9 @@ flowchart TD
   the vertical slice that proves the terminal illusion works on real shells
   before any AI orchestration exists to feed it. See
   [milestones-0-2.md](milestones-0-2.md) for what "done" rests on.
-- **M3 (plan model) is the next unblocker.** Four milestones need it directly.
-  It can start now; nothing it needs is missing.
+- **M3 (plan model) is done** ([milestone-3.md](milestone-3.md)). It was
+  the next unblocker: four milestones need it directly.
+- **M4 (approval) is next.** It needs only M3.
 - **M5 and M6 can run in parallel** once M3 lands. Validation needs the plan
   model and the terminal (to run native dry-runs through a real shell); agent
   integration needs only the plan model.

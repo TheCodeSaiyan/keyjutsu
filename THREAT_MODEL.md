@@ -6,7 +6,7 @@ this document says where it is held, what could break it, and what is done
 about each threat, including the ones that are not dealt with yet.
 
 It is kept current with the code. Each invariant below carries its actual
-status. At Milestone 2 most of them are **planned**: the table says so rather
+status. At Milestone 3 most of them are still **planned**: the table says so rather
 than implying protection that does not exist yet.
 
 ## What is being protected
@@ -51,7 +51,7 @@ it is; **planned** names the milestone.
 
 | # | Invariant | Status | Where, and the test |
 | --- | --- | --- | --- |
-| 1 | Agent output is never execution authority. | Planned, M6 | No agent integration exists yet, so nothing an agent says can run. The proposal schema already rejects any proposal claiming readiness, proof, hashes or approval (`schemas/plan/v1`, fixture `agent-claims-readiness`). |
+| 1 | Agent output is never execution authority. | Partial: M3 held, M6 planned | No agent integration exists yet, so nothing an agent says can run. What an agent returns can only enter as a proposal: `parse_proposal` refuses any claim of readiness, proof, hashes or approval (`an_agent_cannot_claim_readiness_but_a_stored_plan_may_record_it`), and KeyJutsu, not the plan, decides control flow (`keyjutsu_plan::frontier`). |
 | 2 | Secrets never enter agent context. | Planned, M6 and M9 | |
 | 3 | Approved execution snapshots are immutable. | Planned, M4 | Hashing approach proposed in [ADR 0010](docs/architecture/adr/0010-plan-hashing.md). Today's staged scripts are validated once and never modified by the engine. |
 | 4 | Plan mutation invalidates affected approval. | Planned, M4 | |
@@ -76,8 +76,11 @@ it is; **planned** names the milestone.
 | Terminal output attacks the renderer. | xterm.js parses output; the webview's CSP allows scripts only from the app itself. | Partial: relies on xterm.js. No fuzzing yet (M17). |
 | A compromised renderer types into the terminal. | It can while the terminal is unarmed, as the user could. It cannot write into an armed line, arm on a dirty line, or (from M4) arm an unapproved snapshot. No plugin grants file-system or process access. | Accepted with the limits stated. |
 | The disarm key fires by accident and ends a performance. | Esc is not the disarm; bindings without Ctrl, Alt or Win are refused. | Held (`bindings_that_ordinary_typing_could_trigger_are_rejected`). |
-| An agent proposes an `eval`-style condition to run code during evaluation. | Conditions are a closed vocabulary with no expression form. | Held at the schema (fixture `free-form-condition`); evaluation itself is M3. |
-| A reader misinterprets a future plan format. | Unknown major versions are refused. | Held at the schema (fixture `future-major-version`). |
+| An agent proposes an `eval`-style condition to run code during evaluation. | Conditions are a closed vocabulary with no expression form, in the schema and in the Rust model; the evaluator has nothing that could execute anything. | Held (fixture `free-form-condition`; `keyjutsu_plan::condition`). |
+| An agent's plan branches on a step that has not run, to steer control flow. | Conditions may only ask about steps that must have finished by then; anything else is refused before the plan is accepted. | Held (`condition-on-later-step`). |
+| A missing fact is treated as true or false and the wrong branch runs. | Evaluation is three-valued; an undecidable branch waits and names the facts it needs. | Held (`a_missing_fact_is_unknown_and_named`, `a_decided_condition_stays_decided_when_more_is_known`). |
+| A crafted plan crashes or hangs KeyJutsu. | 1 MiB limit, serde_json's nesting limit, schema then structure checks, no recursion over untrusted depth beyond those limits. | Partial: property-tested with 16,000 generated cases per run; coverage-guided fuzzing is M17. |
+| A reader misinterprets a future plan format. | Any version other than 1.0 is refused by name before anything else is read. | Held (`a_future_version_is_refused_by_name_not_guessed_at`). |
 | PSReadLine predictions show sensitive history on screen during a performance. | The clean profile turns predictions off and saves no history. The detected profile keeps the user's settings. | **Partial.** With the detected profile, predictions can show anything in the user's history. [ADR 0009](docs/architecture/adr/0009-clean-profile-hides-history.md). |
 | Commands typed in a performance end up in the user's shell history. | Not saved with the clean profile. Saved with the detected profile, as the user's own commands would be. | Accepted for the detected profile; stated here so it is a choice, not a surprise. |
 | The shell ignores Ctrl+C because of how KeyJutsu was launched. | The inherited ignore flag is cleared before shells start. | Held. |

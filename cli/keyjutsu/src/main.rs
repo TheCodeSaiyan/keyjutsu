@@ -40,6 +40,9 @@ enum Command {
         #[command(flatten)]
         performance: PerformanceArgs,
     },
+    /// Work with plan files.
+    #[command(subcommand)]
+    Plan(PlanCommand),
     /// Perform commands you supply. Before approved plans exist (Milestone 8)
     /// this is how to stage your own commands; they carry no approval and run
     /// exactly as if you had typed them.
@@ -51,6 +54,19 @@ enum Command {
         shell: ShellArgs,
         #[command(flatten)]
         performance: PerformanceArgs,
+    },
+}
+
+#[derive(Subcommand)]
+enum PlanCommand {
+    /// Check a plan file against the schema and its structure, and show the
+    /// order its steps would run in.
+    Check {
+        file: std::path::PathBuf,
+        /// Treat it as a stored plan, which may carry KeyJutsu's own state.
+        /// By default it is checked as an agent's proposal, which may not.
+        #[arg(long)]
+        stored: bool,
     },
 }
 
@@ -140,6 +156,7 @@ fn main() -> ExitCode {
             let script = demo::safe_demo(options.shell);
             session(options, Some(console::Performance { script, config: performance.config() }))
         }
+        Command::Plan(PlanCommand::Check { file, stored }) => plan_check(&file, stored),
         Command::Perform { commands, shell, performance } => {
             let script = StagedScript {
                 steps: commands
@@ -241,4 +258,52 @@ fn doctor(json: bool) -> ExitCode {
     }
     let blocked = report.checks.iter().any(|c| c.status == CheckStatus::Unavailable);
     if blocked { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+}
+
+fn plan_check(file: &std::path::Path, stored: bool) -> ExitCode {
+    use keyjutsu_core::plan::{PlanError, parse_plan, parse_proposal};
+    let text = match std::fs::read_to_string(file) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("keyjutsu: cannot read {}: {e}", file.display());
+            return ExitCode::from(2);
+        }
+    };
+    let result = if stored { parse_plan(&text) } else { parse_proposal(&text) };
+    match result {
+        Ok(valid) => {
+            let plan = valid.plan();
+            println!(
+                "{}: valid ({} steps)",
+                plan.title.as_deref().unwrap_or(&plan.plan_id),
+                plan.steps.len()
+            );
+            println!();
+            for (n, id) in valid.graph().topological_order().enumerate() {
+                let branch = plan.edges.iter().filter(|e| e.to == id && e.when.is_some()).count();
+                let note = if branch > 0 { "  (conditional)" } else { "" };
+                let title = plan.step(id).map(|s| s.title.as_str()).unwrap_or(id);
+                println!("  {:>2}. {id}: {title}{note}", n + 1);
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("{}: {e}", file.display());
+            match &e {
+                PlanError::Schema { violations } => {
+                    for v in violations {
+                        let at = if v.at.is_empty() { "(document)" } else { v.at.as_str() };
+                        eprintln!("  {at}: {}", v.message);
+                    }
+                }
+                PlanError::Invalid { problems } => {
+                    for p in problems {
+                        eprintln!("  {p}");
+                    }
+                }
+                _ => {}
+            }
+            ExitCode::FAILURE
+        }
+    }
 }
