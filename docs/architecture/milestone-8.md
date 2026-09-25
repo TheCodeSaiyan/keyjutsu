@@ -100,3 +100,5 @@ with keys mashed from the moment it starts.
 - **Nothing runs elevated.** A step that needs elevation fails as it would if
   the operator typed it; the broker is Milestone 10.
 - **Recovery is not attempted.** A failed plan stops; rollback is Milestone 11.
+- **Working directories were not applied** until Milestone 13 found it: a
+  step ran wherever the shell was. Fixed there ([milestone-13.md](milestone-13.md)).

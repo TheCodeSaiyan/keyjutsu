@@ -22,7 +22,6 @@ use keyjutsu_core::execute::{
 use keyjutsu_core::execution::{
     ExecutionState, PerformanceConfig, PerformanceSnapshot, StagedScript, StagedStep,
 };
-use keyjutsu_core::fingerprint;
 use keyjutsu_core::ipc::{OpenRequest, RunMessage, ScriptSource, Sealed, TerminalMessage};
 use keyjutsu_core::plan::ApprovedSnapshot;
 use keyjutsu_core::plan::model::Step;
@@ -34,6 +33,7 @@ use keyjutsu_core::terminal::{KeyChord, TerminalSize};
 use keyjutsu_core::validation::Options;
 use keyjutsu_core::workspace::{Workspace, WorkspaceView, run_folder};
 use keyjutsu_core::{CoreError, Session, SessionEvent, SessionOptions, SessionSink, demo};
+use keyjutsu_core::{fingerprint, git};
 use tauri::State;
 use tauri::ipc::Channel;
 
@@ -473,6 +473,18 @@ fn plan_run(
         ..ExecuteOptions::default()
     };
     std::thread::spawn(move || {
+        // Record the repositories the plan works in, to tell its changes
+        // from the operator's afterwards (§31).
+        let git_dir = path.with_file_name("git");
+        let start = std::env::current_dir().unwrap_or_default();
+        let baseline: Vec<(git::RepoState, PathBuf)> = git::repositories(&start, snapshot.plan())
+            .iter()
+            .enumerate()
+            .filter_map(|(i, repo)| {
+                let copies = git_dir.join(i.to_string());
+                git::record(repo, Some(&copies)).ok().map(|r| (r, copies))
+            })
+            .collect();
         let (tx, rx) = channel();
         *locked(&sink.forward) = Some(tx);
         let (outcome, _) = execute(
@@ -486,10 +498,12 @@ fn plan_run(
             },
         );
         *locked(&sink.forward) = None;
+        let git = baseline.iter().filter_map(|(before, copies)| git::report(before, copies).ok()).collect();
         let _ = on_event.send(RunMessage::Done {
             outcome,
             snapshot: path.display().to_string(),
             checkpoint: checkpoint.display().to_string(),
+            git,
         });
     });
     Ok(())

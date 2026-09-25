@@ -6,6 +6,7 @@
 
 mod agent_cli;
 mod console;
+mod git_cli;
 mod plans;
 mod recover_cli;
 mod run_cli;
@@ -25,6 +26,20 @@ use keyjutsu_core::{SessionOptions, demo};
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Subcommand)]
+enum GitCommand {
+    /// KeyJutsu's changes alone, against each file as it was just before the run.
+    Diff { snapshot: std::path::PathBuf },
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum IsolateChoice {
+    /// A temporary worktree on a new local branch; your working tree is untouched.
+    Worktree,
+    /// A new local branch, switched to in place; your uncommitted changes come along.
+    Branch,
 }
 
 #[derive(Subcommand)]
@@ -70,7 +85,13 @@ enum Command {
         /// Settle a step left in doubt by a crash: STEP=succeeded or STEP=failed.
         #[arg(long, value_name = "STEP=RESULT")]
         settle: Vec<String>,
+        /// Run apart from your working tree: in a new worktree, or on a new branch.
+        #[arg(long, value_enum)]
+        isolate: Option<IsolateChoice>,
     },
+    /// What a run did to the Git repositories it worked in.
+    #[command(subcommand)]
+    Git(GitCommand),
     /// Check this machine is ready: Windows, ConPTY, shells and staged input.
     Doctor {
         /// Print the full report as JSON.
@@ -321,7 +342,8 @@ fn main() -> ExitCode {
                 clean,
             })
         }
-        Command::Run { snapshot, mode, clean, resume, settle } => run_cli::run(run_cli::RunArgs {
+        Command::Git(GitCommand::Diff { snapshot }) => git_cli::diff(&snapshot),
+        Command::Run { snapshot, mode, clean, resume, settle, isolate } => run_cli::run(run_cli::RunArgs {
             snapshot: &snapshot,
             mode: mode.map(|m| match m {
                 ModeChoice::Performance => ExecutionMode::Performance,
@@ -332,6 +354,10 @@ fn main() -> ExitCode {
             clean,
             resume: resume.map(|from| from.unwrap_or_else(|| run_cli::checkpoint_path(&snapshot))),
             settle: &settle,
+            isolate: isolate.map(|i| match i {
+                IsolateChoice::Worktree => run_cli::Isolation::Worktree,
+                IsolateChoice::Branch => run_cli::Isolation::Branch,
+            }),
         }),
         Command::Shell(shell) => session(shell.options(), None),
         Command::Demo { shell, performance } => {

@@ -266,11 +266,22 @@ fn run_resumes_from_the_checkpoint_it_is_given() {
 fn launch(
     args: &[&str],
 ) -> (Box<dyn portable_pty::Child + Send + Sync>, Arc<Screen>, Arc<Mutex<Box<dyn Write + Send>>>) {
+    launch_in(args, None)
+}
+
+#[allow(clippy::type_complexity)]
+fn launch_in(
+    args: &[&str],
+    cwd: Option<&std::path::Path>,
+) -> (Box<dyn portable_pty::Child + Send + Sync>, Arc<Screen>, Arc<Mutex<Box<dyn Write + Send>>>) {
     let pair = native_pty_system()
         .openpty(PtySize { rows: 30, cols: 120, pixel_width: 0, pixel_height: 0 })
         .unwrap();
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_keyjutsu"));
     cmd.args(args);
+    if let Some(dir) = cwd {
+        cmd.cwd(dir);
+    }
     let child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);
     let mut reader = pair.master.try_clone_reader().unwrap();
@@ -441,4 +452,72 @@ fn a_failed_run_is_recovered_only_when_the_operator_confirms() {
     assert!(done.status.success(), "{text}{}", String::from_utf8_lossy(&done.stderr));
     assert!(text.contains("Recovered."), "{text}");
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "original");
+}
+
+#[test]
+fn run_tells_its_git_changes_from_yours_and_shows_its_diff() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-git");
+    let _ = std::fs::remove_dir_all(&dir);
+    let repo = dir.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(["-c", "user.name=T", "-c", "user.email=t@example.invalid", "-c", "core.autocrlf=false"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    };
+    git(&["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("b.txt"), "b\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-q", "-m", "start"]);
+    std::fs::write(repo.join("u.txt"), "mine\n").unwrap();
+
+    let plan = serde_json::json!({
+        "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+        "target": {"id": "local", "kind": "local_windows"},
+        "agent": {"name": "codex", "version": "1"},
+        "steps": [{"id": "edit", "title": "Edit", "objective": "Change b.", "kind": "command",
+                   "shell": {"kind": "pwsh"}, "commands": [{"text": "Add-Content -LiteralPath b.txt -Value keyjutsu-b"}]}]
+    });
+    let plan_path = dir.join("plan.json");
+    std::fs::write(&plan_path, plan.to_string()).unwrap();
+    let snap = dir.join("snap.json");
+    let keyjutsu = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+            .args(args)
+            .current_dir(&repo)
+            .output()
+            .unwrap()
+    };
+    let approved =
+        keyjutsu(&["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()]);
+    assert!(approved.status.success(), "{}", String::from_utf8_lossy(&approved.stderr));
+
+    let (mut child, screen, writer) =
+        launch_in(&["run", snap.to_str().unwrap(), "--mode", "direct", "--clean"], Some(&repo));
+    let deadline = Instant::now() + TIMEOUT;
+    while std::fs::read_to_string(repo.join("b.txt")).is_ok_and(|t| !t.contains("keyjutsu-b")) {
+        assert!(Instant::now() < deadline, "the step never ran:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    std::thread::sleep(Duration::from_millis(800));
+    writer.lock().unwrap().write_all(&win32_key(0x4B, 0x25, 0x0B, 0x1A)).unwrap();
+    writer.lock().unwrap().write_all(b"exit\r").unwrap();
+    let deadline = Instant::now() + TIMEOUT;
+    while child.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "keyjutsu run did not exit:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(screen.wait_for("Your own changes, untouched: u.txt"), "{}", screen.plain());
+    assert!(screen.plain().contains("Changed by KeyJutsu:"), "{}", screen.plain());
+
+    let diff = keyjutsu(&["git", "diff", snap.to_str().unwrap()]);
+    let text = String::from_utf8_lossy(&diff.stdout);
+    assert!(diff.status.success(), "{text}{}", String::from_utf8_lossy(&diff.stderr));
+    assert!(text.contains("+keyjutsu-b"), "{text}");
+    assert!(!text.contains("+mine"), "your untracked file is not KeyJutsu's:\n{text}");
 }

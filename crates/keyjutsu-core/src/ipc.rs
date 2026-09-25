@@ -59,6 +59,8 @@ pub enum RunMessage {
         outcome: crate::execute::Outcome,
         snapshot: String,
         checkpoint: String,
+        /// What the run did to each Git repository it worked in (§31).
+        git: Vec<crate::git::RepoReport>,
     },
 }
 

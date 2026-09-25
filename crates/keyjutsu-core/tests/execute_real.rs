@@ -706,3 +706,19 @@ fn a_critical_step_is_confirmed_again_just_before_it_runs() {
     assert!(asked[0].commands[0].contains("Remove-Item -Recurse"));
     assert!(asked[0].recovery.contains("cannot undo"), "{:?}", asked[0].recovery);
 }
+
+#[test]
+fn a_step_runs_in_its_working_directory() {
+    let dir = scratch("working-directory");
+    let inner = dir.join("inner folder's");
+    std::fs::create_dir_all(&inner).unwrap();
+    let mut s = step("here", "Set-Content -LiteralPath made-here.txt -Value x");
+    s["working_directory"] = json!(fwd(&inner));
+    let snap = approve(&plan(json!([s]), json!([])));
+    let t = terminal();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    t.session.close();
+    assert_eq!(outcome, Outcome::Complete);
+    assert!(inner.join("made-here.txt").exists(), "the file belongs in the step's folder");
+    assert!(!std::env::current_dir().unwrap().join("made-here.txt").exists());
+}

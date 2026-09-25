@@ -2,8 +2,13 @@
 import type { CriticalConfirmation } from "./execute/CriticalConfirmation";
 import type { ExecutionEvent } from "./execute/ExecutionEvent";
 import type { Outcome } from "./execute/Outcome";
+import type { RepoReport } from "./git/RepoReport";
 
 /**
  * What streams from a plan run to the window.
  */
-export type RunMessage = { "kind": "execution", event: ExecutionEvent, } | { "kind": "confirm", confirmation: CriticalConfirmation, } | { "kind": "done", outcome: Outcome, snapshot: string, checkpoint: string, };
+export type RunMessage = { "kind": "execution", event: ExecutionEvent, } | { "kind": "confirm", confirmation: CriticalConfirmation, } | { "kind": "done", outcome: Outcome, snapshot: string, checkpoint: string, 
+/**
+ * What the run did to each Git repository it worked in (§31).
+ */
+git: Array<RepoReport>, };

@@ -8,6 +8,7 @@
 pub mod demo;
 pub mod execute;
 pub mod fingerprint;
+pub mod git;
 pub mod headless;
 pub mod ipc;
 pub mod readiness;

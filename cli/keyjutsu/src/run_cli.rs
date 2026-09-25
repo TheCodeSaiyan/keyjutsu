@@ -26,6 +26,16 @@ use keyjutsu_core::plan::model::ShellName;
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 
 use crate::console;
+use keyjutsu_core::git;
+
+/// Where the plan runs, relative to the operator's working tree (§31).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Isolation {
+    /// A temporary worktree on a new local branch; the working tree is untouched.
+    Worktree,
+    /// A new local branch, switched to in place.
+    Branch,
+}
 
 pub struct RunArgs<'a> {
     pub snapshot: &'a Path,
@@ -34,6 +44,40 @@ pub struct RunArgs<'a> {
     /// The checkpoint to continue from, if any.
     pub resume: Option<PathBuf>,
     pub settle: &'a [String],
+    pub isolate: Option<Isolation>,
+}
+
+/// Where a run keeps its Git record: next to the snapshot.
+pub fn git_folder(snapshot: &Path) -> PathBuf {
+    snapshot.with_extension("git")
+}
+
+fn print_git(r: &git::RepoReport, snapshot: &Path) {
+    if r.keyjutsu.is_empty() && r.untouched.is_empty() {
+        return;
+    }
+    println!();
+    println!("Git: {}{}", r.root, r.branch.as_ref().map(|b| format!(" ({b})")).unwrap_or_default());
+    if r.keyjutsu.is_empty() {
+        println!("  KeyJutsu changed nothing here.");
+    } else {
+        println!("  Changed by KeyJutsu:");
+        for k in &r.keyjutsu {
+            let note = if k.was_already_changed {
+                "  (you had changed it too; your part is not counted)"
+            } else {
+                ""
+            };
+            println!("    {} {}{note}", k.status, k.path);
+        }
+    }
+    if !r.untouched.is_empty() {
+        println!("  Your own changes, untouched: {}", r.untouched.join(", "));
+    }
+    if let Some((from, to)) = &r.head_moved {
+        println!("  HEAD moved from {} to {}.", &from[..from.len().min(10)], &to[..to.len().min(10)]);
+    }
+    println!("  KeyJutsu's diff: keyjutsu git diff {}", snapshot.display());
 }
 
 pub fn checkpoint_path(snapshot: &Path) -> PathBuf {
@@ -115,6 +159,65 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         options.profile = ProfileMode::Clean;
     }
 
+    // Git (§31): isolate if asked, then record every repository the plan
+    // works in, so its changes can be told from the operator's afterwards.
+    let mut start = std::env::current_dir().unwrap_or_default();
+    if let Some(isolation) = args.isolate {
+        let Some(root) = git::find_root(&start) else {
+            eprintln!("keyjutsu: --isolate needs a Git repository, and {} is not in one", start.display());
+            return ExitCode::FAILURE;
+        };
+        let branch = git::isolation_branch(&snapshot.plan().plan_id, snapshot.snapshot_hash());
+        match isolation {
+            Isolation::Worktree => {
+                let inside = git::steps_inside(&root, snapshot.plan());
+                if !inside.is_empty() {
+                    eprintln!(
+                        "keyjutsu: steps {} name folders in {}, which a worktree elsewhere would not isolate",
+                        inside.join(", "),
+                        root.display()
+                    );
+                    return ExitCode::FAILURE;
+                }
+                let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let dest = root.with_file_name(format!("{name}.{}", branch.replace('/', "-")));
+                if let Err(e) = git::create_worktree(&root, &branch, &dest) {
+                    eprintln!("keyjutsu: {e}");
+                    return ExitCode::FAILURE;
+                }
+                println!("Running in a new worktree, {}, on branch {branch}.", dest.display());
+                println!("Your working tree and its uncommitted changes are not touched.");
+                start = dest;
+            }
+            Isolation::Branch => {
+                if let Err(e) = git::create_branch(&root, &branch) {
+                    eprintln!("keyjutsu: {e}");
+                    return ExitCode::FAILURE;
+                }
+                println!("Switched to a new branch, {branch}. Your uncommitted changes came with it.");
+            }
+        }
+    }
+    options.cwd = Some(start.clone());
+    let git_dir = git_folder(args.snapshot);
+    let mut baseline = Vec::new();
+    for (i, repo) in git::repositories(&start, snapshot.plan()).iter().enumerate() {
+        match git::record(repo, Some(&git_dir.join(i.to_string()))) {
+            Ok(r) => baseline.push(r),
+            Err(e) => eprintln!("keyjutsu: cannot record {} before the run: {e}", repo.display()),
+        }
+    }
+    if !baseline.is_empty()
+        && let Err(e) = std::fs::create_dir_all(&git_dir).and_then(|()| {
+            std::fs::write(
+                git_dir.join("baseline.json"),
+                serde_json::to_string_pretty(&baseline).unwrap_or_default(),
+            )
+        })
+    {
+        eprintln!("keyjutsu: cannot save the Git record: {e}");
+    }
+
     let result: Arc<Mutex<Option<(Outcome, Checkpoint)>>> = Arc::new(Mutex::new(None));
     let (snap, out, mode) = (snapshot.clone(), result.clone(), args.mode);
     let exec_options =
@@ -148,6 +251,12 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     if let Err(e) = console::run(options, None, Some(controller)) {
         eprintln!("keyjutsu: {e}");
         return ExitCode::FAILURE;
+    }
+    for (i, before) in baseline.iter().enumerate() {
+        match git::report(before, &git_dir.join(i.to_string())) {
+            Ok(r) => print_git(&r, args.snapshot),
+            Err(e) => eprintln!("keyjutsu: cannot compare {} after the run: {e}", before.root),
+        }
     }
     let Some((outcome, checkpoint)) = result.lock().ok().and_then(|mut r| r.take()) else {
         println!("The shell ended before the plan finished. Checkpoint: {}", cp_path.display());

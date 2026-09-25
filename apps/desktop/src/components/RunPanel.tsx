@@ -30,6 +30,33 @@ export function RunPanel({ done, busy, onReview, onRecover, onBack }: Props) {
       <p className="muted small">
         Checkpoint: <code>{done.checkpoint}</code>
       </p>
+      {done.git.map((r) => (
+        <div key={r.root} className="git-report">
+          <h2>Git · {r.branch ?? r.root}</h2>
+          {r.keyjutsu.length === 0 ? (
+            <p className="small muted">KeyJutsu changed nothing in {r.root}.</p>
+          ) : (
+            <ul className="small plain">
+              {r.keyjutsu.map((k) => (
+                <li key={k.path}>
+                  <details>
+                    <summary>
+                      Changed by KeyJutsu: <code>{k.path}</code>
+                      {k.was_already_changed
+                        ? " (you had changed it too; only KeyJutsu's part is shown)"
+                        : ""}
+                    </summary>
+                    <pre className="code">{k.diff}</pre>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          )}
+          {r.untouched.length > 0 && (
+            <p className="small muted">Your own changes, untouched: {r.untouched.join(", ")}</p>
+          )}
+        </div>
+      ))}
       {!complete && !items && (
         <>
           <p className="small">Nothing has been rolled back. Your choices:</p>

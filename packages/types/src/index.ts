@@ -37,6 +37,7 @@ export type { TerminalSize } from "./generated/TerminalSize";
 export type { WindowsInfo } from "./generated/WindowsInfo";
 export type * as agent from "./agent";
 export type * as execute from "./execute";
+export type * as git from "./git";
 export type * as plan from "./plan";
 export type * as recovery from "./recovery";
 export type * as serde_json from "./serde_json";

@@ -340,19 +340,33 @@ pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
         };
     }
     let mode = step.execution_mode.map(engine_mode);
-    let mut lines: Vec<StagedStep> = step
-        .commands
-        .iter()
-        .enumerate()
-        .map(|(i, c)| StagedStep {
-            id: format!("{}#c{i}", step.id),
+    // A step's working directory is where its commands run. Going there is
+    // KeyJutsu's own line, sent directly rather than performed; the approval
+    // covers it because the directory is part of the step's hash.
+    let enter = step.working_directory.as_ref().map(|dir| {
+        let cmd = step.shell.as_ref().is_some_and(|s| s.kind == keyjutsu_plan::model::ShellName::Cmd);
+        StagedStep {
+            id: format!("{}#cd", step.id),
             title: step.title.clone(),
-            command: c.text.clone(),
-            mode,
+            command: if cmd {
+                format!("cd /d \"{dir}\"")
+            } else {
+                format!("Set-Location -LiteralPath {}", ps_quote(dir))
+            },
+            mode: Some(EngineMode::Direct),
             submit: None,
             answers: None,
-        })
-        .collect();
+        }
+    });
+    let mut lines: Vec<StagedStep> = enter.into_iter().collect();
+    lines.extend(step.commands.iter().enumerate().map(|(i, c)| StagedStep {
+        id: format!("{}#c{i}", step.id),
+        title: step.title.clone(),
+        command: c.text.clone(),
+        mode,
+        submit: None,
+        answers: None,
+    }));
     if show_validation {
         lines.extend(step.visible_validation.iter().enumerate().map(|(i, c)| StagedStep {
             id: format!("{}#v{i}", step.id),
