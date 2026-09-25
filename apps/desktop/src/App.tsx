@@ -101,7 +101,9 @@ export function App() {
     typed: Record<string, string>;
   } | null>(null);
 
-  const [shell, setShell] = useState<ShellKind>("pwsh");
+  // Chosen once the readiness scan says which shells exist; opening PowerShell 7
+  // before then failed on machines without it and left the error on screen.
+  const [shell, setShell] = useState<ShellKind | null>(null);
   const [shellProfile, setShellProfile] = useState<ProfileMode>("detected");
   const [generation, setGeneration] = useState(0);
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -159,9 +161,16 @@ export function App() {
       .readinessScan()
       .then((r) => {
         setReport(r);
-        if (!r.shells.some((s) => s.kind === "pwsh") && r.shells[0]) setShell(r.shells[0].kind);
+        setShell(
+          r.shells.some((s) => s.kind === "pwsh")
+            ? "pwsh"
+            : (r.shells[0]?.kind ?? "windows_powershell"),
+        );
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => {
+        setError(String(e));
+        setShell("windows_powershell");
+      });
   }, []);
 
   const onEvent = useCallback((event: SessionEvent) => {
@@ -213,7 +222,7 @@ export function App() {
 
   // One live session for the chosen shell and profile.
   useEffect(() => {
-    if (view !== "workspace") return;
+    if (view !== "workspace" || shell === null) return;
     let id: number | null = null;
     let cancelled = false;
     const size = term.current?.size() ?? { rows: 30, cols: 120 };
@@ -540,10 +549,10 @@ export function App() {
               <label>
                 Shell{" "}
                 <select
-                  value={shell}
+                  value={shell ?? ""}
                   onChange={(e) => restart(() => setShell(e.target.value as ShellKind))}
                 >
-                  {(report?.shells ?? [{ kind: "pwsh" as ShellKind }]).map((s) => (
+                  {(report?.shells ?? []).map((s) => (
                     <option key={s.kind} value={s.kind}>
                       {SHELL_NAMES[s.kind]}
                     </option>

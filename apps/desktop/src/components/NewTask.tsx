@@ -21,7 +21,13 @@ export function NewTask({ agents, report, busy, onPlan, onOpen }: Props) {
   const [showContext, setShowContext] = useState(false);
   const [context, setContext] = useState("");
   const agentKind = chosen || installed[0]?.kind;
-  const pwsh = report?.shells.find((s) => s.kind === "pwsh");
+  // The shell a new terminal opens: PowerShell 7 if it's installed,
+  // otherwise the first one found, which on a clean Windows is Windows
+  // PowerShell. Saying "no PowerShell 7" there read like a fault.
+  const shell = report?.shells.find((s) => s.kind === "pwsh") ?? report?.shells[0];
+  const shellName = shell
+    ? `${{ pwsh: "PowerShell", windows_powershell: "Windows PowerShell", cmd: "Command Prompt" }[shell.kind]} ${shell.version}`
+    : null;
 
   return (
     <div className="new-task">
@@ -97,7 +103,7 @@ export function NewTask({ agents, report, busy, onPlan, onOpen }: Props) {
         </p>
       )}
       <ul className="facts" aria-label="This machine">
-        {pwsh && <li className="chip">PowerShell {pwsh.version}</li>}
+        {shellName && <li className="chip">{shellName}</li>}
         {report && <li className="chip">{report.windows.product}</li>}
       </ul>
       <div className="cards">
@@ -111,9 +117,7 @@ export function NewTask({ agents, report, busy, onPlan, onOpen }: Props) {
         </section>
         <section className="card">
           <h2>Terminal</h2>
-          <p className="small muted">
-            ConPTY · {pwsh ? `PowerShell ${pwsh.version}` : "no PowerShell 7"}
-          </p>
+          <p className="small muted">ConPTY · {shellName ?? "no shell found"}</p>
         </section>
         <section className="card">
           <h2>Execution</h2>
