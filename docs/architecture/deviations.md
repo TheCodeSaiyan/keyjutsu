@@ -158,7 +158,9 @@ Building Milestone 6 without the owner present, calling Codex, Claude Code,
 Gemini or Copilot would have sent requests on their accounts without their
 agreement. The adapters are tested against recorded answers in each CLI's
 documented output shape. `keyjutsu agents check --live` is the live check, run
-when the owner chooses.
+when the owner chooses. The owner ran it on 25 September 2026: Codex, Claude Code and Copilot passed;
+Gemini failed (not signed in, and its plan mode needs a setting, which led to
+a fix: see [docs/agent-integrations](../agent-integrations/README.md)).
 
 ## D19. One shell per plan
 

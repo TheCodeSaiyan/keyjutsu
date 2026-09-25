@@ -11,24 +11,30 @@ Every flag below was read from the agent's own `--help` on a real machine.
 `keyjutsu agents` shows what is installed and flags any agent whose version
 differs from the one its adapter was checked against.
 
-| Agent | Checked against | Run as | Read-only mode | Answer read from |
-| --- | --- | --- | --- | --- |
-| Codex CLI | 0.154.0 | `codex exec … -` (prompt on stdin) | `--sandbox read-only` | `-o FILE`, the final message |
-| Claude Code | 2.1.282 | `claude -p` (prompt on stdin) | `--permission-mode plan` | `--output-format json` envelope |
-| Gemini CLI | 0.32.1 | `gemini -p … ` (prompt on stdin) | `--approval-mode plan` | `-o json` envelope |
-| GitHub Copilot CLI | 1.0.78 | `copilot -p PROMPT` | `--mode plan --no-ask-user` | `-s`, the response as text |
-| Cursor CLI | **not verified** | `cursor-agent -p PROMPT` | unknown | `--output-format json` (unverified) |
+| Agent | Checked against | Run as | Read-only mode | Answer read from | Live check (25 Sep 2026) |
+| --- | --- | --- | --- | --- | --- |
+| Codex CLI | 0.154.0 | `codex exec … -` (prompt on stdin) | `--sandbox read-only` | `-o FILE`, the final message | passed |
+| Claude Code | 2.1.282 | `claude -p` (prompt on stdin) | `--permission-mode plan` | `--output-format json` envelope | passed |
+| Gemini CLI | 0.32.1 | `gemini -p … ` (prompt on stdin) | `--approval-mode plan`, which needs `experimental.plan` | `-o json` envelope | failed: not signed in, and plan mode off (see below) |
+| GitHub Copilot CLI | 1.0.78 | `copilot -p PROMPT` | `--mode plan --no-ask-user` | `-s`, the response as text | passed |
+| Cursor CLI | **not verified** | `cursor-agent -p PROMPT` | unknown | `--output-format json` (unverified) | not installed |
 
 No invocation ever passes an agent's bypass or auto-approve options; a test
 (`no_invocation_ever_bypasses_the_agents_own_safeguards`) fails if one does.
 
 **Limits, said plainly:**
 
-- **None of the adapters has been exercised against a live agent yet.** They
-  were built against the CLIs' documented output shapes and tested with
-  recorded answers. `keyjutsu agents check --live` sends each installed agent
-  one small request to confirm its adapter works; it uses your accounts, so
-  it only runs when asked.
+- **The live check** (`keyjutsu agents check --live`, one small request per
+  installed agent, on the owner's accounts) passed for Codex, Claude Code
+  and Copilot on 25 September 2026. It is the only live evidence; the rest of
+  the tests replay recorded answers.
+- **Gemini's plan mode can be silently off.** Gemini CLI 0.32.1 only honours
+  `--approval-mode plan` when `experimental.plan` is enabled in its
+  `settings.json`; otherwise it warns, falls back to its default mode and
+  carries on. The live check found this. KeyJutsu now treats that warning as
+  a failure and discards the answer (`an_answer_from_outside_the_read_only_mode_is_discarded`),
+  so Gemini is usable only with `"experimental": {"plan": true}` set. The
+  request is still sent before KeyJutsu can see the warning.
 - **Cursor's agent CLI was not installed** where the adapter was written, so
   its flags are unverified; `keyjutsu agents` says so.
 - **Copilot takes its prompt on the command line**, which Windows caps at

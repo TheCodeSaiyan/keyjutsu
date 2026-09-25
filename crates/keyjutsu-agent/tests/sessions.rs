@@ -217,3 +217,19 @@ fn a_review_challenges_steps_but_changes_nothing() {
     assert_eq!(last.action, ProvenanceAction::Challenged);
     assert_eq!(last.actor.agent.as_ref().unwrap().name, AgentName::Gemini);
 }
+
+/// Found by the first live check: Gemini CLI 0.32.1 without
+/// `experimental.plan` warns and falls back to its default mode.
+#[test]
+fn an_answer_from_outside_the_read_only_mode_is_discarded() {
+    let warning = "Approval mode \"plan\" is only available when experimental.plan is enabled. Falling back to \"default\".";
+    let runner = Replay::new(vec![RunOutput {
+        success: true,
+        stdout: json!({"response": format!("```json\n{}\n```", plan_doc())}).to_string(),
+        stderr: warning.into(),
+        ..RunOutput::default()
+    }]);
+    let err = agents(&runner).propose(&handle(AgentKind::Gemini), "t", &empty_context(), AT).unwrap_err();
+    assert!(matches!(&err, AgentError::NotReadOnly(why) if why.contains("experimental")), "{err}");
+    assert_eq!(runner.seen.borrow().len(), 1, "not asked again in the same mode");
+}

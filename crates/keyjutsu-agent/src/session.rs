@@ -76,6 +76,10 @@ pub enum AgentError {
     Run(String),
     #[error("the agent failed: {0}")]
     Failed(String),
+    /// The agent said it did not run in the read-only mode KeyJutsu asked
+    /// for, so its answer, if any, was discarded (§6).
+    #[error("{0}")]
+    NotReadOnly(String),
     #[error("no acceptable answer after {attempts} attempt(s); last problems: {}", problems.join("; "))]
     Unacceptable { attempts: usize, problems: Vec<String> },
     #[error("there is no step `{0}` to revise")]
@@ -178,6 +182,25 @@ fn carry_provenance(from: &Plan, into: &mut Plan, extra: Vec<ProvenanceEvent>) {
     });
 }
 
+/// Whether the agent reported running outside the read-only mode it was
+/// started in. Gemini CLI's plan mode needs `experimental.plan` in its
+/// settings; without it, Gemini prints a warning and carries on in its
+/// default mode, which was found by the first live check (Gemini 0.32.1).
+fn left_read_only_mode(kind: crate::agents::AgentKind, out: &RunOutput) -> Option<String> {
+    let said = |needle: &str| out.stderr.contains(needle) || out.stdout.contains(needle);
+    match kind {
+        crate::agents::AgentKind::Gemini
+            if said("only available when experimental.plan is enabled") || said("Falling back to \"default\"") =>
+        {
+            Some(
+                "Gemini CLI did not run in its read-only plan mode (it needs \"experimental\": {\"plan\": true} in its                  settings.json), so KeyJutsu discarded its answer"
+                    .into(),
+            )
+        }
+        _ => None,
+    }
+}
+
 impl<R: Runner> Agents<'_, R> {
     /// Run `agent` with `prompt` until it gives an answer `accept` takes, or
     /// the repairs run out.
@@ -193,6 +216,9 @@ impl<R: Runner> Agents<'_, R> {
         for attempt in 1..=self.max_repairs + 1 {
             let inv = invocation(agent.kind, &agent.program, &current, cwd, &self.scratch)?;
             let out = self.runner.run(&inv)?;
+            if let Some(why) = left_read_only_mode(agent.kind, &out) {
+                return Err(AgentError::NotReadOnly(why));
+            }
             if let Some(why) = envelope_error(&out.stdout) {
                 return Err(AgentError::Failed(why));
             }
