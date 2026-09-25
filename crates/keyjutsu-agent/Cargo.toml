@@ -1,0 +1,20 @@
+[package]
+name = "keyjutsu-agent"
+description = "Lite adapters for installed AI coding agents: detection, proposals, revisions and reviews"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+keyjutsu-plan.workspace = true
+keyjutsu-validation.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+
+[lints]
+workspace = true

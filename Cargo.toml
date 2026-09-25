@@ -3,7 +3,11 @@ resolver = "3"
 members = [
     "crates/keyjutsu-terminal",
     "crates/keyjutsu-execution",
+    "crates/keyjutsu-plan",
+    "crates/keyjutsu-validation",
+    "crates/keyjutsu-agent",
     "crates/keyjutsu-core",
+    "crates/keyjutsu-broker",
     "cli/keyjutsu",
     "apps/desktop/src-tauri",
 ]
@@ -13,7 +17,11 @@ members = [
 default-members = [
     "crates/keyjutsu-terminal",
     "crates/keyjutsu-execution",
+    "crates/keyjutsu-plan",
+    "crates/keyjutsu-validation",
+    "crates/keyjutsu-agent",
     "crates/keyjutsu-core",
+    "crates/keyjutsu-broker",
     "cli/keyjutsu",
 ]
 
@@ -28,17 +36,30 @@ publish = false
 keyjutsu-terminal = { path = "crates/keyjutsu-terminal" }
 keyjutsu-execution = { path = "crates/keyjutsu-execution" }
 keyjutsu-core = { path = "crates/keyjutsu-core" }
+keyjutsu-plan = { path = "crates/keyjutsu-plan" }
+keyjutsu-validation = { path = "crates/keyjutsu-validation" }
+keyjutsu-agent = { path = "crates/keyjutsu-agent" }
+keyjutsu-broker = { path = "crates/keyjutsu-broker" }
 
+# The history store's record encryption (AES-256-GCM); its key is protected
+# with Windows DPAPI (ADR 0016).
+aes-gcm = "0.10"
 clap = { version = "4.5", features = ["derive"] }
 crossterm = "0.29"
 getrandom = "0.4"
+# Without its default features it cannot fetch or read remote schemas: plans
+# are only ever checked against the schemas compiled into KeyJutsu.
+jsonschema = { version = "0.57", default-features = false }
 portable-pty = "0.9"
+proptest = "1.11"
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11"
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 thiserror = "2"
-ts-rs = "12"
+ts-rs = { version = "12", features = ["serde-json-impl"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

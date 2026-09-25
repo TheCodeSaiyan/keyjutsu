@@ -121,6 +121,8 @@ struct Control {
     line_dirty: bool,
     ready: bool,
     exited: bool,
+    /// Where the shell's last prompt said it was.
+    location: Option<std::path::PathBuf>,
 }
 
 struct Inner {
@@ -165,6 +167,7 @@ impl Session {
                 line_dirty: false,
                 ready: false,
                 exited: false,
+                location: None,
             }),
             ready_signal: Condvar::new(),
             tick_generation: AtomicU64::new(0),
@@ -190,6 +193,18 @@ impl Session {
 
     pub fn shell_kind(&self) -> ShellKind {
         self.inner.pty.kind()
+    }
+
+    /// The folder the shell was in at its last prompt: where the next command
+    /// runs. A profile that changes folder is reflected here.
+    pub fn shell_location(&self) -> Option<std::path::PathBuf> {
+        self.inner.lock().location.clone()
+    }
+
+    /// The shell's process id, which tells one shell from the next across a
+    /// shell restart.
+    pub fn shell_pid(&self) -> Option<u32> {
+        self.inner.pty.process_id()
     }
 
     /// Block until the shell's first prompt, or until `timeout`. Returns
@@ -270,7 +285,14 @@ impl Session {
         if control.exited {
             return Err(CoreError::Refused("the shell has exited".into()));
         }
-        if control.engine.as_ref().is_some_and(PerformanceEngine::owns_input) {
+        // A finished performance still holds the keyboard (so mashing past the
+        // end types nothing); the next step of a plan may take over from it.
+        // Anything still in progress may not be replaced.
+        if control
+            .engine
+            .as_ref()
+            .is_some_and(|e| e.owns_input() && e.state() != keyjutsu_execution::ExecutionState::Complete)
+        {
             return Err(CoreError::Refused("a performance is already armed".into()));
         }
         if !control.ready {
@@ -288,7 +310,8 @@ impl Session {
         let mut engine =
             PerformanceEngine::new(script, config).map_err(|e| CoreError::Refused(e.to_string()))?;
         let mut actions = engine.handle(Input::Arm);
-        // Direct and user-input steps have no first keystroke to wait for.
+        // Direct and user-input steps have no first keystroke to wait for,
+        // except one that asks the operator: the engine waits for Enter.
         if matches!(engine.snapshot().step_mode, ExecutionMode::Direct | ExecutionMode::UserInput) {
             actions.extend(engine.handle(Input::Start));
         }
@@ -446,6 +469,7 @@ impl Inner {
                 let _ = self.pty.write(format!("\x1b[{row};{col}R").as_bytes());
             }
             ScanItem::Mark(mark) => self.mark(mark),
+            ScanItem::Location(path) => self.lock().location = Some(std::path::PathBuf::from(path)),
         }
     }
 
@@ -546,6 +570,7 @@ mod tests {
             line_dirty: false,
             ready: true,
             exited: false,
+            location: None,
         };
         note_operator_input(&mut c, b"dir");
         assert!(c.line_dirty);

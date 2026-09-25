@@ -64,6 +64,13 @@ pub struct StagedStep {
     pub mode: Option<ExecutionMode>,
     #[serde(default)]
     pub submit: Option<SubmitPolicy>,
+    /// For a line that asks the operator: how many times their answer is
+    /// ended with Enter (a user name and a password is two). After the last,
+    /// keys stop reaching the shell until the command finishes, so nothing
+    /// typed afterwards lands on the next prompt. `None` forwards keys until
+    /// the command finishes.
+    #[serde(default)]
+    pub answers: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
@@ -84,6 +91,10 @@ pub enum ScriptError {
     ControlCharacter { step: String, index: usize },
     #[error("step id `{0}` is used more than once")]
     DuplicateId(String),
+    #[error(
+        "step `{0}` asks the operator for input part-way through a script; such a step must come first, so it waits for the operator rather than catching keys still being pressed for the step before"
+    )]
+    OperatorLineNotFirst(String),
 }
 
 impl StagedScript {
@@ -96,7 +107,7 @@ impl StagedScript {
             return Err(ScriptError::Empty);
         }
         let mut seen = std::collections::HashSet::new();
-        for step in &self.steps {
+        for (i, step) in self.steps.iter().enumerate() {
             if !seen.insert(step.id.as_str()) {
                 return Err(ScriptError::DuplicateId(step.id.clone()));
             }
@@ -106,6 +117,9 @@ impl StagedScript {
             }
             if let Some(index) = step.command.chars().position(char::is_control) {
                 return Err(ScriptError::ControlCharacter { step: step.id.clone(), index });
+            }
+            if i > 0 && mode == ExecutionMode::UserInput && !step.command.is_empty() {
+                return Err(ScriptError::OperatorLineNotFirst(step.id.clone()));
             }
         }
         Ok(())
@@ -117,7 +131,14 @@ mod tests {
     use super::*;
 
     fn step(id: &str, command: &str) -> StagedStep {
-        StagedStep { id: id.into(), title: id.into(), command: command.into(), mode: None, submit: None }
+        StagedStep {
+            id: id.into(),
+            title: id.into(),
+            command: command.into(),
+            mode: None,
+            submit: None,
+            answers: None,
+        }
     }
 
     #[test]
@@ -138,6 +159,19 @@ mod tests {
         assert_eq!(e.validate(ExecutionMode::Performance), Err(ScriptError::EmptyCommand("a".into())));
         let d = StagedScript { steps: vec![step("a", "x"), step("a", "y")] };
         assert_eq!(d.validate(ExecutionMode::Performance), Err(ScriptError::DuplicateId("a".into())));
+    }
+
+    #[test]
+    fn a_line_that_asks_the_operator_must_come_first() {
+        let mut ask = step("ask", "$t = Read-Host -AsSecureString");
+        ask.mode = Some(ExecutionMode::UserInput);
+        let first = StagedScript { steps: vec![ask.clone(), step("use", "Get-Date")] };
+        assert_eq!(first.validate(ExecutionMode::Performance), Ok(()));
+        let later = StagedScript { steps: vec![step("before", "Get-Date"), ask] };
+        assert_eq!(
+            later.validate(ExecutionMode::Performance),
+            Err(ScriptError::OperatorLineNotFirst("ask".into()))
+        );
     }
 
     #[test]

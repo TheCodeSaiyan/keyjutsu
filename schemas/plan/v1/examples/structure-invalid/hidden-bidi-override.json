@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-tidy-logs",
+  "task_id": "task-tidy-logs",
+  "title": "Tidy old log files",
+  "target": {
+    "id": "local",
+    "kind": "local_windows"
+  },
+  "agent": {
+    "name": "codex",
+    "version": "0.52.0"
+  },
+  "steps": [
+    {
+      "id": "list-logs",
+      "title": "List the old logs",
+      "objective": "Show which logs are older than a week.",
+      "kind": "validation",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Get-ChildItem -Path C:/Logs/\u202etxt.exe -File"
+        }
+      ],
+      "privilege": "standard"
+    }
+  ]
+}

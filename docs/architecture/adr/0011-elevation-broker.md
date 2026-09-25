@@ -1,32 +1,59 @@
 # 0011: A separate, narrowly scoped elevation broker
 
-Status: proposed, for Milestone 10. Recorded now so nothing built before then
-makes it harder.
+Status: accepted, Milestone 10. First recorded at Milestone 0 as a proposal,
+so nothing built before then would make it harder.
 
-## Proposal
+## Decision
 
-- The app and CLI always run unelevated. Administrator steps go to
-  `keyjutsu-broker`, a separate binary started elevated once per performance
-  (one UAC prompt, before arming, never mid-performance).
-- The broker listens on a named pipe whose ACL admits only the launching
-  user's logon SID, and checks the client's process identity on connect.
-- It accepts one kind of request: *run approved step N of snapshot H*, with
-  the approved snapshot supplied at start-up. It recomputes the step hash
-  itself and refuses anything that does not match. There is no endpoint that
-  takes a command string.
-- The protocol is versioned; a version mismatch is a refusal, not a
-  negotiation.
-- The broker exits when the performance ends, disarms or fails.
+- **KeyJutsu always runs unelevated.** A step marked `privilege:
+  administrator` goes to `keyjutsu-broker.exe`, a separate binary installed
+  next to KeyJutsu, started elevated through Windows' own "run as
+  administrator" once per run, before the session starts: one UAC prompt,
+  never in the middle of a performance.
+- **It is pinned to one snapshot.** The launch names the snapshot file and
+  its hash. The broker verifies the whole snapshot (every hash) and refuses
+  to start unless its hash is the one it was launched for, so a file swapped
+  between approval and elevation is refused (exit codes say which).
+- **Its pipe** admits only the launching Windows account and SYSTEM (a
+  protected DACL built from the account's SID), rejects remote clients, and
+  is created with `FILE_FLAG_FIRST_PIPE_INSTANCE`, so a name someone else
+  created first makes the broker exit instead of sharing it. The name is 128
+  random bits.
+- **The client is checked three ways:** the connecting process must be the
+  one that launched the broker (`GetNamedPipeClientProcessId`), it must know
+  the per-launch 256-bit secret, and it must speak protocol version 1. A
+  different version is refused, not negotiated.
+- **There is one kind of work:** *run approved step X of snapshot S, whose
+  hash is H*. The broker checks S is its snapshot, X exists and is an
+  Administrator step, and H is X's hash in its own copy. An altered command
+  changes the hash and is refused. Requests are closed JSON types with no
+  unknown fields; there is no request that carries a command string.
+- **It runs the step in its own elevated shell**, directly (not as a typing
+  performance), and returns each line's result and what the shell printed,
+  which KeyJutsu shows in the terminal. KeyJutsu runs the step's checks and
+  records the result as for any step.
+- **It is short-lived:** it serves one connection and exits when that ends,
+  or after a minute if nobody connects.
 
-## What this rules out now
+## The open question, answered
 
-No code before Milestone 10 may run anything elevated, and there is no
-temporary elevated `execute(string)` path "to be secured later" (§59). The
-readiness scan reports the broker as not yet built.
+§15 wants the visible terminal and the real execution to correspond. An
+Administrator step cannot be typed into the operator's unelevated shell and
+run elevated, so it runs in the broker's shell and its output is shown in the
+terminal, marked as the broker's. It is not performed keystroke by keystroke.
 
-## Open question
+## Consequences
 
-Whether the elevated step runs in its own pseudo-console owned by the broker,
-mirrored into the visible terminal, or in the visible terminal's shell by some
-other route. §15 requires the visible terminal and the real execution to
-correspond, which the first option has to demonstrate rather than assume.
+- The secret travels on the broker's command line. A process at Medium
+  integrity cannot read the command line of a High-integrity process, so
+  another unelevated program of the same user cannot read it; an elevated one
+  could, but it is already an Administrator.
+- Same-user malware can always ask UAC for elevation itself; the broker adds
+  no way round that boundary and removes none. What it guarantees is that
+  what runs elevated is exactly what was approved.
+- The launch pins the snapshot hash the operator's KeyJutsu checked, which
+  is what UAC is then asked about. KeyJutsu checks it against the approval
+  recorded in its encrypted store before launching.
+- The pipe's DACL and the launching-process check are enforced by Windows;
+  the tests cover the process check and the name squatting, not an attempt
+  from another account.

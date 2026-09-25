@@ -17,6 +17,7 @@ fn script(commands: &[&str]) -> StagedScript {
                 command: (*c).to_owned(),
                 mode: None,
                 submit: None,
+                answers: None,
             })
             .collect(),
     }
@@ -406,4 +407,90 @@ fn the_overlay_chord_is_reported_and_types_nothing() {
     let overlay = KeyChord { key: KeyName::Char('K'), ctrl: true, alt: false, shift: true, meta: false };
     let out = press(&mut e, overlay);
     assert_eq!(out, vec![Action::OverlayRequested]);
+}
+
+#[test]
+fn the_snapshot_names_the_next_step_for_the_overlay() {
+    let mut e = engine(&["first", "second"], PerformanceConfig::default());
+    mash(&mut e, "a");
+    assert_eq!(e.snapshot().next_step_title.as_deref(), Some("Step 1"));
+    mash(&mut e, "aaaaa");
+    e.handle(finished(Some(0)));
+    assert_eq!(e.snapshot().step_index, 1);
+    assert_eq!(e.snapshot().next_step_title, None, "the last step has nothing after it");
+}
+
+/// A credential step (§25): KeyJutsu's command asks, the operator answers.
+fn asking(command: &str) -> PerformanceEngine {
+    let mut s = script(&[command]);
+    s.steps[0].mode = Some(ExecutionMode::UserInput);
+    let mut e = PerformanceEngine::new(s, PerformanceConfig::default()).unwrap();
+    e.handle(Input::Arm);
+    e
+}
+
+#[test]
+fn a_line_that_asks_the_operator_waits_for_enter_and_is_never_performed() {
+    let mut e = asking("$t = Read-Host -AsSecureString -Prompt 'Token'");
+    assert!(e.asks_operator());
+
+    // Keys still being mashed for the previous step start nothing.
+    assert!(mash(&mut e, "asdfjkl").is_empty());
+    assert_eq!(e.state(), ExecutionState::Armed);
+
+    // Enter starts it: the command is written whole, not typed out.
+    let out = press(&mut e, KeyChord::plain(KeyName::Enter));
+    assert_eq!(written(&out), b"$t = Read-Host -AsSecureString -Prompt 'Token'\r");
+    assert_eq!(e.state(), ExecutionState::AwaitingUserInput);
+
+    // From then on the keys are the operator's answer, delivered as typed.
+    assert_eq!(mash(&mut e, "s3cret"), b"s3cret");
+    assert_eq!(written(&press(&mut e, KeyChord::plain(KeyName::Enter))), b"\r");
+    e.handle(finished(Some(0)));
+    assert_eq!(e.state(), ExecutionState::Complete);
+    assert_all_transitions_legal(&e);
+}
+
+#[test]
+fn a_line_that_asks_the_operator_is_not_started_for_them() {
+    let mut e = asking("$t = Read-Host -AsSecureString");
+    assert!(written(&e.handle(Input::Start)).is_empty(), "a front end cannot start it for the operator");
+    for _ in 0..5 {
+        assert!(written(&e.handle(Input::Tick)).is_empty());
+    }
+    assert_eq!(e.state(), ExecutionState::Armed);
+}
+
+#[test]
+fn cancelling_the_prompt_fails_the_step() {
+    let mut e = asking("$t = Read-Host -AsSecureString");
+    press(&mut e, KeyChord::plain(KeyName::Enter));
+    let ctrl_c = KeyChord { key: KeyName::Char('c'), ctrl: true, alt: false, shift: false, meta: false };
+    assert!(!written(&press(&mut e, ctrl_c)).is_empty(), "Ctrl+C reaches the prompt");
+    e.handle(finished(Some(1)));
+    assert_eq!(e.state(), ExecutionState::Failed);
+}
+
+#[test]
+fn keys_after_the_last_answer_do_not_reach_the_next_prompt() {
+    let mut s = script(&["$c = Get-Credential"]);
+    s.steps[0].mode = Some(ExecutionMode::UserInput);
+    s.steps[0].answers = Some(2);
+    let mut e = PerformanceEngine::new(s, PerformanceConfig::default()).unwrap();
+    e.handle(Input::Arm);
+    e.handle(Input::Key(KeyInput::from_chord(&KeyChord::plain(KeyName::Enter), &Bindings::default())));
+
+    // User name, Enter, password, Enter: all of it is the operator's.
+    assert_eq!(mash(&mut e, "bob"), b"bob");
+    press(&mut e, KeyChord::plain(KeyName::Enter));
+    assert_eq!(e.state(), ExecutionState::AwaitingUserInput);
+    assert_eq!(mash(&mut e, "pw"), b"pw");
+    press(&mut e, KeyChord::plain(KeyName::Enter));
+
+    // Answered: anything else is swallowed until the shell reports back.
+    assert_eq!(e.state(), ExecutionState::Executing);
+    assert!(mash(&mut e, "qqqq").is_empty());
+    e.handle(finished(Some(0)));
+    assert_eq!(e.state(), ExecutionState::Complete);
+    assert_all_transitions_legal(&e);
 }

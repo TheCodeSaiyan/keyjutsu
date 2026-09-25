@@ -179,6 +179,7 @@ pub fn probe_shell(kind: ShellKind, profile: ProfileMode, timeout: Duration) -> 
             command: command.into(),
             mode: None,
             submit: None,
+            answers: None,
         }],
     };
     let config = PerformanceConfig {
@@ -300,13 +301,43 @@ pub fn scan() -> ReadinessReport {
         status: CheckStatus::Ok,
         detail: "off: KeyJutsu has no telemetry, crash reporting or remote diagnostics".into(),
     });
-    for (name, milestone) in [
-        ("AI agents", "detection arrives with agent integration (Milestone 6)"),
-        ("Elevation broker", "arrives with Milestone 10; nothing runs elevated yet"),
-        ("Encrypted storage", "arrives with Milestone 14; nothing is persisted yet"),
-    ] {
-        checks.push(Check { name: name.into(), status: CheckStatus::NotYetBuilt, detail: milestone.into() });
-    }
+    let agents: Vec<&'static str> =
+        keyjutsu_agent::detect_all().into_iter().filter(|a| a.installed()).map(|a| a.name).collect();
+    checks.push(if agents.is_empty() {
+        Check {
+            name: "AI agents".into(),
+            status: CheckStatus::Warning,
+            detail: "none installed: plans can still be opened from files".into(),
+        }
+    } else {
+        Check { name: "AI agents".into(), status: CheckStatus::Ok, detail: agents.join(", ") }
+    });
+    let broker = std::env::current_exe().ok().map(|e| e.with_file_name("keyjutsu-broker.exe"));
+    checks.push(match broker {
+        Some(b) if b.exists() => Check {
+            name: "Elevation broker".into(),
+            status: CheckStatus::Ok,
+            detail: "installed: Administrator steps run through it, after one UAC prompt before the run"
+                .into(),
+        },
+        _ => Check {
+            name: "Elevation broker".into(),
+            status: CheckStatus::Warning,
+            detail: "keyjutsu-broker.exe is not next to KeyJutsu, so Administrator steps cannot run".into(),
+        },
+    });
+    let sample = b"keyjutsu readiness";
+    let dpapi_works =
+        crate::dpapi::protect(sample).and_then(|p| crate::dpapi::unprotect(&p)).is_ok_and(|u| u == sample);
+    checks.push(Check {
+        name: "Encrypted storage".into(),
+        status: if dpapi_works { CheckStatus::Ok } else { CheckStatus::Unavailable },
+        detail: if dpapi_works {
+            "history is encrypted with a key only this Windows account can unlock (DPAPI)".into()
+        } else {
+            "Windows would not protect a key for this account, so history cannot be kept".into()
+        },
+    });
 
     ReadinessReport {
         keyjutsu_version: env!("CARGO_PKG_VERSION").into(),

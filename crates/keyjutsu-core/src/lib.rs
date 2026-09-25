@@ -5,14 +5,30 @@
 //! or below it, never in a front end. The desktop's React code in particular
 //! can only ask; this crate answers.
 
+pub mod approvals;
+pub mod artifacts;
+pub mod boundary;
 pub mod demo;
+pub mod dpapi;
+pub mod elevation;
+pub mod execute;
+pub mod fingerprint;
+pub mod git;
 pub mod headless;
+pub mod history;
 pub mod ipc;
 pub mod readiness;
+pub mod recovery;
 pub mod session;
+pub mod store;
+pub mod technique;
+pub mod workspace;
 
+pub use keyjutsu_agent as agent;
 pub use keyjutsu_execution as execution;
+pub use keyjutsu_plan as plan;
 pub use keyjutsu_terminal as terminal;
+pub use keyjutsu_validation as validation;
 pub use session::{Session, SessionEvent, SessionOptions, SessionSink};
 
 #[derive(Debug, thiserror::Error)]

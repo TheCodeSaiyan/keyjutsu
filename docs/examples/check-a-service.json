@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "check-winmgmt",
+  "task_id": "docs-example",
+  "title": "Check that Windows Management Instrumentation is running",
+  "target": { "id": "local", "kind": "local_windows" },
+  "agent": { "name": "codex", "version": "0.154.0" },
+  "steps": [
+    {
+      "id": "look",
+      "title": "Look at the Winmgmt service",
+      "objective": "Winmgmt is running.",
+      "kind": "validation",
+      "shell": { "kind": "windows_powershell" },
+      "commands": [{ "text": "Get-Service -Name Winmgmt" }],
+      "internal_validation": [{ "service_state": { "name": "Winmgmt", "state": "running" } }]
+    },
+    {
+      "id": "when",
+      "title": "Say when Windows last started",
+      "objective": "The last boot time, for the record.",
+      "kind": "validation",
+      "shell": { "kind": "windows_powershell" },
+      "depends_on": ["look"],
+      "commands": [{ "text": "(Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime" }]
+    }
+  ]
+}

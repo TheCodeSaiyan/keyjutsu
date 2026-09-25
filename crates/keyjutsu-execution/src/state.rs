@@ -72,7 +72,7 @@ impl ExecutionState {
             Executing => &[Waiting, Validating, Failed, Aborted],
             Waiting => &[Validating, Failed, Aborted],
             Validating => &[Typing, Executing, AwaitingUserInput, Paused, Complete, Failed, Aborted],
-            AwaitingUserInput => &[Validating, Paused, Failed, Aborted],
+            AwaitingUserInput => &[Validating, Executing, Paused, Failed, Aborted],
             Paused => &[
                 Armed,
                 Typing,

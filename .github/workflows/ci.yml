@@ -29,6 +29,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      # §57: a release does not ship unless every gate's named tests pass.
+      # A renamed or deleted test fails its gate rather than dropping out.
+      - run: node scripts/release-gates.mjs
+      # The docs against the CLI just built: commands, options, links,
+      # headings, pages nothing links to, and the house style.
+      - run: node scripts/docs-check.mjs
       # ts-rs rewrites the TypeScript bindings during `cargo test`. A diff here
       # means a Rust IPC type changed without its TypeScript counterpart.
       - name: Generated TypeScript is current
@@ -52,10 +58,15 @@ jobs:
       - run: pnpm -r typecheck
       - run: pnpm -r test
       - run: pnpm schemas:check
+      # Every place the version is written says the same thing.
+      - run: node scripts/version.mjs
+      - run: pnpm tokens:check
       - run: pnpm --filter @keyjutsu/desktop build
 
-  # The desktop binary, built against the frontend. Unbundled: installers and
-  # signing belong to the release pipeline (Milestone 16).
+  # The desktop app, bundled into the NSIS installer with the CLI and the
+  # elevation broker beside it. Unsigned here and kept, so every change,
+  # including a pull request from a fork, produces something to try; signing
+  # belongs to release.yml, which is the only place a signing identity is used.
   desktop:
     runs-on: windows-latest
     steps:
@@ -71,8 +82,18 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @keyjutsu/desktop build
+      # The desktop crate's build script needs the CLI and broker beside it
+      # (bundle.externalBin), even for clippy; tauri build stages them itself.
+      - run: node scripts/stage-sidecars.mjs
       - run: cargo clippy -p keyjutsu-desktop --all-targets -- -D warnings
-      - run: pnpm --filter @keyjutsu/desktop tauri build --no-bundle
+      # Not a default workspace member, so the rust job doesn't test it.
+      - run: cargo test -p keyjutsu-desktop
+      - run: pnpm --filter @keyjutsu/desktop tauri build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyjutsu-installer-unsigned
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error
 
   audit:
     runs-on: ubuntu-latest

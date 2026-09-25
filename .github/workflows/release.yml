@@ -1,0 +1,300 @@
+name: Release
+
+# The run's title says which of two things it is. A run started from the
+# Actions page builds and checks the installer and publishes nothing; only a
+# tag publishes. Without saying so, a green run titled "Release" reads as a
+# release to whoever just pressed the button.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+      && format('Build only {0}: nothing is published from the Actions page; push tag v{0} to release', inputs.version)
+      || format('Release {0}', github.ref_name) }}
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Version to BUILD, without the leading v. This checks the installer and
+          publishes nothing. To release, push an annotated tag vX.Y.Z instead.
+        required: true
+        default: 0.1.0
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  installer:
+    name: Build and sign the installer
+    runs-on: windows-latest
+    # Bounded, so a hang fails visibly and names its step instead of using up
+    # the job's whole allowance with nothing left to read.
+    timeout-minutes: 45
+    # Named so the OIDC subject stays the same for every tag: a federated
+    # credential matches a fixed subject, and without an environment the
+    # subject carries the ref, which differs every release.
+    environment: release
+
+    # ARTIFACT_SIGNING_ACCOUNT is the switch. Unset, the signing script leaves
+    # files unsigned and says so; set, it refuses to run half-configured. The
+    # other two are read by scripts/sign-windows.ps1.
+    env:
+      ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.ARTIFACT_SIGNING_ACCOUNT }}
+      ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.ARTIFACT_SIGNING_ENDPOINT }}
+      ARTIFACT_SIGNING_PROFILE: ${{ secrets.ARTIFACT_SIGNING_PROFILE }}
+
+    # For the OIDC token azure/login exchanges. No token is requested when
+    # signing isn't configured.
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      signed: ${{ steps.signed.outputs.value }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A tag that disagrees with the version in the code would publish an
+      # installer whose name and whose `keyjutsu --version` differ.
+      - name: The version in the code is the version being released
+        shell: bash
+        run: |
+          node scripts/version.mjs
+          code=$(node -e "console.log(require('./apps/desktop/src-tauri/tauri.conf.json').version)")
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "$code" != "${{ steps.version.outputs.value }}" ]; then
+            echo "::error::Tag ${{ github.ref_name }} but the code says $code. Run 'node scripts/version.mjs set ${{ steps.version.outputs.value }}' and commit it first."
+            exit 1
+          fi
+
+      - name: Say that this run publishes nothing
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          {
+            echo "## Build only: nothing is published"
+            echo
+            echo "This run was started from the Actions page. It builds and checks the"
+            echo "installer, and stops: only a tag publishes a release."
+            echo
+            echo "To release ${{ inputs.version }}: set the version, commit, then push an annotated tag,"
+            echo '`node scripts/version.mjs set ${{ inputs.version }}`, then'
+            echo '`git tag -a v${{ inputs.version }} -F notes && git push origin main v${{ inputs.version }}`'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Everything is compiled here, unsigned, so the signing step below only
+      # bundles. GitHub's OIDC assertion lasts five minutes and azure/login
+      # cannot renew it, so a login in front of a long compile is dead by the
+      # time signtool asks for a token.
+      - name: Build, before signing
+        run: pnpm --filter @keyjutsu/desktop tauri build --no-bundle
+
+      - name: Azure login for signing
+        if: env.ARTIFACT_SIGNING_ACCOUNT != ''
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Tauri calls the signing script for each file it bundles: the CLI and
+      # the broker, the desktop app once patched, and the installer and its
+      # uninstaller. Given here rather than in tauri.conf.json, so a local
+      # build is never slowed or changed by it.
+      - name: Bundle and sign
+        shell: pwsh
+        run: |
+          $sign = Join-Path $env:GITHUB_WORKSPACE 'scripts\sign-windows.ps1'
+          @{ bundle = @{ windows = @{ signCommand = @{
+              cmd = 'pwsh'
+              args = @('-NoProfile', '-File', $sign, '-Path', '%1')
+          } } } } | ConvertTo-Json -Depth 6 | Set-Content -Path "$env:RUNNER_TEMP\sign.conf.json"
+          pnpm --filter @keyjutsu/desktop tauri build --config "$env:RUNNER_TEMP\sign.conf.json"
+          if ($LASTEXITCODE -ne 0) { throw 'tauri build failed' }
+
+      # The installer's own signature, checked rather than assumed. The
+      # programs inside it are checked where they end up, in the verify job.
+      - name: Check the installer's signature
+        id: signed
+        shell: pwsh
+        run: |
+          $setup = "target/release/bundle/nsis/KeyJutsu_${{ steps.version.outputs.value }}_x64-setup.exe"
+          if (-not (Test-Path $setup)) { throw "missing: $setup" }
+          if (-not $env:ARTIFACT_SIGNING_ACCOUNT) {
+            "value=false" >> $env:GITHUB_OUTPUT
+            "::warning::Signing is not configured: this installer and the programs in it are unsigned."
+            return
+          }
+          $s = Get-AuthenticodeSignature $setup
+          if ($s.Status -ne 'Valid') { throw "$setup is not validly signed ($($s.Status))" }
+          "Signed by $($s.SignerCertificate.Subject)"
+          "value=true" >> $env:GITHUB_OUTPUT
+
+      # Each file carries its own checksum, and the publish step collects them
+      # into SHA256SUMS and checks that against the files being published.
+      - name: Checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp "target/release/bundle/nsis/KeyJutsu_${{ steps.version.outputs.value }}_x64-setup.exe" out/
+          cd out
+          for f in *.exe; do sha256sum "$f" | tr -d '\n' > "$f.sha256"; done
+          cat *.sha256; echo
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyjutsu-installer
+          path: out/
+          if-no-files-found: error
+
+  # Installing it is the only way to know it installs, and the runner is
+  # disposable, so this costs nothing and catches what a checksum never will:
+  # an installer that runs, reports success, and leaves no working program, or
+  # an uninstaller that leaves the PATH entry behind.
+  verify:
+    name: Install, run and uninstall it
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: installer
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: keyjutsu-installer
+          path: out
+
+      - name: Install, run and uninstall
+        shell: pwsh
+        run: |
+          $version = '${{ needs.installer.outputs.version }}'
+          $setup = Get-ChildItem out/*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exited $($p.ExitCode)" }
+          $dir = "$env:ProgramFiles\KeyJutsu"
+          foreach ($f in 'keyjutsu-desktop.exe', 'keyjutsu.exe', 'keyjutsu-broker.exe', 'uninstall.exe') {
+            if (-not (Test-Path "$dir\$f")) { throw "not installed: $f" }
+          }
+          # Every program Windows will run from this release, as installed: a
+          # signed installer that puts unsigned programs in Program Files
+          # still meets the unknown-publisher warning later.
+          if ('${{ needs.installer.outputs.signed }}' -eq 'true') {
+            foreach ($f in 'keyjutsu-desktop.exe', 'keyjutsu.exe', 'keyjutsu-broker.exe', 'uninstall.exe') {
+              $s = Get-AuthenticodeSignature "$dir\$f"
+              if ($s.Status -ne 'Valid') { throw "$f is not validly signed ($($s.Status))" }
+            }
+          }
+          $said = & "$dir\keyjutsu.exe" --version
+          if ($said -ne "keyjutsu $version") { throw "keyjutsu --version said '$said', not $version" }
+          & "$dir\keyjutsu.exe" doctor --json | Out-Null
+          # doctor may find problems on a bare runner; it may not fail to report.
+          if ($LASTEXITCODE -gt 1) { throw "doctor failed to report ($LASTEXITCODE)" }
+          $path = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (-not ($path -split ';' -contains $dir)) { throw 'the install folder is not on the PATH' }
+          $u = Start-Process "$dir\uninstall.exe" -ArgumentList '/S' -Wait -PassThru
+          Start-Sleep -Seconds 5
+          if ($u.ExitCode -ne 0) { throw "uninstaller exited $($u.ExitCode)" }
+          if (Test-Path "$dir\keyjutsu.exe") { throw 'files left after uninstalling' }
+          $path = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if ($path -split ';' -contains $dir) { throw 'PATH entry left after uninstalling' }
+          "Installed $said, ran doctor, and uninstalled cleanly."
+
+  release:
+    name: Publish the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [installer, verify]
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: keyjutsu-installer
+          path: out
+
+      - name: Collect checksums
+        run: |
+          set -euo pipefail
+          cd out
+          # Each sidecar has no trailing newline, so they are joined with one;
+          # a plain `cat *.sha256` makes one line sha256sum -c can't read.
+          for sidecar in *.sha256; do cat "$sidecar"; echo; done > SHA256SUMS
+          # Checked here, against the very files about to be published.
+          sha256sum -c SHA256SUMS
+          cat SHA256SUMS
+
+      # What changed in this version is written in the tag; the part every
+      # release carries follows it. The commands come first, because the page
+      # is for somebody who has landed on it wanting to install this.
+      - name: Write the notes
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${{ github.ref_name }}:refs/tags/${{ github.ref_name }}"
+          git tag -l --format='%(contents:body)' "${{ github.ref_name }}" > notes.md
+          if [ ! -s notes.md ]; then echo "No notes were written for this version." > notes.md; fi
+          version="${{ needs.installer.outputs.version }}"
+          if [ "${{ needs.installer.outputs.signed }}" = "true" ]; then
+            signed="The installer and every program in it are signed, and the signature is timestamped."
+          else
+            signed="This release is **not signed**: Windows will warn about an unknown publisher. The checksums below still hold."
+          fi
+          cat >> notes.md <<STANDING
+
+          ## Install
+
+          In PowerShell:
+
+          \`\`\`powershell
+          irm https://github.com/${{ github.repository }}/releases/latest/download/install.ps1 | iex
+          \`\`\`
+
+          It downloads the installer, checks it against \`SHA256SUMS\` and its
+          signature before running anything, then runs it: Windows asks for
+          Administrator once, and the installer asks whether to put
+          \`keyjutsu\` on your PATH and "Open KeyJutsu here" in Explorer.
+
+          Or download \`KeyJutsu_${version}_x64-setup.exe\` below and check it
+          against \`SHA256SUMS\` yourself.
+
+          ## The small print
+
+          Windows 11, x64. ${signed} The installer was installed, run and
+          uninstalled on a clean runner before this page was published.
+          STANDING
+          cat notes.md
+
+      # Pinned to a commit: this is the one step with contents: write, so a
+      # moved tag upstream would be a moved tag with permission to publish.
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            out/*.exe
+            out/SHA256SUMS
+            scripts/install.ps1
+          body_path: notes.md

@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "meta": {
+    "name": "KeyJutsu Design Tokens",
+    "version": "1.0.0",
+    "description": "Canonical visual tokens for the KeyJutsu Windows desktop application, CLI-adjacent UI, docs, and branded surfaces.",
+    "principles": [
+      "Japanese-minimal rather than themed or decorative",
+      "Windows-native interaction patterns",
+      "Technical, restrained, calm, premium",
+      "Vermilion is an accent, not a wallpaper",
+      "Correctness and state clarity beat visual theatre",
+      "Performance terminal inherits the user's terminal theme rather than KeyJutsu branding"
+    ]
+  },
+  "color": {
+    "brand": {
+      "black": "#0F1317",
+      "obsidian": "#090B0D",
+      "graphite": "#1A1E23",
+      "gunmetal": "#35373E",
+      "steel": "#62666D",
+      "mist": "#A6A8AC",
+      "white": "#F7F7F5",
+      "paper": "#FDFCF9",
+      "vermilion": "#E32226",
+      "vermilionHover": "#F0393D",
+      "vermilionPressed": "#BE1C20",
+      "vermilionTint": "rgba(227,34,38,0.094)"
+    },
+    "semantic": {
+      "success": "#3FA66B",
+      "info": "#4C8DDB",
+      "warning": "#D89A31",
+      "error": "#D84A4A",
+      "critical": "#B72C3B",
+      "userInput": "#AF78D2"
+    },
+    "dark": {
+      "background": "#090B0D",
+      "surface1": "#0F1317",
+      "surface2": "#1A1E23",
+      "surface3": "#23282E",
+      "surfaceHover": "#2C3138",
+      "border": "#353A41",
+      "borderSubtle": "#252A30",
+      "textPrimary": "#F7F7F5",
+      "textSecondary": "#A6A8AC",
+      "textMuted": "#747980",
+      "textDisabled": "#555A61",
+      "accent": "#E32226"
+    },
+    "light": {
+      "background": "#FDFCF9",
+      "surface1": "#F7F7F5",
+      "surface2": "#EEEDEA",
+      "surface3": "#E5E4E1",
+      "surfaceHover": "#FFFFFF",
+      "border": "#D4D3D0",
+      "borderSubtle": "#E5E4E1",
+      "textPrimary": "#0F1317",
+      "textSecondary": "#555A61",
+      "textMuted": "#747980",
+      "textDisabled": "#A6A8AC",
+      "accent": "#D51E22"
+    },
+    "state": {
+      "ready": "#3FA66B",
+      "review": "#D89A31",
+      "blocked": "#D84A4A",
+      "critical": "#B72C3B",
+      "running": "#4C8DDB",
+      "typing": "#E32226",
+      "waitingUser": "#AF78D2",
+      "skipped": "#62666D"
+    }
+  },
+  "typography": {
+    "family": {
+      "ui": "'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif",
+      "mono": "'Cascadia Mono', 'Cascadia Code', 'Consolas', monospace"
+    },
+    "weight": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "size": {
+      "caption": "11px",
+      "compact": "12px",
+      "body": "14px",
+      "bodyLarge": "16px",
+      "heading3": "16px",
+      "heading2": "20px",
+      "heading1": "24px",
+      "display": "32px"
+    },
+    "lineHeight": {
+      "caption": "16px",
+      "compact": "16px",
+      "body": "20px",
+      "bodyLarge": "24px",
+      "heading3": "24px",
+      "heading2": "28px",
+      "heading1": "32px",
+      "display": "40px"
+    },
+    "tracking": {
+      "ui": "0",
+      "label": "0.01em",
+      "caps": "0.08em",
+      "mono": "0"
+    }
+  },
+  "spacing": {
+    "0": 0,
+    "1": 4,
+    "2": 8,
+    "3": 12,
+    "4": 16,
+    "5": 20,
+    "6": 24,
+    "8": 32,
+    "10": 40,
+    "12": 48,
+    "16": 64
+  },
+  "radius": {
+    "none": 0,
+    "xs": 3,
+    "sm": 6,
+    "md": 8,
+    "lg": 12,
+    "xl": 16,
+    "pill": 999
+  },
+  "border": {
+    "hairline": "1px",
+    "strong": "2px"
+  },
+  "control": {
+    "height": {
+      "compact": 28,
+      "default": 36,
+      "large": 44
+    },
+    "iconSize": {
+      "sm": 16,
+      "md": 20,
+      "lg": 24
+    },
+    "focusRing": "0 0 0 2px rgba(227,34,38,.35)"
+  },
+  "layout": {
+    "appMinWidth": 1024,
+    "sidebar": 240,
+    "sidebarCollapsed": 56,
+    "inspector": 360,
+    "contentMax": 1600,
+    "panelGap": 1,
+    "pagePadding": 24
+  },
+  "shadow": {
+    "none": "none",
+    "subtle": "0 1px 2px rgba(0,0,0,.24)",
+    "raised": "0 8px 24px rgba(0,0,0,.28)",
+    "dialog": "0 20px 60px rgba(0,0,0,.48)"
+  },
+  "motion": {
+    "duration": {
+      "instant": "80ms",
+      "fast": "120ms",
+      "standard": "180ms",
+      "panel": "240ms",
+      "slow": "320ms"
+    },
+    "easing": {
+      "standard": "cubic-bezier(.2,0,0,1)",
+      "enter": "cubic-bezier(0,0,.2,1)",
+      "exit": "cubic-bezier(.4,0,1,1)"
+    },
+    "rules": [
+      "No decorative continuous animation",
+      "Respect prefers-reduced-motion",
+      "Terminal takeover defaults to instant or <=180ms",
+      "Status transitions may fade/slide subtly; never bounce"
+    ]
+  },
+  "iconography": {
+    "preferredSet": "Fluent System Icons",
+    "style": "Regular outline for default; Filled only for selected/armed/emphasised states",
+    "stroke": "Consistent native set stroke; do not mix icon families",
+    "sizes": [
+      16,
+      20,
+      24
+    ],
+    "rules": [
+      "Pair critical icons with text",
+      "Never use colour alone to convey state",
+      "Avoid ninja/weapon iconography"
+    ]
+  },
+  "density": {
+    "default": {
+      "rowHeight": 40,
+      "tableRow": 36,
+      "panelPadding": 16
+    },
+    "compact": {
+      "rowHeight": 32,
+      "tableRow": 30,
+      "panelPadding": 12
+    }
+  },
+  "risk": {
+    "low": {
+      "color": "#4C8DDB",
+      "label": "Low"
+    },
+    "normal": {
+      "color": "#62666D",
+      "label": "Normal"
+    },
+    "high": {
+      "color": "#D89A31",
+      "label": "High"
+    },
+    "critical": {
+      "color": "#B72C3B",
+      "label": "Critical"
+    }
+  },
+  "copy": {
+    "voice": [
+      "plainspoken",
+      "technical",
+      "concise",
+      "calm",
+      "slightly playful only where appropriate"
+    ],
+    "preferredTerms": [
+      "Technique",
+      "Plan",
+      "Ready",
+      "Revalidate",
+      "Arm KeyJutsu",
+      "Performance",
+      "Direct",
+      "Recovery",
+      "Review"
+    ],
+    "avoid": [
+      "magic",
+      "hacker mode",
+      "ninja mode",
+      "AI magic",
+      "guaranteed safe",
+      "100% safe"
+    ]
+  }
+}

@@ -225,7 +225,8 @@ function global:prompt {{
     $kjE = [char]27; $kjB = [char]7
     if (-not $kjOk) {{ Write-Error 'keyjutsu' -ErrorAction Ignore }}
     $kjPrompt = (& $global:__KeyJutsuOriginalPrompt) -join ''
-    "$kjE]133;D;$kjCode;kj={n}$kjB$kjE]133;A;kj={n}$kjB$kjPrompt$kjE]133;B;kj={n}$kjB"
+    $kjCwd = $executionContext.SessionState.Path.CurrentFileSystemLocation.ProviderPath
+    "$kjE]133;D;$kjCode;kj={n}$kjB$kjE]133;P;kj={n};cwd=$kjCwd$kjB$kjE]133;A;kj={n}$kjB$kjPrompt$kjE]133;B;kj={n}$kjB"
 }}"#
     )
 }
@@ -234,7 +235,7 @@ function global:prompt {{
 /// exit code in the `D` mark: see [`ShellKind::reports_exit_codes`].
 pub fn cmd_prompt(nonce: &Nonce, original: &str) -> String {
     let n = nonce.as_str();
-    format!(r"$e]133;D;kj={n}$e\$e]133;A;kj={n}$e\{original}$e]133;B;kj={n}$e\")
+    format!(r"$e]133;D;kj={n}$e\$e]133;P;kj={n};cwd=$P$e\$e]133;A;kj={n}$e\{original}$e]133;B;kj={n}$e\")
 }
 
 /// `-EncodedCommand` takes base64 of the UTF-16LE script.
@@ -289,12 +290,15 @@ mod tests {
     fn integration_scripts_carry_the_nonce_on_every_mark() {
         let nonce = Nonce::from_fixed("abc123");
         let ps = powershell_integration(&nonce, ProfileMode::Detected);
-        assert_eq!(ps.matches("kj=abc123").count(), 3);
+        // D, P (location), A, B: every mark carries the nonce.
+        assert_eq!(ps.matches("kj=abc123").count(), 4);
+        assert_eq!(ps.matches("]133;").count(), 4);
         assert!(!ps.contains("PredictionSource"), "a detected profile is left as the user set it");
         let clean = powershell_integration(&nonce, ProfileMode::Clean);
         assert!(clean.contains("-PredictionSource None") && clean.contains("SaveNothing"));
         let cmd = cmd_prompt(&nonce, "$P$G");
-        assert_eq!(cmd.matches("kj=abc123").count(), 3);
+        assert_eq!(cmd.matches("kj=abc123").count(), 4);
+        assert_eq!(cmd.matches("]133;").count(), 4);
         assert!(cmd.contains("$P$G"));
     }
 

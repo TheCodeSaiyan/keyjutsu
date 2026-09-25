@@ -12,6 +12,7 @@ tauri-build.workspace = true
 
 [dependencies]
 keyjutsu-core.workspace = true
+keyjutsu-broker.workspace = true
 tauri.workspace = true
 
 [lints]

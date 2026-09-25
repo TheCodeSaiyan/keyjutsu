@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-docker-start",
+  "task_id": "task-docker-start",
+  "title": "Find out why Docker Desktop is not starting",
+  "target": {
+    "id": "local",
+    "kind": "local_windows"
+  },
+  "agent": {
+    "name": "codex",
+    "version": "0.52.0"
+  },
+  "environment_assumptions": [
+    {
+      "description": "PowerShell 7 is installed",
+      "check": {
+        "tool_version": {
+          "tool": "pwsh",
+          "satisfies": ">=7.4"
+        }
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "detect-backend",
+      "title": "Detect the Docker backend",
+      "objective": "Find out whether Docker Desktop uses WSL 2 or Hyper-V.",
+      "kind": "validation",
+      "shell": {
+        "kind": "pwsh",
+        "version": ">=7.4"
+      },
+      "commands": [
+        {
+          "text": "wsl --status"
+        }
+      ],
+      "privilege": "standard",
+      "proposed_risk": {
+        "level": "low",
+        "rationale": "Read-only."
+      },
+      "reversibility": {
+        "level": "full"
+      },
+      "execution_mode": "performance"
+    },
+    {
+      "id": "wsl-path",
+      "title": "Restart the WSL backend",
+      "objective": "Shut WSL down so Docker Desktop can bring its distributions back cleanly.",
+      "kind": "command",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "wsl --shutdown"
+        }
+      ],
+      "privilege": "standard",
+      "proposed_risk": {
+        "level": "normal",
+        "rationale": "Stops running WSL distributions."
+      },
+      "reversibility": {
+        "level": "full",
+        "notes": "WSL starts again on demand."
+      },
+      "expected_effects": [
+        {
+          "kind": "process_started",
+          "target": "wsl"
+        }
+      ],
+      "internal_validation": [
+        {
+          "exit_code": {
+            "equals": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "hyperv-path",
+      "title": "Check the Hyper-V service",
+      "objective": "Confirm the Hyper-V host compute service is running.",
+      "kind": "validation",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Get-Service -Name vmcompute"
+        }
+      ],
+      "internal_validation": [
+        {
+          "service_state": {
+            "name": "vmcompute",
+            "state": "running"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wsl-path",
+      "title": "Verify Docker responds",
+      "objective": "Docker answers a version query.",
+      "kind": "validation",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "docker version --format '{{.Server.Version}}'"
+        }
+      ],
+      "internal_validation": [
+        {
+          "exit_code": {
+            "equals": 0
+          }
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "detect-backend",
+      "to": "wsl-path",
+      "when": {
+        "fact": {
+          "name": "docker.backend",
+          "equals": "wsl2"
+        }
+      }
+    },
+    {
+      "from": "detect-backend",
+      "to": "hyperv-path",
+      "when": {
+        "not": {
+          "fact": {
+            "name": "docker.backend",
+            "equals": "wsl2"
+          }
+        }
+      }
+    }
+  ],
+  "execution_preferences": {
+    "default_mode": "performance",
+    "submit": "any_key",
+    "show_validation": "meaningful"
+  }
+}

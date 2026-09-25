@@ -45,6 +45,7 @@ fn script(steps: &[(&str, Option<ExecutionMode>)]) -> StagedScript {
                 command: (*command).into(),
                 mode: *mode,
                 submit: None,
+                answers: None,
             })
             .collect(),
     }
@@ -312,4 +313,36 @@ fn the_session_reports_the_shell_exiting() {
     });
     assert_eq!(code, Some(7));
     assert!(session.arm(script(&[("Get-Date", None)]), PerformanceConfig::default()).is_err());
+}
+
+#[test]
+fn each_shell_says_where_it_is_at_every_prompt() {
+    let base = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("location");
+    let start_dir = base.join("start here; please");
+    let next_dir = base.join("then here");
+    std::fs::create_dir_all(&start_dir).unwrap();
+    std::fs::create_dir_all(&next_dir).unwrap();
+    for kind in [ShellKind::Pwsh, ShellKind::WindowsPowershell, ShellKind::Cmd] {
+        let out = Arc::new(Collector::new());
+        let mut o = SessionOptions::new(kind);
+        o.profile = ProfileMode::Clean;
+        o.intercept_cursor_queries = true;
+        o.cwd = Some(start_dir.clone());
+        let session = Session::open(o, out.clone()).unwrap();
+        assert!(session.wait_ready(Duration::from_secs(60)), "{kind:?}");
+        assert_eq!(session.shell_location().as_deref(), Some(start_dir.as_path()), "{kind:?}");
+
+        let cd = match kind {
+            ShellKind::Cmd => format!("cd /d \"{}\"\r", next_dir.display()),
+            _ => format!("Set-Location -LiteralPath '{}'\r", next_dir.display()),
+        };
+        session.write_input(cd.as_bytes()).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        while session.shell_location().as_deref() != Some(next_dir.as_path()) {
+            assert!(std::time::Instant::now() < deadline, "{kind:?}: {:?}", session.shell_location());
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(!out.plain_output().contains("133;P"), "{kind:?}: the mark is not shown");
+        session.close();
+    }
 }

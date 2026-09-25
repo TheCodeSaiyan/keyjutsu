@@ -14,7 +14,7 @@ place.
 Milestones 0 to 2 create three crates, `keyjutsu-terminal`,
 `keyjutsu-execution` and `keyjutsu-core`, because those milestones have code
 for them. Each remaining crate is created by the milestone that first needs
-it; [the dependency graph](../dependency-graph.md#crate-order) lists which.
+it. The [architecture overview](../overview.md) shows the crates that exist.
 
 ## Consequences
 

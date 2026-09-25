@@ -7,4 +7,12 @@ export type StagedStep = { id: string, title: string,
  * The exact text delivered to the shell's input line. Empty only for a
  * user-input step.
  */
-command: string, mode: ExecutionMode | null, submit: SubmitPolicy | null, };
+command: string, mode: ExecutionMode | null, submit: SubmitPolicy | null, 
+/**
+ * For a line that asks the operator: how many times their answer is
+ * ended with Enter (a user name and a password is two). After the last,
+ * keys stop reaching the shell until the command finishes, so nothing
+ * typed afterwards lands on the next prompt. `None` forwards keys until
+ * the command finishes.
+ */
+answers: number | null, };

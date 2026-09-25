@@ -1,0 +1,19 @@
+[package]
+name = "keyjutsu-validation"
+description = "Validation for KeyJutsu plans: syntax, resolution, versions, preconditions, risk and dry runs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+keyjutsu-plan.workspace = true
+keyjutsu-terminal.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ts-rs.workspace = true
+
+[lints]
+workspace = true

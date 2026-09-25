@@ -1,11 +1,17 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
+  agent,
+  plan,
+  recovery,
+  workspace,
   KeyChord,
   OpenRequest,
   PerformanceConfig,
   PerformanceSnapshot,
   ReadinessReport,
+  RunMessage,
   ScriptSource,
+  Sealed,
   TerminalMessage,
   TerminalProfile,
   TerminalSize,
@@ -34,6 +40,42 @@ export const ipc = {
   disarm: (id: number) => invoke<void>("performance_disarm", { id }),
   pause: (id: number) => invoke<void>("performance_pause", { id }),
   resume: (id: number) => invoke<void>("performance_resume", { id }),
+
+  agents: () => invoke<agent.AgentInfo[]>("agents_list"),
+  workspace: () => invoke<workspace.WorkspaceView | null>("workspace_view"),
+  openPlan: (text: string) => invoke<workspace.WorkspaceView>("workspace_open", { text }),
+  propose: (task: string, agent: agent.AgentKind, context: string) =>
+    invoke<workspace.WorkspaceView>("workspace_propose", { task, agent, context }),
+  replaceStep: (step: plan.Step) =>
+    invoke<workspace.WorkspaceView>("workspace_replace_step", { step }),
+  insertStep: (after: string | null, step: plan.Step) =>
+    invoke<workspace.WorkspaceView>("workspace_insert_step", { after, step }),
+  removeStep: (id: string) => invoke<workspace.WorkspaceView>("workspace_remove_step", { id }),
+  moveStep: (id: string, earlier: boolean) =>
+    invoke<workspace.WorkspaceView>("workspace_move_step", { id, earlier }),
+  note: (text: string, step: string | null) =>
+    invoke<workspace.WorkspaceView>("workspace_note", { text, step }),
+  validate: () => invoke<workspace.WorkspaceView>("workspace_validate"),
+  /** Download and pin the plan's artifacts now, so nothing is fetched while it runs. */
+  stage: () => invoke<workspace.WorkspaceView>("workspace_stage"),
+  retryStep: (agent: agent.AgentKind, step: string, guidance: string) =>
+    invoke<workspace.WorkspaceView>("workspace_retry_step", { agent, step, guidance }),
+  revise: (agent: agent.AgentKind, guidance: string) =>
+    invoke<workspace.WorkspaceView>("workspace_revise", { agent, guidance }),
+  review: (agent: agent.AgentKind) =>
+    invoke<workspace.WorkspaceView>("workspace_review", { agent }),
+  approve: (confirmations: Record<string, string>) =>
+    invoke<Sealed>("workspace_approve", { confirmations }),
+
+  runPlan: (id: number, config: PerformanceConfig, onEvent: (m: RunMessage) => void) => {
+    const channel = new Channel<RunMessage>();
+    channel.onmessage = onEvent;
+    return invoke<void>("plan_run", { id, config, onEvent: channel });
+  },
+  /** What the operator typed for a critical step, or null to decline. Rust compares it. */
+  confirm: (typed: string | null) => invoke<void>("plan_confirm", { typed }),
+  recoveryPlan: () => invoke<recovery.RecoveryItem[]>("recovery_plan"),
+  recover: (id: number) => invoke<recovery.RecoveryResult[]>("recovery_run", { id }),
 };
 
 /** The refusal Rust returns for typed input while a performance owns the keyboard. */

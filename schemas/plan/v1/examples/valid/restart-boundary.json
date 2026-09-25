@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-wsl-feature",
+  "task_id": "task-wsl-feature",
+  "title": "Enable the WSL feature and check it after the restart",
+  "target": {
+    "id": "local",
+    "kind": "local_windows"
+  },
+  "agent": {
+    "name": "claude_code",
+    "version": "2.1.0"
+  },
+  "phases": [
+    {
+      "id": "before-restart",
+      "title": "Enable the feature",
+      "steps": ["check-feature", "enable-feature"],
+      "boundary_after": "windows_restart"
+    },
+    {
+      "id": "after-restart",
+      "title": "Confirm it took effect",
+      "steps": ["confirm-feature"]
+    }
+  ],
+  "steps": [
+    {
+      "id": "check-feature",
+      "title": "Check the WSL feature",
+      "objective": "See whether the feature is already enabled.",
+      "kind": "validation",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux"
+        }
+      ],
+      "privilege": "administrator"
+    },
+    {
+      "id": "enable-feature",
+      "title": "Enable the WSL feature",
+      "objective": "Turn the feature on; Windows needs a restart afterwards.",
+      "kind": "command",
+      "shell": {
+        "kind": "pwsh",
+        "version": ">=7.4"
+      },
+      "commands": [
+        {
+          "text": "Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart"
+        }
+      ],
+      "privilege": "administrator",
+      "proposed_risk": {
+        "level": "high",
+        "rationale": "Changes Windows features and needs a restart."
+      },
+      "reversibility": {
+        "level": "full",
+        "notes": "Disable-WindowsOptionalFeature reverses it, with another restart."
+      },
+      "expected_effects": [
+        {
+          "kind": "restart_required",
+          "target": "Windows"
+        }
+      ],
+      "preconditions": [
+        {
+          "not": {
+            "fact": {
+              "name": "wsl.feature_enabled",
+              "equals": true
+            }
+          }
+        }
+      ],
+      "recovery": {
+        "strategy": "commands",
+        "commands": [
+          {
+            "text": "Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart"
+          }
+        ]
+      }
+    },
+    {
+      "id": "confirm-feature",
+      "title": "Confirm the feature is enabled",
+      "objective": "After the restart, the feature reports Enabled.",
+      "kind": "validation",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "(Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux).State"
+        }
+      ],
+      "privilege": "administrator",
+      "depends_on": ["enable-feature"]
+    }
+  ]
+}

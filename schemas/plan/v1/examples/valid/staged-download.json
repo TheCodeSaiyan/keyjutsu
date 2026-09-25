@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-install-jq",
+  "task_id": "task-install-jq",
+  "title": "Install jq from a pinned release",
+  "target": {
+    "id": "local",
+    "kind": "local_windows"
+  },
+  "agent": {
+    "name": "codex",
+    "version": "0.154.0"
+  },
+  "steps": [
+    {
+      "id": "install",
+      "title": "Put jq on the path",
+      "objective": "Copy the staged jq binary into the tools folder.",
+      "kind": "command",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Copy-Item -LiteralPath $KJ_ARTIFACTS['jq.exe'] -Destination C:/Tools/jq.exe",
+          "purpose": "The staged, hash-checked copy; nothing is downloaded here."
+        }
+      ],
+      "network": {
+        "destinations": [
+          {
+            "host": "github.com",
+            "protocol": "https",
+            "purpose": "the jq release, fetched when staged",
+            "at_runtime": false
+          }
+        ]
+      },
+      "artifacts": [
+        {
+          "name": "jq.exe",
+          "source": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe",
+          "version": "1.7.1",
+          "publisher": "jqlang",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "reversibility": {
+        "level": "full"
+      },
+      "recovery": {
+        "strategy": "restore_captured_state",
+        "capture": [
+          {
+            "kind": "file",
+            "target": "C:/Tools/jq.exe"
+          }
+        ]
+      },
+      "internal_validation": [
+        {
+          "path_exists": {
+            "path": "C:/Tools/jq.exe"
+          }
+        }
+      ]
+    }
+  ]
+}

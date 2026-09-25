@@ -2,3 +2,9 @@
 # ts-rs writes the TypeScript bindings for IPC types here during `cargo test`.
 # CI fails if the committed copies differ from what the Rust types produce.
 TS_RS_EXPORT_DIR = { value = "packages/types/src/generated", relative = true }
+
+# A clean Windows has no Visual C++ runtime, so every KeyJutsu binary carries
+# its own (Milestone 16). Without this, the installed app and CLI would not
+# start on a machine that has never had Visual Studio or a game installed.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

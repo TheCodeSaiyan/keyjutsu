@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "dev.keyjutsu.desktop",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "node ../../scripts/stage-sidecars.mjs && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build && node ../../scripts/stage-sidecars.mjs",
     "frontendDist": "../dist"
   },
   "app": {
@@ -33,6 +33,17 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
-  }
+    ],
+    "externalBin": ["binaries/keyjutsu", "binaries/keyjutsu-broker"],
+    "publisher": "KeyJutsu",
+    "shortDescription": "Approved plans, performed in a real terminal",
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "installer-hooks.nsh",
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "mainBinaryName": "keyjutsu-desktop"
 }

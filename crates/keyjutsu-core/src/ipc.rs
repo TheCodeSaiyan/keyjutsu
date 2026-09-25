@@ -41,3 +41,35 @@ pub enum ScriptSource {
         commands: Vec<String>,
     },
 }
+
+/// What streams from a plan run to the window.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum RunMessage {
+    Execution {
+        event: crate::execute::ExecutionEvent,
+    },
+    /// A critical step is next: the window asks for the phrase and answers
+    /// with `plan_confirm`. Nothing runs until it does.
+    Confirm {
+        confirmation: crate::execute::CriticalConfirmation,
+    },
+    Done {
+        outcome: crate::execute::Outcome,
+        snapshot: String,
+        checkpoint: String,
+        /// What the run did to each Git repository it worked in (§31).
+        git: Vec<crate::git::RepoReport>,
+    },
+}
+
+/// A sealed snapshot, as the window is told about it.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct Sealed {
+    pub snapshot_hash: String,
+    /// Where it was written, so the CLI can run or recover it too.
+    pub path: String,
+    pub sealed_at: String,
+}
