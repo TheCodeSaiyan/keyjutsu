@@ -23,6 +23,10 @@ typed them into the same terminal. When M8 lands, the operator-authored
 source should become "make a one-step draft plan", going through validation
 and approval like any other.
 
+M8 has landed and this has not been done yet: `keyjutsu perform -c` still
+performs the operator's text directly. It is the same authority as typing it,
+so nothing is lost meanwhile, but the change is still owed.
+
 ## D3. cmd.exe cannot report exit codes
 
 - **Requirement:** each step's success is validated (§23), and a green result
@@ -155,3 +159,33 @@ Gemini or Copilot would have sent requests on their accounts without their
 agreement. The adapters are tested against recorded answers in each CLI's
 documented output shape. `keyjutsu agents check --live` is the live check, run
 when the owner chooses.
+
+## D19. One shell per plan
+
+- **Requirement:** each step names its shell (§9), so a plan could mix pwsh,
+  Windows PowerShell and cmd.
+- **Limitation:** a performance is one terminal session with one shell. Running
+  a cmd step inside pwsh would change what the step means; starting a second
+  session part-way through would move the audience to a different terminal
+  and lose the working directory and variables the earlier steps set up.
+- **Evidence:** none needed yet: no example or agent-proposed plan so far
+  mixes shells.
+- **Options:** (a) refuse mixed plans at preflight; (b) one session per shell,
+  switched between steps; (c) run the odd step through the main shell
+  (`cmd /c …`), which changes the approved text.
+- **Resolution taken:** (a). `preflight` refuses a plan that uses more than one
+  shell and says so. (b) is the likely answer once the desktop app can show
+  more than one terminal.
+
+## D20. Checkpoints are plain JSON until Milestone 14
+
+A checkpoint records which steps succeeded, and `--resume` skips those. It is
+not hashed or signed, so someone who can write the file can mark a step as
+done and have it skipped. It cannot make a changed step count, because each
+result is matched to the step's hash in the approved snapshot, and it cannot
+add a step. Protecting it belongs with the other local state in Milestone 14
+(DPAPI-protected keys), alongside the snapshot MAC of D14.
+
+A checkpoint that cannot be written does not stop the run; the run carries on,
+and a later `--resume` will know less than it should. That should become a
+warning on screen once there is somewhere to show it.

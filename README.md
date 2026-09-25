@@ -14,14 +14,15 @@ agent proposes a plan, KeyJutsu checks it against your actual machine, you
 review and approve it, and only then does anything run, with each step checked
 after it runs.
 
-> **Status: early.** Milestones 0 to 6 of 17 are built: the real terminal, the
-> performance engine, the plan model, approval, validation and agent
-> integration. Approved plans are not executed yet (Milestone 8), and the
-> desktop app has no plan workspace yet (Milestone 7), so today planning,
-> validation and approval happen in the CLI (`keyjutsu agents`,
-> `keyjutsu plan`). Per milestone: [0–2](docs/architecture/milestones-0-2.md),
+> **Status: early.** Milestones 0 to 6 and 8 of 17 are built: the real
+> terminal, the performance engine, the plan model, approval, validation,
+> agent integration and execution of approved plans. The desktop app has no
+> plan workspace yet (Milestone 7), so today planning, validation, approval
+> and execution happen in the CLI (`keyjutsu agents`, `keyjutsu plan`,
+> `keyjutsu run`). Per milestone: [0–2](docs/architecture/milestones-0-2.md),
 > [3](docs/architecture/milestone-3.md), [4](docs/architecture/milestone-4.md),
-> [5](docs/architecture/milestone-5.md), [6](docs/architecture/milestone-6.md).
+> [5](docs/architecture/milestone-5.md), [6](docs/architecture/milestone-6.md),
+> [8](docs/architecture/milestone-8.md).
 
 Windows 11 x64 only for now.
 
@@ -51,6 +52,16 @@ While a performance is armed:
 
 `--mode auto` types and runs everything by itself; `--mode direct` skips the
 typing effect entirely.
+
+To run a plan: validate and approve it, then run the snapshot. Nothing runs
+unless every step is READY and the machine still matches what was approved.
+
+```powershell
+keyjutsu plan approve plan.json --out plan.approved.json
+keyjutsu run plan.approved.json --mode performance
+# after a failure: revise, approve again, and resume from the old checkpoint
+keyjutsu run plan.v2.approved.json --resume plan.approved.checkpoint.json
+```
 
 ## How it holds together
 

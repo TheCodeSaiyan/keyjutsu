@@ -21,7 +21,7 @@ when the next step may start.
 | `TYPING` | Staged characters are going onto the shell's input line. | KeyJutsu |
 | `AWAITING_EXECUTION` | The whole command is on the line; waiting for the submit key. | KeyJutsu |
 | `EXECUTING` | Submitted; waiting for the shell to say the command finished. | KeyJutsu (keys swallowed, Ctrl+C and Esc passed on) |
-| `WAITING` | Waiting on an outside condition after a command. Defined now, entered from Milestone 8. | KeyJutsu |
+| `WAITING` | Waiting on an outside condition after a command. Defined, not entered yet: Milestone 8 waits for checks after the performance completes ([limits](milestone-8.md#limits)). | KeyJutsu |
 | `VALIDATING` | Checking the finished command against its contract. | KeyJutsu |
 | `AWAITING_USER_INPUT` | A user-input step: keys go to the shell for real. | The operator, through KeyJutsu |
 | `PAUSED` | Nothing advances until Resume. | KeyJutsu |

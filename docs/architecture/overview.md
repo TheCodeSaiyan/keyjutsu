@@ -32,7 +32,7 @@ keyjutsu/
 │   ├── keyjutsu-terminal/        ✓ ConPTY sessions, shell launch, prompt marks,
 │   │                               key encoding, terminal profile detection
 │   ├── keyjutsu-execution/       ✓ state machine, Performance Mode engine
-│   ├── keyjutsu-core/            ✓ sessions, readiness scan, safe demo, IPC types
+│   ├── keyjutsu-core/            ✓ sessions, plan execution, readiness scan, safe demo, IPC types
 │   ├── keyjutsu-plan/            ✓ plan model, graph, conditions, walk, diff,
 │   │                               hashing, approval and sealed snapshots
 │   ├── keyjutsu-validation/      ✓ readiness, proof, evidence, risk, dry runs
@@ -87,7 +87,9 @@ Dependencies point one way, towards the platform:
   the workspace and has no I/O; facts reach it through a trait.
 - **`keyjutsu-core`** joins the terminal and the engine: it runs a real session, feeds its marks
   and the operator's keys into the engine, and carries out the engine's
-  actions against the pseudo-console. It is the only public surface the front
+  actions against the pseudo-console. Its `execute` module runs an approved
+  snapshot one step at a time through a session, checks each step against
+  the machine and keeps a checkpoint. It is the only public surface the front
   ends use.
 - **Front ends** translate their own events into core calls and render what
   comes back. The desktop's Rust layer (`src-tauri/src/main.rs`) is about 200

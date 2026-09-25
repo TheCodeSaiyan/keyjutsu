@@ -1,0 +1,642 @@
+//! Executing an approved snapshot through a real terminal session.
+//!
+//! One plan step at a time: the step's command lines (and its visible
+//! validation, unless the plan says to hide it) become a staged performance
+//! on the session; when the shell reports them finished, KeyJutsu runs the
+//! step's internal checks, records the result, writes a checkpoint and asks
+//! the plan's walk what comes next. Branches are decided by KeyJutsu from real
+//! outcomes, never by the agent (§10).
+//!
+//! What this refuses to do:
+//!
+//! - run a snapshot that was not validated, or whose steps are not all READY
+//!   (§12);
+//! - carry on past a failure (§2.3): the outcome says what was expected and
+//!   what happened;
+//! - assume a step that was running when KeyJutsu stopped succeeded (§52):
+//!   the checkpoint marks it in doubt and the operator settles it;
+//! - reuse a result from an earlier run unless the step's hash is unchanged.
+
+use std::collections::BTreeMap;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::time::{Duration, Instant};
+
+use keyjutsu_execution::{
+    ExecutionMode as EngineMode, ExecutionState, PerformanceConfig, StagedScript, StagedStep, StepOutcome,
+};
+use keyjutsu_plan::approval::ApprovedSnapshot;
+use keyjutsu_plan::condition::{KnownFacts, StepResult};
+use keyjutsu_plan::model::{
+    Check, ExecutionMode, Readiness, ServiceState, Step, StepKind, ValidationDisplay,
+};
+use keyjutsu_plan::walk::frontier;
+use serde::{Deserialize, Serialize};
+
+use crate::session::{Session, SessionEvent, SessionSink};
+
+/// Passes everything to an inner sink and also sends events to a channel,
+/// so the execution controller can follow the session without calling back
+/// into it from the session's own threads.
+pub struct ForwardingSink<S: SessionSink> {
+    pub inner: std::sync::Arc<S>,
+    pub events: std::sync::Mutex<Sender<SessionEvent>>,
+}
+
+impl<S: SessionSink> std::fmt::Debug for ForwardingSink<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ForwardingSink").finish_non_exhaustive()
+    }
+}
+
+impl<S: SessionSink> SessionSink for ForwardingSink<S> {
+    fn output(&self, text: &str) {
+        self.inner.output(text);
+    }
+    fn event(&self, event: SessionEvent) {
+        if let Ok(tx) = self.events.lock() {
+            let _ = tx.send(event.clone());
+        }
+        self.inner.event(event);
+    }
+    fn cursor_position(&self) -> (u16, u16) {
+        self.inner.cursor_position()
+    }
+}
+
+/// How one internal check turned out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "execute/")]
+pub struct CheckResult {
+    pub check: String,
+    /// `None` when it could not be decided (for example, a shell with no exit codes).
+    pub passed: Option<bool>,
+    pub detail: String,
+}
+
+/// What happened to one plan step in one run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "execute/")]
+pub struct StepRun {
+    pub step: String,
+    pub step_hash: String,
+    pub succeeded: bool,
+    pub exit_code: Option<i64>,
+    pub checks: Vec<CheckResult>,
+    pub started_at: String,
+    pub finished_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "execute/")]
+pub struct InProgress {
+    pub step: String,
+    pub step_hash: String,
+    pub started_at: String,
+}
+
+/// Written before and after every step, so a crash, power loss or restart
+/// leaves a record of exactly what is known (§52).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, export_to = "execute/")]
+pub struct Checkpoint {
+    pub kind: String,
+    pub snapshot_hash: String,
+    pub runs: Vec<StepRun>,
+    /// A step that had started and not finished. Its effect is unknown.
+    pub in_progress: Option<InProgress>,
+}
+
+const CHECKPOINT_KIND: &str = "keyjutsu.checkpoint/1";
+
+impl Checkpoint {
+    pub fn new(snapshot_hash: &str) -> Self {
+        Self {
+            kind: CHECKPOINT_KIND.into(),
+            snapshot_hash: snapshot_hash.into(),
+            runs: Vec::new(),
+            in_progress: None,
+        }
+    }
+
+    pub fn load(path: &Path) -> Result<Self, String> {
+        let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        let c: Checkpoint = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        if c.kind != CHECKPOINT_KIND {
+            return Err(format!("checkpoint format `{}` is not supported", c.kind));
+        }
+        Ok(c)
+    }
+
+    /// Write via a temporary file and a rename, so a crash mid-write leaves
+    /// the previous checkpoint rather than half of a new one.
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, serde_json::to_string_pretty(self).unwrap_or_default())
+            .map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "execute/")]
+pub enum Outcome {
+    Complete,
+    /// A step failed; the plan stopped there.
+    Failed {
+        step: String,
+        expected: String,
+        actual: String,
+    },
+    /// The operator disarmed.
+    Aborted {
+        step: Option<String>,
+        in_doubt: bool,
+    },
+    /// Execution could not start or continue.
+    Blocked {
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "execute/")]
+pub enum ExecutionEvent {
+    StepStarting { step: String, title: String },
+    StepCarried { step: String },
+    Waiting { step: String, check: String },
+    StepFinished { step: String, run: StepRun },
+    Finished { outcome: Outcome },
+}
+
+#[derive(Debug, Clone)]
+pub struct ExecuteOptions {
+    /// The mode for steps that do not set one; the plan's default otherwise.
+    pub mode: Option<EngineMode>,
+    pub base: PerformanceConfig,
+    pub checkpoint: Option<PathBuf>,
+    /// Results the operator has settled for a step left in doubt.
+    pub settled: BTreeMap<String, bool>,
+    /// How long to wait for the shell to return to its prompt between steps.
+    pub prompt_timeout: Duration,
+}
+
+impl Default for ExecuteOptions {
+    fn default() -> Self {
+        Self {
+            mode: None,
+            base: PerformanceConfig::default(),
+            checkpoint: None,
+            settled: BTreeMap::new(),
+            prompt_timeout: Duration::from_secs(120),
+        }
+    }
+}
+
+fn engine_mode(m: ExecutionMode) -> EngineMode {
+    match m {
+        ExecutionMode::Performance => EngineMode::Performance,
+        ExecutionMode::Assisted => EngineMode::Assisted,
+        ExecutionMode::AutoPerformance => EngineMode::AutoPerformance,
+        ExecutionMode::Direct => EngineMode::Direct,
+        ExecutionMode::UserInput => EngineMode::UserInput,
+    }
+}
+
+/// The staged lines for one plan step: its commands, then its visible
+/// validation unless the plan hides it. Operator steps become one user-input
+/// line: the operator does what the step says and presses Enter.
+pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
+    let operator = matches!(step.kind, StepKind::Manual | StepKind::UserInput | StepKind::Credential);
+    if operator || step.commands.is_empty() {
+        return StagedScript {
+            steps: vec![StagedStep {
+                id: format!("{}#u", step.id),
+                title: step.title.clone(),
+                command: String::new(),
+                mode: Some(EngineMode::UserInput),
+                submit: None,
+            }],
+        };
+    }
+    let mode = step.execution_mode.map(engine_mode);
+    let mut lines: Vec<StagedStep> = step
+        .commands
+        .iter()
+        .enumerate()
+        .map(|(i, c)| StagedStep {
+            id: format!("{}#c{i}", step.id),
+            title: step.title.clone(),
+            command: c.text.clone(),
+            mode,
+            submit: None,
+        })
+        .collect();
+    if show_validation {
+        lines.extend(step.visible_validation.iter().enumerate().map(|(i, c)| StagedStep {
+            id: format!("{}#v{i}", step.id),
+            title: format!("{} (check)", step.title),
+            command: c.text.clone(),
+            mode,
+            submit: None,
+        }));
+    }
+    StagedScript { steps: lines }
+}
+
+/// Run one internal check now.
+pub fn run_check(check: &Check, last_exit: Option<i64>) -> CheckResult {
+    let (name, passed, detail): (String, Option<bool>, String) = match check {
+        Check::ExitCode { equals } => match last_exit {
+            Some(code) => {
+                ("exit code".into(), Some(code == *equals), format!("expected {equals}, got {code}"))
+            }
+            None => ("exit code".into(), None, "this shell reports no exit codes".into()),
+        },
+        Check::ServiceState(s) => {
+            let actual = service_state(&s.name);
+            let want = format!("{:?}", s.state).to_ascii_lowercase();
+            (
+                format!("service {}", s.name),
+                actual.as_ref().map(|a| *a == want),
+                format!("expected {want}, got {}", actual.as_deref().unwrap_or("unknown")),
+            )
+        }
+        Check::PathExists(p) => {
+            let exists = Path::new(&p.path).exists();
+            (
+                format!("path {}", p.path),
+                Some(exists),
+                if exists { "exists".into() } else { "does not exist".into() },
+            )
+        }
+        Check::FileSha256 { path, sha256 } => match std::fs::read(path) {
+            Ok(bytes) => {
+                let actual = keyjutsu_plan::hash::sha256_hex(&bytes);
+                (
+                    format!("sha256 of {path}"),
+                    Some(actual.eq_ignore_ascii_case(sha256)),
+                    format!("got {actual}"),
+                )
+            }
+            Err(e) => (format!("sha256 of {path}"), Some(false), e.to_string()),
+        },
+        Check::JsonValue { path, pointer, equals } => {
+            let actual = std::fs::read_to_string(path)
+                .ok()
+                .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                .and_then(|v| v.pointer(pointer).cloned());
+            (
+                format!("{path}{pointer}"),
+                Some(actual.as_ref() == Some(equals)),
+                format!(
+                    "expected {equals}, got {}",
+                    actual.map(|a| a.to_string()).unwrap_or_else(|| "nothing".into())
+                ),
+            )
+        }
+        Check::TcpPortOpen { host, port } => {
+            let open = (host.as_str(), *port)
+                .to_socket_addrs()
+                .ok()
+                .into_iter()
+                .flatten()
+                .any(|a| TcpStream::connect_timeout(&a, Duration::from_secs(3)).is_ok());
+            (
+                format!("port {host}:{port}"),
+                Some(open),
+                if open { "open".into() } else { "not accepting connections".into() },
+            )
+        }
+        Check::HttpStatus { url, status } => {
+            let actual = http_status(url);
+            (
+                format!("HTTP {url}"),
+                actual.map(|a| a == *status),
+                format!(
+                    "expected {status}, got {}",
+                    actual.map(|a| a.to_string()).unwrap_or_else(|| "no response".into())
+                ),
+            )
+        }
+        Check::TimeoutSeconds(s) => ("wait".into(), Some(true), format!("up to {s} seconds")),
+    };
+    CheckResult { check: name, passed, detail }
+}
+
+fn service_state(name: &str) -> Option<String> {
+    let ps = keyjutsu_terminal::shell::locate(keyjutsu_terminal::ShellKind::Pwsh)
+        .or_else(|| keyjutsu_terminal::shell::locate(keyjutsu_terminal::ShellKind::WindowsPowershell))?;
+    let a = keyjutsu_validation::powershell::analyse(&ps, &[], &[], &[name]).ok()?;
+    a.services.get(name).cloned()
+}
+
+fn http_status(url: &str) -> Option<u16> {
+    let ps = keyjutsu_terminal::shell::locate(keyjutsu_terminal::ShellKind::Pwsh)?;
+    let quoted = url.replace('\'', "''");
+    let script = format!(
+        "try {{ (Invoke-WebRequest -Uri '{quoted}' -Method Head -UseBasicParsing -TimeoutSec 10 -SkipHttpErrorCheck).StatusCode }} catch {{ -1 }}"
+    );
+    let mut c = std::process::Command::new(ps);
+    c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+    c.arg(keyjutsu_terminal::shell::encode_powershell_command(&script));
+    let done = keyjutsu_validation::process::run(c, "", Duration::from_secs(20)).ok()?;
+    done.stdout.trim().parse::<i32>().ok().and_then(|n| u16::try_from(n).ok())
+}
+
+/// Run a step's internal checks, waiting up to its `timeout_seconds` for
+/// them to hold.
+fn run_checks(step: &Step, last_exit: Option<i64>, observe: &dyn Fn(ExecutionEvent)) -> Vec<CheckResult> {
+    let wait = step.internal_validation.iter().find_map(|c| match c {
+        Check::TimeoutSeconds(s) => Some(Duration::from_secs(u64::from(*s))),
+        _ => None,
+    });
+    let checks: Vec<&Check> =
+        step.internal_validation.iter().filter(|c| !matches!(c, Check::TimeoutSeconds(_))).collect();
+    let deadline = Instant::now() + wait.unwrap_or_default();
+    loop {
+        let results: Vec<CheckResult> = checks.iter().map(|c| run_check(c, last_exit)).collect();
+        let failing = results.iter().find(|r| r.passed == Some(false));
+        match failing {
+            Some(f) if Instant::now() < deadline => {
+                observe(ExecutionEvent::Waiting { step: step.id.clone(), check: f.check.clone() });
+                std::thread::sleep(Duration::from_secs(1));
+            }
+            _ => return results,
+        }
+    }
+}
+
+/// Everything `execute` needs to know about the session it drives.
+pub struct Driver<'a> {
+    pub session: &'a Session,
+    pub events: &'a Receiver<SessionEvent>,
+}
+
+impl std::fmt::Debug for Driver<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Driver").finish_non_exhaustive()
+    }
+}
+
+/// Why a snapshot may not be executed at all.
+pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
+    let Some(state) = &snapshot.plan().keyjutsu else {
+        return Err(
+            "the snapshot was not validated before it was sealed; no unvalidated step may run (§12)".into()
+        );
+    };
+    let not_ready: Vec<&str> = snapshot
+        .graph()
+        .topological_order()
+        .filter(|id| state.steps.get(*id).map(|s| s.readiness) != Some(Readiness::Ready))
+        .collect();
+    if !not_ready.is_empty() {
+        return Err(format!("steps not ready: {}", not_ready.join(", ")));
+    }
+    let mut shells = Vec::new();
+    for kind in snapshot.plan().steps.iter().filter_map(|s| s.shell.as_ref().map(|sh| sh.kind)) {
+        if !shells.contains(&kind) {
+            shells.push(kind);
+        }
+    }
+    if shells.len() > 1 {
+        return Err(
+            "the plan uses more than one shell; a performance runs in one terminal (deviation D19)".into()
+        );
+    }
+    Ok(())
+}
+
+/// Execute `snapshot` on the session. Blocks until the plan completes, fails,
+/// is disarmed or cannot continue; `observe` hears every step as it goes.
+pub fn execute(
+    driver: &Driver<'_>,
+    snapshot: &ApprovedSnapshot,
+    resume: Option<Checkpoint>,
+    options: &ExecuteOptions,
+    now: &dyn Fn() -> String,
+    observe: &dyn Fn(ExecutionEvent),
+) -> (Outcome, Checkpoint) {
+    let mut checkpoint = Checkpoint::new(snapshot.snapshot_hash());
+    let finish = |outcome: Outcome, checkpoint: Checkpoint| {
+        observe(ExecutionEvent::Finished { outcome: outcome.clone() });
+        (outcome, checkpoint)
+    };
+    if let Err(reason) = preflight(snapshot) {
+        return finish(Outcome::Blocked { reason }, checkpoint);
+    }
+    let plan = snapshot.plan();
+    let hashes = snapshot.step_hashes();
+    let show_validation =
+        plan.execution_preferences.as_ref().and_then(|p| p.show_validation) != Some(ValidationDisplay::None);
+    let default_mode = options
+        .mode
+        .or_else(|| plan.execution_preferences.as_ref().and_then(|p| p.default_mode).map(engine_mode))
+        .unwrap_or(options.base.mode);
+    let save = |c: &Checkpoint| {
+        if let Some(path) = &options.checkpoint {
+            let _ = c.save(path);
+        }
+    };
+
+    // Results from an earlier run count only where the step is unchanged.
+    let mut facts = KnownFacts::default();
+    if let Some(previous) = resume {
+        if let Some(doubt) = &previous.in_progress {
+            match options.settled.get(&doubt.step) {
+                None => {
+                    return finish(
+                        Outcome::Blocked {
+                            reason: format!(
+                                "step `{}` was running when KeyJutsu last stopped, so its effect is unknown; check the machine and settle it",
+                                doubt.step
+                            ),
+                        },
+                        previous,
+                    );
+                }
+                Some(&ok) if hashes.get(&doubt.step) == Some(&doubt.step_hash) && ok => {
+                    checkpoint.runs.push(StepRun {
+                        step: doubt.step.clone(),
+                        step_hash: doubt.step_hash.clone(),
+                        succeeded: true,
+                        exit_code: None,
+                        checks: vec![CheckResult {
+                            check: "settled by the operator".into(),
+                            passed: Some(true),
+                            detail: String::new(),
+                        }],
+                        started_at: doubt.started_at.clone(),
+                        finished_at: now(),
+                    });
+                }
+                Some(_) => {}
+            }
+        }
+        for run in previous.runs.into_iter().filter(|r| r.succeeded) {
+            if hashes.get(&run.step) == Some(&run.step_hash) {
+                checkpoint.runs.push(run);
+            }
+        }
+        for run in &checkpoint.runs {
+            facts.steps.insert(run.step.clone(), StepResult::Succeeded { exit_code: run.exit_code });
+            observe(ExecutionEvent::StepCarried { step: run.step.clone() });
+        }
+    }
+    save(&checkpoint);
+
+    loop {
+        let f = frontier(plan, snapshot.graph(), &facts);
+        if f.complete {
+            save(&checkpoint);
+            return finish(Outcome::Complete, checkpoint);
+        }
+        let Some(id) = f.next().map(str::to_owned) else {
+            let needs: Vec<String> = f.needs.iter().map(|m| format!("{m:?}")).collect();
+            return finish(
+                Outcome::Blocked {
+                    reason: format!("no step can run until these are known: {}", needs.join(", ")),
+                },
+                checkpoint,
+            );
+        };
+        for skipped in &f.skipped {
+            facts.steps.entry(skipped.clone()).or_insert(StepResult::Skipped);
+        }
+        let Some(step) = plan.step(&id) else {
+            return finish(Outcome::Blocked { reason: format!("step `{id}` vanished") }, checkpoint);
+        };
+        let step_hash = hashes.get(&id).cloned().unwrap_or_default();
+
+        if !driver.session.wait_for_prompt(options.prompt_timeout) {
+            return finish(
+                Outcome::Blocked { reason: "the shell did not return to its prompt".into() },
+                checkpoint,
+            );
+        }
+        let started_at = now();
+        checkpoint.in_progress = Some(InProgress {
+            step: id.clone(),
+            step_hash: step_hash.clone(),
+            started_at: started_at.clone(),
+        });
+        save(&checkpoint);
+        observe(ExecutionEvent::StepStarting { step: id.clone(), title: step.title.clone() });
+
+        let script = staged_for(step, show_validation);
+        let lines = script.steps.len();
+        let config = PerformanceConfig { mode: default_mode, ..options.base.clone() };
+        // Drop events left over from the previous step.
+        while driver.events.try_recv().is_ok() {}
+        if let Err(e) = driver.session.arm(script, config) {
+            checkpoint.in_progress = None;
+            save(&checkpoint);
+            return finish(Outcome::Blocked { reason: e.to_string() }, checkpoint);
+        }
+
+        let mut outcomes: Vec<StepOutcome> = Vec::new();
+        let mut last_state = ExecutionState::Armed;
+        // The last state before the performance ended, to tell whether a
+        // command had been submitted when it stopped.
+        let mut live_state = ExecutionState::Armed;
+        let ended = loop {
+            match driver.events.recv_timeout(Duration::from_millis(500)) {
+                Ok(SessionEvent::StepFinished { outcome, .. }) => outcomes.push(outcome),
+                // The session sends each line's result before the snapshot
+                // that reports the state it led to, so by the time the state
+                // is final every result has arrived.
+                Ok(SessionEvent::Performance { snapshot: s }) => {
+                    last_state = s.state;
+                    if !s.state.is_terminal() && s.state != ExecutionState::Failed {
+                        live_state = s.state;
+                    }
+                    if matches!(s.state, ExecutionState::Complete | ExecutionState::Failed) {
+                        break Some(s.state);
+                    }
+                }
+                Ok(SessionEvent::Released)
+                    if !matches!(last_state, ExecutionState::Complete | ExecutionState::Failed) =>
+                {
+                    break None;
+                }
+                Ok(SessionEvent::Exited { .. }) => break None,
+                Ok(_) | Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break None,
+            }
+        };
+
+        // A performance that ended without a result for every line did not
+        // finish: the shell exited under it. That is never a success.
+        let unfinished = match ended {
+            None => true,
+            Some(ExecutionState::Complete) => outcomes.len() != lines,
+            Some(_) => !outcomes.iter().any(|o| matches!(o, StepOutcome::Failed { .. })),
+        };
+        if unfinished {
+            // Disarmed or the shell went away. If a command had been
+            // submitted, its effect is unknown: leave the step in doubt.
+            let in_doubt = matches!(
+                live_state,
+                ExecutionState::Executing | ExecutionState::Waiting | ExecutionState::Validating
+            );
+            if !in_doubt {
+                checkpoint.in_progress = None;
+            }
+            save(&checkpoint);
+            return finish(Outcome::Aborted { step: Some(id), in_doubt }, checkpoint);
+        }
+
+        let last_exit = outcomes.iter().rev().find_map(|o| match o {
+            StepOutcome::Succeeded { exit_code } | StepOutcome::Failed { exit_code } => {
+                Some(i64::from(*exit_code))
+            }
+            StepOutcome::Unverified => None,
+        });
+        let failed_line = outcomes.iter().find_map(|o| match o {
+            StepOutcome::Failed { exit_code } => Some(*exit_code),
+            _ => None,
+        });
+        let checks = if failed_line.is_none() { run_checks(step, last_exit, observe) } else { Vec::new() };
+        let failed_check = checks.iter().find(|c| c.passed == Some(false));
+        let succeeded = failed_line.is_none() && failed_check.is_none();
+        let run = StepRun {
+            step: id.clone(),
+            step_hash,
+            succeeded,
+            exit_code: last_exit,
+            checks: checks.clone(),
+            started_at,
+            finished_at: now(),
+        };
+        checkpoint.in_progress = None;
+        checkpoint.runs.push(run.clone());
+        save(&checkpoint);
+        observe(ExecutionEvent::StepFinished { step: id.clone(), run });
+
+        if !succeeded {
+            let (expected, actual) = match (failed_line, failed_check) {
+                (Some(code), _) => {
+                    ("every command to succeed".to_owned(), format!("a command exited with {code}"))
+                }
+                (None, Some(c)) => (c.check.clone(), c.detail.clone()),
+                (None, None) => (String::new(), String::new()),
+            };
+            return finish(Outcome::Failed { step: id, expected, actual }, checkpoint);
+        }
+        facts.steps.insert(id, StepResult::Succeeded { exit_code: last_exit });
+    }
+}
+
+/// `ServiceState` as a condition value, for callers that report checks.
+pub fn service_state_name(s: ServiceState) -> &'static str {
+    match s {
+        ServiceState::Running => "running",
+        ServiceState::Stopped => "stopped",
+        ServiceState::Paused => "paused",
+        ServiceState::Missing => "missing",
+    }
+}

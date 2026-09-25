@@ -1,0 +1,440 @@
+//! Milestone 8: approved snapshots executed through real pwsh sessions, in
+//! each mode, from the same snapshot. Plans are validated, approved and
+//! sealed exactly as the CLI does it; nothing here is mocked.
+
+#![cfg(windows)]
+#![allow(clippy::unwrap_used)] // Helpers outside #[test] functions may unwrap too.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::channel;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use keyjutsu_core::execute::{
+    Checkpoint, Driver, ExecuteOptions, ExecutionEvent, ForwardingSink, InProgress, Outcome, execute,
+};
+use keyjutsu_core::execution::{Cadence, ExecutionMode, PerformanceConfig};
+use keyjutsu_core::headless::Collector;
+use keyjutsu_core::plan::{ApprovalBook, ApprovedSnapshot, parse_plan, seal};
+use keyjutsu_core::terminal::{KeyChord, ProfileMode, ShellKind};
+use keyjutsu_core::validation::{Options, validate};
+use keyjutsu_core::{Session, SessionOptions};
+use serde_json::{Value, json};
+
+const AT: &str = "2026-09-25T04:00:00Z";
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("execute").join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn fwd(p: &Path) -> String {
+    p.display().to_string().replace('\\', "/")
+}
+
+fn step(id: &str, command: &str) -> Value {
+    json!({"id": id, "title": id, "objective": "Test.", "kind": "command", "shell": {"kind": "pwsh"},
+           "commands": [{"text": command}]})
+}
+
+fn plan(steps: Value, edges: Value) -> Value {
+    json!({
+        "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+        "target": {"id": "local", "kind": "local_windows"},
+        "agent": {"name": "codex", "version": "1"},
+        "steps": steps, "edges": edges
+    })
+}
+
+/// Validate, approve every step and seal, as `keyjutsu plan approve` does.
+fn approve(v: &Value) -> ApprovedSnapshot {
+    let draft = parse_plan(&v.to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, ..Options::default() });
+    let not_ready = report.not_ready(&draft);
+    assert!(not_ready.is_empty(), "not ready: {not_ready:?} {:#?}", report.steps);
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    assert!(book.approve_all_except_critical(&validated, AT).is_empty());
+    seal(&validated, &book, None, AT).unwrap()
+}
+
+struct Terminal {
+    session: Session,
+    events: std::sync::mpsc::Receiver<keyjutsu_core::SessionEvent>,
+    out: Arc<Collector>,
+}
+
+fn terminal() -> Terminal {
+    let out = Arc::new(Collector::new());
+    let (tx, events) = channel();
+    let sink = Arc::new(ForwardingSink { inner: out.clone(), events: Mutex::new(tx) });
+    let mut o = SessionOptions::new(ShellKind::Pwsh);
+    o.profile = ProfileMode::Clean;
+    o.intercept_cursor_queries = true;
+    let session = Session::open(o, sink).unwrap();
+    assert!(session.wait_ready(Duration::from_secs(30)));
+    Terminal { session, events, out }
+}
+
+fn run(
+    t: &Terminal,
+    snap: &ApprovedSnapshot,
+    options: &ExecuteOptions,
+    resume: Option<Checkpoint>,
+) -> (Outcome, Checkpoint, Vec<ExecutionEvent>) {
+    let seen = Mutex::new(Vec::new());
+    let (outcome, checkpoint) = execute(
+        &Driver { session: &t.session, events: &t.events },
+        snap,
+        resume,
+        options,
+        &|| AT.to_owned(),
+        &|e| seen.lock().unwrap().push(e),
+    );
+    (outcome, checkpoint, seen.into_inner().unwrap())
+}
+
+fn mode(m: ExecutionMode) -> ExecuteOptions {
+    ExecuteOptions {
+        mode: Some(m),
+        base: PerformanceConfig {
+            cadence: Cadence { base_ms: 2, variance_ms: 1, punctuation_pause_ms: 2, boundary_pause_ms: 20 },
+            ..PerformanceConfig::default()
+        },
+        ..ExecuteOptions::default()
+    }
+}
+
+/// Three steps that leave evidence on disk, with internal checks.
+fn three_steps(dir: &Path) -> Value {
+    let file = fwd(&dir.join("note.txt"));
+    let mut make = step("make", &format!("New-Item -ItemType File -Force -Path {file} | Out-Null"));
+    make["internal_validation"] = json!([{"path_exists": {"path": file}}]);
+    let mut write = step("write", &format!("Add-Content -LiteralPath {file} -Value written"));
+    write["internal_validation"] = json!([{"exit_code": {"equals": 0}}]);
+    let mut show = step("show", &format!("Get-Content -LiteralPath {file}"));
+    show["visible_validation"] = json!([{"text": "Get-Date -Format o"}]);
+    plan(json!([make, write, show]), json!([]))
+}
+
+#[test]
+fn the_same_snapshot_runs_in_every_mode() {
+    for m in [
+        ExecutionMode::Direct,
+        ExecutionMode::AutoPerformance,
+        ExecutionMode::Performance,
+        ExecutionMode::Assisted,
+    ] {
+        let dir = scratch(&format!("modes-{m:?}"));
+        let snap = approve(&three_steps(&dir));
+        let t = terminal();
+        // In Performance and Assisted modes someone has to press keys.
+        let done = Arc::new(AtomicBool::new(false));
+        let masher = matches!(m, ExecutionMode::Performance | ExecutionMode::Assisted).then(|| {
+            let (session, done) = (t.session.clone(), done.clone());
+            std::thread::spawn(move || {
+                while !done.load(Ordering::SeqCst) {
+                    let _ = session.key(&KeyChord::char('z'));
+                    std::thread::sleep(Duration::from_millis(3));
+                }
+            })
+        });
+        let (outcome, checkpoint, events) = run(&t, &snap, &mode(m), None);
+        done.store(true, Ordering::SeqCst);
+        if let Some(h) = masher {
+            h.join().unwrap();
+        }
+        assert_eq!(outcome, Outcome::Complete, "{m:?}: {:?}\n{}", events, t.out.plain_output());
+        assert_eq!(checkpoint.runs.len(), 3);
+        assert!(
+            checkpoint.runs.iter().all(|r| r.succeeded && r.checks.iter().all(|c| c.passed != Some(false)))
+        );
+        assert_eq!(std::fs::read_to_string(dir.join("note.txt")).unwrap().trim(), "written", "{m:?}");
+        assert!(checkpoint.in_progress.is_none());
+        let plain = t.out.plain_output();
+        assert!(!plain.contains("zz"), "{m:?}: mashed keys reached the shell");
+        t.session.close();
+    }
+}
+
+#[test]
+fn a_failure_halts_the_plan_and_reports_expected_versus_actual() {
+    let dir = scratch("failure");
+    let marker = fwd(&dir.join("never.txt"));
+    let v = plan(
+        json!([
+            step("first", "Get-Date"),
+            step("breaks", "cmd /c exit 3"),
+            step("after", &format!("New-Item -ItemType File -Path {marker}"))
+        ]),
+        json!([]),
+    );
+    let snap = approve(&v);
+    let t = terminal();
+    let (outcome, checkpoint, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    match outcome {
+        Outcome::Failed { step, actual, .. } => {
+            assert_eq!(step, "breaks");
+            assert!(actual.contains('3'), "{actual}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(!dir.join("never.txt").exists(), "the step after the failure ran");
+    assert_eq!(
+        checkpoint.runs.iter().map(|r| (r.step.as_str(), r.succeeded)).collect::<Vec<_>>(),
+        [("first", true), ("breaks", false)]
+    );
+    t.session.close();
+}
+
+#[test]
+fn a_failing_internal_check_fails_the_step() {
+    let dir = scratch("check");
+    let missing = fwd(&dir.join("not-there.txt"));
+    let mut s = step("look", "Get-Date");
+    s["internal_validation"] = json!([{"path_exists": {"path": missing}}]);
+    let snap = approve(&plan(json!([s]), json!([])));
+    let t = terminal();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    match outcome {
+        Outcome::Failed { expected, actual, .. } => {
+            assert!(expected.contains("not-there.txt"), "{expected}");
+            assert_eq!(actual, "does not exist");
+        }
+        other => panic!("{other:?}"),
+    }
+    t.session.close();
+}
+
+#[test]
+fn a_repaired_plan_resumes_without_rerunning_unchanged_steps() {
+    let dir = scratch("resume");
+    let log = fwd(&dir.join("log.txt"));
+    let first = step("first", &format!("Add-Content -LiteralPath {log} -Value first"));
+    let broken = plan(json!([first.clone(), step("second", "cmd /c exit 4")]), json!([]));
+    let snap = approve(&broken);
+    let t = terminal();
+    let (outcome, checkpoint, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    assert!(matches!(outcome, Outcome::Failed { .. }));
+
+    // Revised, revalidated and re-approved: a new snapshot.
+    let fixed = plan(json!([first, step("second", "cmd /c exit 0")]), json!([]));
+    let snap2 = approve(&fixed);
+    let (outcome, checkpoint2, events) = run(&t, &snap2, &mode(ExecutionMode::Direct), Some(checkpoint));
+    assert_eq!(outcome, Outcome::Complete, "{events:?}");
+    assert!(events.contains(&ExecutionEvent::StepCarried { step: "first".into() }));
+    let lines = std::fs::read_to_string(dir.join("log.txt")).unwrap();
+    assert_eq!(lines.lines().count(), 1, "the unchanged step ran again");
+    assert_eq!(checkpoint2.snapshot_hash, snap2.snapshot_hash());
+    t.session.close();
+}
+
+#[test]
+fn branches_follow_real_outcomes() {
+    let dir = scratch("branch");
+    let taken = fwd(&dir.join("taken.txt"));
+    let not_taken = fwd(&dir.join("not-taken.txt"));
+    let v = plan(
+        json!([
+            step("probe", "Get-Date"),
+            step("yes", &format!("New-Item -ItemType File -Path {taken}")),
+            step("no", &format!("New-Item -ItemType File -Path {not_taken}"))
+        ]),
+        json!([
+            {"from": "probe", "to": "yes", "when": {"step_outcome": {"step": "probe", "is": "succeeded"}}},
+            {"from": "probe", "to": "no", "when": {"not": {"step_outcome": {"step": "probe", "is": "succeeded"}}}}
+        ]),
+    );
+    let snap = approve(&v);
+    let t = terminal();
+    let (outcome, checkpoint, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    assert_eq!(outcome, Outcome::Complete);
+    assert!(dir.join("taken.txt").exists());
+    assert!(!dir.join("not-taken.txt").exists());
+    assert_eq!(checkpoint.runs.len(), 2);
+    t.session.close();
+}
+
+#[test]
+fn a_step_left_in_doubt_blocks_until_the_operator_settles_it() {
+    let dir = scratch("doubt");
+    let log = fwd(&dir.join("log.txt"));
+    let snap = approve(&plan(
+        json!([step("a", &format!("Add-Content -LiteralPath {log} -Value a")), step("b", "Get-Date")]),
+        json!([]),
+    ));
+    let hash = snap.step_hashes()["a"].clone();
+    let mut crashed = Checkpoint::new(snap.snapshot_hash());
+    crashed.in_progress = Some(InProgress { step: "a".into(), step_hash: hash, started_at: AT.into() });
+
+    let t = terminal();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), Some(crashed.clone()));
+    assert!(
+        matches!(&outcome, Outcome::Blocked { reason } if reason.contains("effect is unknown")),
+        "{outcome:?}"
+    );
+
+    let settled =
+        ExecuteOptions { settled: BTreeMap::from([("a".to_owned(), true)]), ..mode(ExecutionMode::Direct) };
+    let (outcome, checkpoint, _) = run(&t, &snap, &settled, Some(crashed));
+    assert_eq!(outcome, Outcome::Complete);
+    assert!(!dir.join("log.txt").exists(), "a step settled as done is not run again");
+    assert_eq!(checkpoint.runs.len(), 2);
+    t.session.close();
+}
+
+#[test]
+fn an_unvalidated_snapshot_is_refused() {
+    let draft = parse_plan(&plan(json!([step("a", "Get-Date")]), json!([])).to_string()).unwrap();
+    let mut book = ApprovalBook::new();
+    book.approve_all_except_critical(&draft, AT);
+    let snap = seal(&draft, &book, None, AT).unwrap();
+    let t = terminal();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    assert!(
+        matches!(&outcome, Outcome::Blocked { reason } if reason.contains("not validated")),
+        "{outcome:?}"
+    );
+    t.session.close();
+}
+
+#[test]
+fn checkpoints_are_written_as_the_plan_runs() {
+    let dir = scratch("checkpoint");
+    let path = dir.join("run.checkpoint.json");
+    let snap = approve(&plan(json!([step("a", "Get-Date"), step("b", "Get-Date")]), json!([])));
+    let t = terminal();
+    let options = ExecuteOptions { checkpoint: Some(path.clone()), ..mode(ExecutionMode::Direct) };
+    let (outcome, _, _) = run(&t, &snap, &options, None);
+    assert_eq!(outcome, Outcome::Complete);
+    let saved = Checkpoint::load(&path).unwrap();
+    assert_eq!(saved.runs.len(), 2);
+    assert_eq!(saved.snapshot_hash, snap.snapshot_hash());
+    assert!(saved.in_progress.is_none());
+    t.session.close();
+}
+
+#[test]
+fn a_changed_step_runs_again_even_though_it_succeeded_before() {
+    let dir = scratch("changed");
+    let log = fwd(&dir.join("log.txt"));
+    let v1 = plan(json!([step("a", &format!("Add-Content -LiteralPath {log} -Value one"))]), json!([]));
+    let t = terminal();
+    let (outcome, checkpoint, _) = run(&t, &approve(&v1), &mode(ExecutionMode::Direct), None);
+    assert_eq!(outcome, Outcome::Complete);
+
+    // Same step id, different command: its hash differs, so the old success does not count.
+    let v2 = plan(json!([step("a", &format!("Add-Content -LiteralPath {log} -Value two"))]), json!([]));
+    let (outcome, _, events) = run(&t, &approve(&v2), &mode(ExecutionMode::Direct), Some(checkpoint));
+    assert_eq!(outcome, Outcome::Complete);
+    assert!(!events.iter().any(|e| matches!(e, ExecutionEvent::StepCarried { .. })), "{events:?}");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("log.txt")).unwrap().lines().collect::<Vec<_>>(),
+        ["one", "two"]
+    );
+    t.session.close();
+}
+
+#[test]
+fn a_step_can_override_the_run_mode() {
+    let dir = scratch("override");
+    let file = fwd(&dir.join("direct.txt"));
+    let mut direct = step("direct", &format!("Set-Content -LiteralPath {file} -Value done"));
+    direct["execution_mode"] = json!("direct");
+    let snap = approve(&plan(json!([direct]), json!([])));
+    let t = terminal();
+    // Run in Performance mode with nobody pressing keys: only the step's own
+    // Direct mode can finish it.
+    let (outcome, _, events) = run(&t, &snap, &mode(ExecutionMode::Performance), None);
+    assert_eq!(outcome, Outcome::Complete, "{events:?}");
+    assert_eq!(std::fs::read_to_string(dir.join("direct.txt")).unwrap().trim(), "done");
+    t.session.close();
+}
+
+#[test]
+fn a_shell_that_exits_mid_step_is_never_a_success() {
+    let dir = scratch("exits");
+    let log = fwd(&dir.join("after.txt"));
+    let snap = approve(&plan(
+        json!([
+            step("leave", "[Environment]::Exit(0)"),
+            step("after", &format!("Set-Content -LiteralPath {log} -Value ran"))
+        ]),
+        json!([]),
+    ));
+    let t = terminal();
+    let (outcome, checkpoint, events) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    assert_eq!(outcome, Outcome::Aborted { step: Some("leave".into()), in_doubt: true }, "{events:?}");
+    assert!(checkpoint.runs.is_empty(), "{checkpoint:?}");
+    assert_eq!(checkpoint.in_progress.map(|p| p.step).as_deref(), Some("leave"));
+    assert!(!dir.join("after.txt").exists());
+}
+
+fn check(v: Value) -> keyjutsu_core::plan::model::Check {
+    serde_json::from_value(v).unwrap()
+}
+
+#[test]
+fn runtime_checks_look_at_the_machine_itself() {
+    use keyjutsu_core::execute::run_check;
+    let dir = scratch("checks");
+    let file = dir.join("settings.json");
+    std::fs::write(&file, r#"{"backend": {"kind": "wsl"}}"#).unwrap();
+    let path = fwd(&file);
+    let digest = keyjutsu_core::plan::hash::sha256_hex(&std::fs::read(&file).unwrap());
+
+    let passed = |c: Value| run_check(&check(c), Some(0)).passed;
+    assert_eq!(passed(json!({"file_sha256": {"path": path, "sha256": digest}})), Some(true));
+    assert_eq!(passed(json!({"file_sha256": {"path": path, "sha256": "00"}})), Some(false));
+    assert_eq!(
+        passed(json!({"json_value": {"path": path, "pointer": "/backend/kind", "equals": "wsl"}})),
+        Some(true)
+    );
+    assert_eq!(
+        passed(json!({"json_value": {"path": path, "pointer": "/backend/kind", "equals": "hyperv"}})),
+        Some(false)
+    );
+    assert_eq!(
+        passed(json!({"json_value": {"path": path, "pointer": "/missing", "equals": 1}})),
+        Some(false)
+    );
+    assert_eq!(passed(json!({"exit_code": {"equals": 0}})), Some(true));
+    assert_eq!(
+        run_check(&check(json!({"exit_code": {"equals": 0}})), None).passed,
+        None,
+        "cmd: unknown, not passed"
+    );
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    assert_eq!(passed(json!({"tcp_port_open": {"host": "127.0.0.1", "port": port}})), Some(true));
+    drop(listener);
+    assert_eq!(passed(json!({"tcp_port_open": {"host": "127.0.0.1", "port": port}})), Some(false));
+}
+
+#[test]
+fn a_check_is_waited_for_up_to_its_timeout() {
+    let dir = scratch("wait");
+    let late = dir.join("late.txt");
+    let mut s = step("start", "Get-Date | Out-Null");
+    s["internal_validation"] = json!([{"path_exists": {"path": fwd(&late)}}, {"timeout_seconds": 20}]);
+    let snap = approve(&plan(json!([s]), json!([])));
+    let t = terminal();
+    let writer = {
+        let late = late.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            std::fs::write(late, "here").unwrap();
+        })
+    };
+    let (outcome, _, events) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    writer.join().unwrap();
+    assert_eq!(outcome, Outcome::Complete, "{events:?}");
+    assert!(events.iter().any(|e| matches!(e, ExecutionEvent::Waiting { .. })), "it had to wait: {events:?}");
+    t.session.close();
+}

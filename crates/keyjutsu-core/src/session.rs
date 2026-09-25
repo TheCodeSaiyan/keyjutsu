@@ -270,7 +270,14 @@ impl Session {
         if control.exited {
             return Err(CoreError::Refused("the shell has exited".into()));
         }
-        if control.engine.as_ref().is_some_and(PerformanceEngine::owns_input) {
+        // A finished performance still holds the keyboard (so mashing past the
+        // end types nothing); the next step of a plan may take over from it.
+        // Anything still in progress may not be replaced.
+        if control
+            .engine
+            .as_ref()
+            .is_some_and(|e| e.owns_input() && e.state() != keyjutsu_execution::ExecutionState::Complete)
+        {
             return Err(CoreError::Refused("a performance is already armed".into()));
         }
         if !control.ready {

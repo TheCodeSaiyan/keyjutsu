@@ -7,6 +7,7 @@
 
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -22,6 +23,8 @@ struct ConsoleSink {
     overlay_requests: Mutex<u32>,
     outcomes: Mutex<Vec<(usize, StepOutcome)>>,
     released: AtomicBool,
+    /// Events for an execution controller, when one is running.
+    forward: Mutex<Option<Sender<SessionEvent>>>,
 }
 
 impl SessionSink for ConsoleSink {
@@ -33,6 +36,11 @@ impl SessionSink for ConsoleSink {
     }
 
     fn event(&self, event: SessionEvent) {
+        if let Ok(forward) = self.forward.lock()
+            && let Some(tx) = forward.as_ref()
+        {
+            let _ = tx.send(event.clone());
+        }
         match event {
             SessionEvent::Exited { .. } => self.exited.store(true, Ordering::SeqCst),
             SessionEvent::OverlayRequested => {
@@ -61,6 +69,10 @@ pub struct Performance {
     pub script: StagedScript,
     pub config: PerformanceConfig,
 }
+
+/// Drives a session from its own thread once the shell is ready, following
+/// the session's events: how `keyjutsu run` executes a snapshot.
+pub type Controller = Box<dyn FnOnce(Session, Receiver<SessionEvent>) + Send>;
 
 pub struct RunSummary {
     pub outcomes: Vec<(usize, StepOutcome)>,
@@ -93,7 +105,11 @@ impl Drop for RawModeGuard {
 
 /// Run a session in this console until its shell exits. With a performance,
 /// it is armed as soon as the shell reaches its first prompt.
-pub fn run(mut options: SessionOptions, performance: Option<Performance>) -> Result<RunSummary, String> {
+pub fn run(
+    mut options: SessionOptions,
+    performance: Option<Performance>,
+    controller: Option<Controller>,
+) -> Result<RunSummary, String> {
     let (cols, rows) = terminal::size().map_err(|e| e.to_string())?;
     options.size = TerminalSize { rows, cols };
     options.intercept_cursor_queries = true;
@@ -105,8 +121,31 @@ pub fn run(mut options: SessionOptions, performance: Option<Performance>) -> Res
         overlay_requests: Mutex::new(0),
         outcomes: Mutex::new(Vec::new()),
         released: AtomicBool::new(false),
+        forward: Mutex::new(None),
     });
     let session = Session::open(options, sink.clone()).map_err(|e| e.to_string())?;
+
+    // While a controller drives the session, keys pressed between its
+    // performances must not reach the shell: they would be typed for real, and
+    // the dirty line would then stop the next performance arming.
+    let controlling = Arc::new(AtomicBool::new(controller.is_some()));
+    if let Some(control) = controller {
+        let (tx, rx) = channel();
+        if let Ok(mut f) = sink.forward.lock() {
+            *f = Some(tx);
+        }
+        if session.wait_ready(Duration::from_secs(30)) {
+            let (s, done) = (session.clone(), controlling.clone());
+            std::thread::spawn(move || {
+                control(s, rx);
+                done.store(false, Ordering::SeqCst);
+            });
+        } else {
+            session.close();
+            drop(guard);
+            return Err("the shell never showed a KeyJutsu prompt; try --clean".to_owned());
+        }
+    }
 
     let mut armed = None;
     if let Some(p) = performance {
@@ -131,6 +170,9 @@ pub fn run(mut options: SessionOptions, performance: Option<Performance>) -> Res
         }
         match event::read() {
             Ok(Event::Key(key)) if key.kind != KeyEventKind::Release => {
+                if controlling.load(Ordering::SeqCst) && session.snapshot().is_none() {
+                    continue;
+                }
                 if let Some(chord) = chord_from(&key) {
                     let _ = session.key(&chord);
                 }

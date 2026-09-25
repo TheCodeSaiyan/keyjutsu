@@ -6,6 +6,7 @@
 //! can only ask; this crate answers.
 
 pub mod demo;
+pub mod execute;
 pub mod fingerprint;
 pub mod headless;
 pub mod ipc;

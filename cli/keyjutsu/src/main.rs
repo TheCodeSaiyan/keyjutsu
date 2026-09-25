@@ -7,6 +7,7 @@
 mod agent_cli;
 mod console;
 mod plans;
+mod run_cli;
 
 use std::process::ExitCode;
 
@@ -34,6 +35,24 @@ enum Command {
         /// Print the list as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Execute an approved snapshot in this console.
+    Run {
+        snapshot: std::path::PathBuf,
+        /// How steps without their own mode are delivered; the plan's default otherwise.
+        #[arg(long, value_enum)]
+        mode: Option<ModeChoice>,
+        /// Skip your shell profile, history predictions and history saving.
+        #[arg(long)]
+        clean: bool,
+        /// Continue from a checkpoint: the one next to the snapshot, or the given
+        /// file (such as the previous snapshot's, after a revision). Steps that
+        /// succeeded and are unchanged are not run again.
+        #[arg(long, value_name = "CHECKPOINT", num_args = 0..=1)]
+        resume: Option<Option<std::path::PathBuf>>,
+        /// Settle a step left in doubt by a crash: STEP=succeeded or STEP=failed.
+        #[arg(long, value_name = "STEP=RESULT")]
+        settle: Vec<String>,
     },
     /// Check this machine is ready: Windows, ConPTY, shells and staged input.
     Doctor {
@@ -276,6 +295,18 @@ fn main() -> ExitCode {
         Command::Plan(PlanCommand::Review { file, task, agent, record }) => {
             agent_cli::review(&file, task.as_deref(), &agent.agent, agent.send, record.as_deref())
         }
+        Command::Run { snapshot, mode, clean, resume, settle } => run_cli::run(run_cli::RunArgs {
+            snapshot: &snapshot,
+            mode: mode.map(|m| match m {
+                ModeChoice::Performance => ExecutionMode::Performance,
+                ModeChoice::Assisted => ExecutionMode::Assisted,
+                ModeChoice::Auto => ExecutionMode::AutoPerformance,
+                ModeChoice::Direct => ExecutionMode::Direct,
+            }),
+            clean,
+            resume: resume.map(|from| from.unwrap_or_else(|| run_cli::checkpoint_path(&snapshot))),
+            settle: &settle,
+        }),
         Command::Shell(shell) => session(shell.options(), None),
         Command::Demo { shell, performance } => {
             let options = shell.options();
@@ -321,7 +352,7 @@ fn session(options: SessionOptions, performance: Option<console::Performance>) -
         .as_ref()
         .map(|p| p.script.steps.iter().map(|s| s.title.clone()).collect())
         .unwrap_or_default();
-    let summary = match console::run(options, performance) {
+    let summary = match console::run(options, performance, None) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("keyjutsu: {e}");
