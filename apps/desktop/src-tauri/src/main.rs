@@ -704,10 +704,9 @@ fn main() {
 mod tests {
     use super::{cwd_argument, session_options};
 
-    /// Found while taking the documentation's screenshots: the folder given
-    /// by "Open KeyJutsu here" was never passed to the shell, which started
-    /// in the home folder every time. Checked on a real shell, which reports
-    /// where it is at its prompt.
+    /// The folder given by "Open KeyJutsu here" is where the shell starts,
+    /// not the home folder. Checked on a real shell, which reports where it
+    /// is at its prompt.
     #[test]
     fn a_terminal_opens_in_the_folder_explorer_passed() {
         use std::sync::Arc;

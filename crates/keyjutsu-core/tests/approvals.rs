@@ -1,6 +1,5 @@
-//! Milestone 17: a snapshot or checkpoint is trusted because this account
-//! recorded it in the encrypted store, not because its own hashes agree
-//! (closes deviations D14 and D20).
+//! A snapshot or checkpoint is trusted because this account recorded it in
+//! the encrypted store, not because its own hashes agree.
 
 #![cfg(windows)]
 #![allow(clippy::unwrap_used)] // Helpers outside #[test] functions may unwrap too.
@@ -134,10 +133,9 @@ fn a_crash_between_recording_and_writing_leaves_a_checkpoint_that_loads() {
     assert_eq!(load_checkpoint(&store, &path).unwrap(), before);
 }
 
-/// Failure injection, found by the CLI tests running in parallel: several
-/// processes opening a new store at once must end up with one key. When each
-/// made its own and the last one written won, records made under the others
-/// could no longer be read, and approvals were lost.
+/// Failure injection: several processes opening a new store at once must end
+/// up with one key. If each made its own and the last one written won,
+/// records made under the others could no longer be read.
 #[test]
 fn a_store_opened_by_many_at_once_keeps_one_key() {
     for round in 0..5 {

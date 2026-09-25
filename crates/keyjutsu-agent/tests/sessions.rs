@@ -158,7 +158,7 @@ fn a_secret_in_pasted_context_never_reaches_the_agent() {
     assert!(!prompt.contains("ghp_0123456789"), "the token was sent");
 }
 
-/// Milestone 17, secret leakage: not only pasted context. The task, the
+/// Secret leakage, by every route: not only pasted context. The task, the
 /// guidance for a revision, what validation found, and a value the operator
 /// typed into a step are all redacted before any agent sees them.
 #[test]

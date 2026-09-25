@@ -1,4 +1,4 @@
-//! Milestone 17, IPC attacks: whatever arrives on the broker's pipe, in
+//! IPC attacks: whatever arrives on the broker's pipe, in
 //! whatever order, it runs a step only for a client that proved the secret,
 //! and only the approved Administrator step at its approved hash. The
 //! requests are built from the real ones, forged, mutated and mixed with

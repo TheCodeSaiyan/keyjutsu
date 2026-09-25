@@ -316,8 +316,8 @@ mod tests {
         assert!(!is_progress_only("Remove-Item: Cannot find path"));
     }
 
-    /// Seen while writing the documentation: a failed dry run's reason was
-    /// the raw CLIXML, escaped colour codes and all, on screen and in the CLI.
+    /// A failed dry run's reason is PowerShell's message, not the raw CLIXML
+    /// with its escaped colour codes.
     #[test]
     fn a_dry_run_error_reads_as_powershell_would_show_it() {
         let raw = r#"<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">_x001B_[31;1mRemove-Item: _x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1mLine |_x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1m_x001B_[36;1m   5 | _x001B_[0m _x001B_[36;1mRemove-Item -Recurse -Force -LiteralPath C:/Users/Public/BuildCache_x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1m_x001B_[36;1m_x001B_[0m_x001B_[36;1m_x001B_[0m_x001B_[36;1m     | _x001B_[31;1m ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~_x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1m_x001B_[36;1m_x001B_[0m_x001B_[36;1m_x001B_[0m_x001B_[36;1m_x001B_[31;1m_x001B_[31;1m_x001B_[36;1m     | _x001B_[31;1mCannot find path 'C:/Users/Public/BuildCache' because it does not exist._x001B_[0m_x000D__x000A_</S></Objs>"#;

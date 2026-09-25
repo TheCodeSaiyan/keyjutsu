@@ -228,7 +228,7 @@ fn a_shared_technique_arrives_as_an_untrusted_draft() {
     assert!(technique::import("{}").is_err());
 }
 
-/// Milestone 17, imported Technique attacks: a crafted export claims trust
+/// Imported Technique attacks: a crafted export claims trust
 /// it was never given, hides characters in its commands, and uses a loose
 /// pattern to smuggle flags in through a value.
 #[test]

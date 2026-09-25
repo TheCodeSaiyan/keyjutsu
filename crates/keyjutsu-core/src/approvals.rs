@@ -1,5 +1,5 @@
 //! What this Windows account approved and wrote, recorded where only it can
-//! vouch for it (Milestone 17; closes deviations D14 and D20).
+//! vouch for it.
 //!
 //! A snapshot's hashes catch accidental edits, but they are unkeyed: someone
 //! who can write the file can recompute them. So sealing a plan also puts a

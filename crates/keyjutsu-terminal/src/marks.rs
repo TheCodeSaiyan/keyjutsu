@@ -406,9 +406,9 @@ mod tests {
         assert!(!spoof.iter().any(|i| matches!(i, ScanItem::Location(_))), "a wrong nonce is only output");
     }
 
-    /// Found by fuzzing (Milestone 17): an unfinished `ESC ] 133 ;` printed
-    /// by a command, then enough output, made the prompt's real mark part of
-    /// one long "sequence" and it was lost, so the step would never finish.
+    /// An unfinished `ESC ] 133 ;` printed by a command, then enough output,
+    /// must not make the prompt's real mark part of one long "sequence": lost,
+    /// the step would never finish.
     #[test]
     fn an_unfinished_sequence_cannot_swallow_the_prompts_mark() {
         let mut data = b"\x1b]133;\x1b".to_vec();
@@ -421,7 +421,7 @@ mod tests {
         assert_eq!(output_of(&short), b"\x1b]133;D;");
     }
 
-    /// Milestone 17 fuzzing. Output is built from pieces an attacker in the
+    /// Fuzzing. Output is built from pieces an attacker in the
     /// session would reach for, near-misses of real marks included, so that
     /// random bytes are not all the scanner ever sees.
     mod fuzz {

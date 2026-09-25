@@ -1,4 +1,4 @@
-// The release gates of §57, each a named list of tests (Milestone 17).
+// The release gates, each a named list of tests.
 //
 // A release must not ship if any gate fails. Every test is named exactly, and
 // a test that is missing counts as a failure: renaming or deleting one cannot

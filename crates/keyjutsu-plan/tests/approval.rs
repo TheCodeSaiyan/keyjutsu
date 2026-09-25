@@ -367,7 +367,7 @@ fn keyjutsus_own_critical_rating_needs_the_typed_phrase_even_if_the_agent_said_l
 proptest! {
     #![proptest_config(ProptestConfig { cases: 3000, ..ProptestConfig::default() })]
 
-    /// Milestone 17, plan tampering: random edits to the stored text of a
+    /// Plan tampering: random edits to the stored text of a
     /// snapshot, a character replaced, removed or inserted anywhere. Loading
     /// never panics, and whatever it accepts is exactly what was approved
     /// (whitespace, say); anything else is refused.
