@@ -11,6 +11,7 @@ pub mod fingerprint;
 pub mod headless;
 pub mod ipc;
 pub mod readiness;
+pub mod recovery;
 pub mod session;
 
 pub use keyjutsu_agent as agent;

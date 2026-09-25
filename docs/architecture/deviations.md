@@ -207,3 +207,13 @@ warning on screen once there is somewhere to show it.
   device-flow helpers; (c) leave both to command steps.
 - **Resolution taken:** (c) for now. (a) is the natural next step when a plan
   needs it.
+
+## D22. Recovery before the broker
+
+The specification orders Milestone 10 (the elevated broker) before Milestone
+11 (recovery). Recovery was built first because it can be proven as a
+standard user against the real file system and registry, while the broker
+needs an elevated process, UAC prompts and someone to answer them. The cost
+is that restoring services and HKLM values, which need elevation, fails and
+is reported as failed until the broker exists
+([milestone-11.md](milestone-11.md#limits)).

@@ -200,6 +200,56 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
         v.record("syntax", EvidenceResult::NotApplicable, "cmd.exe has no parser KeyJutsu can ask");
         v.uncertainty.push("cmd.exe syntax is not checked before the step runs".into());
     }
+    // Recovery (§29) is prepared before the step runs, so it must be
+    // something KeyJutsu can actually carry out.
+    if let Some(r) = &step.recovery {
+        use keyjutsu_plan::model::{CaptureKind, RecoveryStrategy};
+        match r.strategy {
+            RecoveryStrategy::RestoreCapturedState if r.capture.is_empty() => {
+                v.fail("recovery", Readiness::Invalid, "restores captured state but captures nothing")
+            }
+            RecoveryStrategy::Commands if r.commands.is_empty() => {
+                v.fail("recovery", Readiness::Invalid, "recovers by commands but lists none")
+            }
+            _ => {}
+        }
+        for c in &r.capture {
+            match c.kind {
+                CaptureKind::RegistryValue => {
+                    let upper = c.target.to_ascii_uppercase();
+                    let named = c.target.rsplit_once('\\').is_some_and(|(k, n)| !n.is_empty() && k.len() > 6);
+                    if !(upper.starts_with("HKCU:\\") || upper.starts_with("HKLM:\\")) || !named {
+                        v.fail(
+                            "recovery",
+                            Readiness::Invalid,
+                            format!(
+                                "`{}`: a registry capture is HKCU:\\Key\\Value or HKLM:\\Key\\Value",
+                                c.target
+                            ),
+                        );
+                    }
+                }
+                CaptureKind::File if std::path::Path::new(&c.target).is_dir() => v.fail(
+                    "recovery",
+                    Readiness::Invalid,
+                    format!("`{}` is a folder; only files can be captured", c.target),
+                ),
+                CaptureKind::PackageVersion => {
+                    v.record(
+                        "recovery",
+                        EvidenceResult::NotApplicable,
+                        format!("package {}: KeyJutsu cannot restore package versions yet", c.target),
+                    );
+                    v.worsen(Readiness::NeedsReview);
+                }
+                _ => {}
+            }
+        }
+        if r.strategy == RecoveryStrategy::RestoreCapturedState && !r.capture.is_empty() {
+            v.pass("recovery", format!("{} item(s) captured before the step runs", r.capture.len()));
+        }
+    }
+
     // Credentials (§25): asked for only through a prompt that masks them.
     if step.kind == StepKind::Credential {
         match &step.credential {
@@ -428,6 +478,44 @@ mod tests {
             "shell": {"kind": shell},
             "credential": {"variable": "TOKEN", "prompt": "Token", "kind": "secret"}}))
         .unwrap()
+    }
+
+    fn with_recovery(recovery: serde_json::Value) -> Step {
+        serde_json::from_value(json!({"id": "s", "title": "T", "objective": "O", "kind": "command",
+            "shell": {"kind": "pwsh"}, "commands": [{"text": "x"}], "recovery": recovery}))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_recovery_that_cannot_be_carried_out_is_not_ready() {
+        let g = Gathered { shell_version: Some("7".into()), ..Gathered::default() };
+        let r = |v| judge(&with_recovery(v), &g).readiness;
+        assert_eq!(r(json!({"strategy": "restore_captured_state"})), Readiness::Invalid);
+        assert_eq!(r(json!({"strategy": "commands"})), Readiness::Invalid);
+        assert_eq!(
+            r(
+                json!({"strategy": "restore_captured_state", "capture": [{"kind": "registry_value", "target": "Software\\X\\Y"}]})
+            ),
+            Readiness::Invalid
+        );
+        assert_eq!(
+            r(
+                json!({"strategy": "restore_captured_state", "capture": [{"kind": "file", "target": std::env::temp_dir().display().to_string()}]})
+            ),
+            Readiness::Invalid
+        );
+        assert_eq!(
+            r(
+                json!({"strategy": "restore_captured_state", "capture": [{"kind": "package_version", "target": "git"}]})
+            ),
+            Readiness::NeedsReview
+        );
+        assert_eq!(
+            r(
+                json!({"strategy": "restore_captured_state", "capture": [{"kind": "registry_value", "target": "HKCU:\\Software\\X\\Y"}]})
+            ),
+            Readiness::Ready
+        );
     }
 
     #[test]

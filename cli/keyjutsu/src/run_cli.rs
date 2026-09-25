@@ -171,7 +171,15 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             println!("  expected: {expected}");
             println!("  actual:   {actual}");
             println!();
-            println!("Next: `keyjutsu plan revise` with your guidance, validate and approve again, then");
+            println!("Nothing has been rolled back. Your choices:");
+            println!("  Diagnose first: the shell is as the step left it.");
+            println!("  Review the recovery plan: `keyjutsu recover {}`", args.snapshot.display());
+            println!("  Roll back: the same, with --confirm.");
+            println!("  Stop here without rolling back: do nothing.");
+            println!();
+            println!(
+                "To repair instead: `keyjutsu plan revise` with your guidance, validate and approve again, then"
+            );
             println!("`keyjutsu run <new snapshot> --resume {}`;", cp_path.display());
             println!("steps that already succeeded and are unchanged are not run again.");
             ExitCode::FAILURE

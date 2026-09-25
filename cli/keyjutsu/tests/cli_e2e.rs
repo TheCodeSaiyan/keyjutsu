@@ -377,3 +377,68 @@ fn run_asks_for_a_credential_in_the_shells_masked_prompt() {
     assert!(!std::fs::read_to_string(dir.join("snap.checkpoint.json")).unwrap().contains(SECRET));
     assert!(!std::fs::read_to_string(&snap).unwrap().contains(SECRET));
 }
+
+#[test]
+fn a_failed_run_is_recovered_only_when_the_operator_confirms() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-recover");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("settings.txt");
+    std::fs::write(&target, "original").unwrap();
+    let fwd = |p: &std::path::Path| p.display().to_string().replace('\\', "/");
+    let plan = serde_json::json!({
+        "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+        "target": {"id": "local", "kind": "local_windows"},
+        "agent": {"name": "codex", "version": "1"},
+        "steps": [
+            {"id": "edit", "title": "Edit", "objective": "Change the setting.", "kind": "command",
+             "shell": {"kind": "pwsh"}, "commands": [{"text": format!("Set-Content -LiteralPath {} -Value changed", fwd(&target))}],
+             "reversibility": {"level": "full"},
+             "recovery": {"strategy": "restore_captured_state", "capture": [{"kind": "file", "target": fwd(&target)}]}},
+            {"id": "verify", "title": "Verify", "objective": "Fails on purpose.", "kind": "validation",
+             "shell": {"kind": "pwsh"}, "depends_on": ["edit"], "commands": [{"text": "Get-Date"}],
+             "internal_validation": [{"path_exists": {"path": fwd(&dir.join("never.txt"))}}]}
+        ]
+    });
+    let plan_path = dir.join("plan.json");
+    std::fs::write(&plan_path, plan.to_string()).unwrap();
+    let snap = dir.join("snap.json");
+    let keyjutsu = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu")).args(args).output().unwrap()
+    };
+    let approved =
+        keyjutsu(&["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()]);
+    assert!(approved.status.success(), "{}", String::from_utf8_lossy(&approved.stderr));
+
+    let (mut child, screen, writer) = launch(&["run", snap.to_str().unwrap(), "--mode", "direct", "--clean"]);
+    let deadline = Instant::now() + TIMEOUT;
+    while std::fs::read_to_string(dir.join("snap.checkpoint.json"))
+        .map_or(true, |t| !t.contains("\"succeeded\": false"))
+    {
+        assert!(Instant::now() < deadline, "the run never failed:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    writer.lock().unwrap().write_all(b"exit\r").unwrap();
+    let deadline = Instant::now() + TIMEOUT;
+    while child.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline, "keyjutsu run did not exit:\n{:?}", screen.text.lock().unwrap());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(screen.wait_for("Nothing has been rolled back"), "{}", screen.plain());
+    assert_eq!(std::fs::read_to_string(&target).unwrap().trim(), "changed");
+
+    // Reviewing changes nothing.
+    let review = keyjutsu(&["recover", snap.to_str().unwrap()]);
+    let text = String::from_utf8_lossy(&review.stdout);
+    assert!(review.status.success(), "{text}");
+    assert!(text.contains("restore") && text.contains("--confirm"), "{text}");
+    assert_eq!(std::fs::read_to_string(&target).unwrap().trim(), "changed");
+
+    // Confirming restores it.
+    let done = keyjutsu(&["recover", snap.to_str().unwrap(), "--confirm"]);
+    let text = String::from_utf8_lossy(&done.stdout);
+    assert!(done.status.success(), "{text}{}", String::from_utf8_lossy(&done.stderr));
+    assert!(text.contains("Recovered."), "{text}");
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "original");
+}

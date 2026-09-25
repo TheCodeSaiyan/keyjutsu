@@ -7,6 +7,7 @@
 mod agent_cli;
 mod console;
 mod plans;
+mod recover_cli;
 mod run_cli;
 
 use std::process::ExitCode;
@@ -35,6 +36,22 @@ enum Command {
         /// Print the list as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Show how to undo what a stopped run changed, and with --confirm, do it.
+    Recover {
+        snapshot: std::path::PathBuf,
+        /// The checkpoint of the run to recover; the one next to the snapshot otherwise.
+        #[arg(long, value_name = "CHECKPOINT")]
+        from: Option<std::path::PathBuf>,
+        /// Recover only these steps (repeatable); every step that ran otherwise.
+        #[arg(long = "step", value_name = "STEP")]
+        steps: Vec<String>,
+        /// Carry out the recovery plan. Without it, the plan is only shown.
+        #[arg(long)]
+        confirm: bool,
+        /// Skip your shell profile for any recovery commands.
+        #[arg(long)]
+        clean: bool,
     },
     /// Execute an approved snapshot in this console.
     Run {
@@ -294,6 +311,15 @@ fn main() -> ExitCode {
         }
         Command::Plan(PlanCommand::Review { file, task, agent, record }) => {
             agent_cli::review(&file, task.as_deref(), &agent.agent, agent.send, record.as_deref())
+        }
+        Command::Recover { snapshot, from, steps, confirm, clean } => {
+            recover_cli::run(recover_cli::RecoverArgs {
+                snapshot: &snapshot,
+                from,
+                steps: &steps,
+                confirm,
+                clean,
+            })
         }
         Command::Run { snapshot, mode, clean, resume, settle } => run_cli::run(run_cli::RunArgs {
             snapshot: &snapshot,

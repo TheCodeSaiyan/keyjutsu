@@ -107,6 +107,10 @@ pub struct Checkpoint {
     pub runs: Vec<StepRun>,
     /// A step that had started and not finished. Its effect is unknown.
     pub in_progress: Option<InProgress>,
+    /// What each step declared it would change, captured just before it ran
+    /// (§29). Latest last.
+    #[serde(default)]
+    pub captures: Vec<crate::recovery::StepCapture>,
 }
 
 const CHECKPOINT_KIND: &str = "keyjutsu.checkpoint/1";
@@ -118,6 +122,7 @@ impl Checkpoint {
             snapshot_hash: snapshot_hash.into(),
             runs: Vec::new(),
             in_progress: None,
+            captures: Vec::new(),
         }
     }
 
@@ -463,6 +468,73 @@ impl std::fmt::Debug for Driver<'_> {
     }
 }
 
+/// How a staged performance ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Performed {
+    /// Every line reported a result (some may have failed).
+    Finished(Vec<StepOutcome>),
+    /// Disarmed, or the shell went away. `in_doubt` when a command had been
+    /// submitted, so its effect is unknown.
+    Unfinished { in_doubt: bool },
+    /// The session would not arm it.
+    Refused(String),
+}
+
+/// Arm `script` on the session and follow it until it ends.
+pub fn perform(driver: &Driver<'_>, script: StagedScript, config: PerformanceConfig) -> Performed {
+    let lines = script.steps.len();
+    // Drop events left over from before.
+    while driver.events.try_recv().is_ok() {}
+    if let Err(e) = driver.session.arm(script, config) {
+        return Performed::Refused(e.to_string());
+    }
+    let mut outcomes: Vec<StepOutcome> = Vec::new();
+    let mut last_state = ExecutionState::Armed;
+    // The last state before the performance ended, to tell whether a
+    // command had been submitted when it stopped.
+    let mut live_state = ExecutionState::Armed;
+    let ended = loop {
+        match driver.events.recv_timeout(Duration::from_millis(500)) {
+            Ok(SessionEvent::StepFinished { outcome, .. }) => outcomes.push(outcome),
+            // The session sends each line's result before the snapshot that
+            // reports the state it led to, so by the time the state is final
+            // every result has arrived.
+            Ok(SessionEvent::Performance { snapshot: s }) => {
+                last_state = s.state;
+                if !s.state.is_terminal() && s.state != ExecutionState::Failed {
+                    live_state = s.state;
+                }
+                if matches!(s.state, ExecutionState::Complete | ExecutionState::Failed) {
+                    break Some(s.state);
+                }
+            }
+            Ok(SessionEvent::Released)
+                if !matches!(last_state, ExecutionState::Complete | ExecutionState::Failed) =>
+            {
+                break None;
+            }
+            Ok(SessionEvent::Exited { .. }) => break None,
+            Ok(_) | Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break None,
+        }
+    };
+    // A performance that ended without a result for every line did not
+    // finish: the shell exited under it. That is never a success.
+    let unfinished = match ended {
+        None => true,
+        Some(ExecutionState::Complete) => outcomes.len() != lines,
+        Some(_) => !outcomes.iter().any(|o| matches!(o, StepOutcome::Failed { .. })),
+    };
+    if unfinished {
+        let in_doubt = matches!(
+            live_state,
+            ExecutionState::Executing | ExecutionState::Waiting | ExecutionState::Validating
+        );
+        return Performed::Unfinished { in_doubt };
+    }
+    Performed::Finished(outcomes)
+}
+
 /// Why a snapshot may not be executed at all.
 pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
     let Some(state) = &snapshot.plan().keyjutsu else {
@@ -515,6 +587,12 @@ pub fn execute(
 ) -> (Outcome, Checkpoint) {
     let mut checkpoint = Checkpoint::new(snapshot.snapshot_hash());
     let finish = |outcome: Outcome, checkpoint: Checkpoint| {
+        // Anything short of completion hands the keyboard back (§2.3). A step
+        // that failed only its checks left a performance that had completed,
+        // and a completed performance keeps the keyboard until disarmed.
+        if outcome != Outcome::Complete {
+            driver.session.disarm();
+        }
         observe(ExecutionEvent::Finished { outcome: outcome.clone() });
         (outcome, checkpoint)
     };
@@ -577,6 +655,8 @@ pub fn execute(
                 checkpoint.runs.push(run);
             }
         }
+        checkpoint.captures =
+            previous.captures.into_iter().filter(|c| hashes.get(&c.step) == Some(&c.step_hash)).collect();
         for run in &checkpoint.runs {
             facts.steps.insert(run.step.clone(), StepResult::Succeeded { exit_code: run.exit_code });
             observe(ExecutionEvent::StepCarried { step: run.step.clone() });
@@ -639,6 +719,29 @@ pub fn execute(
                 checkpoint,
             );
         }
+        // Prepare the step's recovery before it runs, or do not run it.
+        if step.recovery.as_ref().is_some_and(|r| !r.capture.is_empty()) {
+            let Some(dir) = options.checkpoint.as_deref().map(crate::recovery::recovery_dir) else {
+                return finish(
+                    Outcome::Blocked {
+                        reason: format!(
+                            "step `{id}` captures state for recovery, but this run keeps no checkpoint"
+                        ),
+                    },
+                    checkpoint,
+                );
+            };
+            match crate::recovery::capture_step(step, &step_hash, &dir, now()) {
+                Ok(c) => checkpoint.captures.push(c),
+                Err(e) => {
+                    save(&checkpoint);
+                    return finish(
+                        Outcome::Blocked { reason: format!("could not prepare recovery for `{id}`: {e}") },
+                        checkpoint,
+                    );
+                }
+            }
+        }
         let started_at = now();
         checkpoint.in_progress = Some(InProgress {
             step: id.clone(),
@@ -655,67 +758,22 @@ pub fn execute(
         }
 
         let script = staged_for(step, show_validation);
-        let lines = script.steps.len();
         let config = PerformanceConfig { mode: default_mode, ..options.base.clone() };
-        // Drop events left over from the previous step.
-        while driver.events.try_recv().is_ok() {}
-        if let Err(e) = driver.session.arm(script, config) {
-            checkpoint.in_progress = None;
-            save(&checkpoint);
-            return finish(Outcome::Blocked { reason: e.to_string() }, checkpoint);
-        }
-
-        let mut outcomes: Vec<StepOutcome> = Vec::new();
-        let mut last_state = ExecutionState::Armed;
-        // The last state before the performance ended, to tell whether a
-        // command had been submitted when it stopped.
-        let mut live_state = ExecutionState::Armed;
-        let ended = loop {
-            match driver.events.recv_timeout(Duration::from_millis(500)) {
-                Ok(SessionEvent::StepFinished { outcome, .. }) => outcomes.push(outcome),
-                // The session sends each line's result before the snapshot
-                // that reports the state it led to, so by the time the state
-                // is final every result has arrived.
-                Ok(SessionEvent::Performance { snapshot: s }) => {
-                    last_state = s.state;
-                    if !s.state.is_terminal() && s.state != ExecutionState::Failed {
-                        live_state = s.state;
-                    }
-                    if matches!(s.state, ExecutionState::Complete | ExecutionState::Failed) {
-                        break Some(s.state);
-                    }
-                }
-                Ok(SessionEvent::Released)
-                    if !matches!(last_state, ExecutionState::Complete | ExecutionState::Failed) =>
-                {
-                    break None;
-                }
-                Ok(SessionEvent::Exited { .. }) => break None,
-                Ok(_) | Err(RecvTimeoutError::Timeout) => {}
-                Err(RecvTimeoutError::Disconnected) => break None,
-            }
-        };
-
-        // A performance that ended without a result for every line did not
-        // finish: the shell exited under it. That is never a success.
-        let unfinished = match ended {
-            None => true,
-            Some(ExecutionState::Complete) => outcomes.len() != lines,
-            Some(_) => !outcomes.iter().any(|o| matches!(o, StepOutcome::Failed { .. })),
-        };
-        if unfinished {
-            // Disarmed or the shell went away. If a command had been
-            // submitted, its effect is unknown: leave the step in doubt.
-            let in_doubt = matches!(
-                live_state,
-                ExecutionState::Executing | ExecutionState::Waiting | ExecutionState::Validating
-            );
-            if !in_doubt {
+        let outcomes = match perform(driver, script, config) {
+            Performed::Finished(outcomes) => outcomes,
+            Performed::Refused(reason) => {
                 checkpoint.in_progress = None;
+                save(&checkpoint);
+                return finish(Outcome::Blocked { reason }, checkpoint);
             }
-            save(&checkpoint);
-            return finish(Outcome::Aborted { step: Some(id), in_doubt }, checkpoint);
-        }
+            Performed::Unfinished { in_doubt } => {
+                if !in_doubt {
+                    checkpoint.in_progress = None;
+                }
+                save(&checkpoint);
+                return finish(Outcome::Aborted { step: Some(id), in_doubt }, checkpoint);
+            }
+        };
 
         let last_exit = outcomes.iter().rev().find_map(|o| match o {
             StepOutcome::Succeeded { exit_code } | StepOutcome::Failed { exit_code } => {

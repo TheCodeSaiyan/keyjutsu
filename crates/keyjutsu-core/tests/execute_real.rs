@@ -208,6 +208,8 @@ fn a_failing_internal_check_fails_the_step() {
         }
         other => panic!("{other:?}"),
     }
+    // The keyboard is the operator's again, as after any failure.
+    assert!(t.session.write_input(b"x").is_ok(), "the failed run still holds the keyboard");
     t.session.close();
 }
 

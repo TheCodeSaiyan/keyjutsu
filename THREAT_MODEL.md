@@ -106,12 +106,17 @@ it is; **planned** names the milestone.
 | Keys typed after the answer land on the next prompt line. | After the last Enter the answer needs, keys are swallowed until the command finishes. | Held (`keys_after_the_last_answer_do_not_reach_the_next_prompt`; found by the real-shell test). |
 | A secret is shown on screen, kept in history, or written to a checkpoint. | PowerShell's masked prompt; the value never passes through KeyJutsu's own state; cmd credential steps are refused. | Held for what KeyJutsu writes, checked on the raw terminal output, `Get-History`, the checkpoint and every event. **Limit:** a plan can print it by using the variable carelessly; validation does not flag that yet. |
 | A credential outlives the run. | `Remove-Variable` when the plan completes or fails. | **Partial:** after a disarm KeyJutsu types nothing, so the variable lasts until that shell exits. |
+| A rollback happens that the operator did not ask for. | Nothing is rolled back by default; `keyjutsu recover` only shows the plan until `--confirm`. | Held (`a_failed_run_is_recovered_only_when_the_operator_confirms`). |
+| A recovery restores from a backup that was altered afterwards. | Each backup's SHA-256 is recorded at capture and checked before use; a mismatch is refused. | Held against accident (`a_backup_changed_since_it_was_taken_is_not_used`); someone who can write the checkpoint can change both (D20). |
+| Recovery touches state the plan never declared. | Only declared captures are restored; a key or service a step created is not deleted. | Held (`a_failed_reversible_task_is_recovered_without_touching_anything_else` checks a neighbouring file's bytes and timestamp and a neighbouring registry value). |
+| A reversible step runs without its recovery in place. | Captures are taken and verified before the step is armed; if that fails, the step does not run. | Held (`a_step_whose_recovery_cannot_be_prepared_does_not_run`). |
+| After a failure the keyboard stays with KeyJutsu. | Any outcome other than completion disarms. | Held (`a_failing_internal_check_fails_the_step`; found by the CLI recovery test). |
 | Keys pressed between steps are typed into the shell for real. | While a plan runs, the CLI holds keys that arrive with nothing armed. | Held (CLI `run_executes_an_approved_snapshot_in_performance_mode`, which fails without the hold). |
 
 ## Not covered yet
 
-Elevation, storage, recovery, networking and Techniques, and the desktop
-plan workspace. Those arrive with
+Elevation, storage, networking and Techniques, and the desktop plan
+workspace. Those arrive with
 their milestones, and each milestone updates this document before it is
 considered done. The release gates in the specification (§57) cannot pass
 until they do.

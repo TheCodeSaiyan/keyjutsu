@@ -52,6 +52,10 @@ flowchart TD
 - **M6 (agent integration) is done** ([milestone-6.md](milestone-6.md)).
 - **M8 (execution) is done** ([milestone-8.md](milestone-8.md)).
 - **M9 (credential gates) is done** ([milestone-9.md](milestone-9.md)).
+- **M11 (recovery) is done** ([milestone-11.md](milestone-11.md)), ahead of
+  M10: the broker needs an elevated process and UAC prompts, which cannot be
+  checked without someone at the machine
+  ([deviation D22](deviations.md#d22-recovery-before-the-broker)).
 - **M8 (execution) came before M7 (the plan workspace).** M8 needs only M2,
   M4 and M5, and could be proven headless against real shells; M7 is desktop
   UI that could not be checked on screen while it was being built.
