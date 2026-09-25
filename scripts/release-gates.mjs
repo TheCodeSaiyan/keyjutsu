@@ -106,7 +106,9 @@ const gates = {
 };
 
 const names = [...new Set(Object.values(gates).flat())];
-const run = spawnSync("cargo", ["test", "--workspace", "--no-fail-fast", "--", ...names], {
+// The default members hold every gate's tests. The desktop crate is left out
+// because building it needs the installer's staged binaries beside it.
+const run = spawnSync("cargo", ["test", "--no-fail-fast", "--", ...names], {
   encoding: "utf8",
   maxBuffer: 64 * 1024 * 1024,
   shell: false,
@@ -129,8 +131,9 @@ for (const [gate, tests] of Object.entries(gates)) {
   );
   for (const t of bad) console.log(`        ${results.get(t) ?? "MISSING"}  ${t}`);
 }
-if (run.status !== 0 && !failed) {
-  console.log(output.slice(-4000));
+// A build failure leaves every test "missing"; show cargo's own words.
+if (run.status !== 0 || run.error) {
+  console.log(run.error ? String(run.error) : output.slice(-4000));
   console.log("cargo test itself failed; the gates cannot be trusted.");
   failed = true;
 }
