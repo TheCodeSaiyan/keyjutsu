@@ -11,7 +11,7 @@
       "title": "Look at the Winmgmt service",
       "objective": "Winmgmt is running.",
       "kind": "validation",
-      "shell": { "kind": "pwsh" },
+      "shell": { "kind": "windows_powershell" },
       "commands": [{ "text": "Get-Service -Name Winmgmt" }],
       "internal_validation": [{ "service_state": { "name": "Winmgmt", "state": "running" } }]
     },
@@ -20,7 +20,7 @@
       "title": "Say when Windows last started",
       "objective": "The last boot time, for the record.",
       "kind": "validation",
-      "shell": { "kind": "pwsh" },
+      "shell": { "kind": "windows_powershell" },
       "depends_on": ["look"],
       "commands": [{ "text": "(Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime" }]
     }

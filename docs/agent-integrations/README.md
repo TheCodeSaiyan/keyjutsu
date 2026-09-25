@@ -1,9 +1,9 @@
 # Agent integrations
 
 KeyJutsu works with the AI coding agents you already have installed. It runs
-each agent's own CLI, never a model API directly (§5), and keeps every one of
+each agent's own CLI, never a model API directly, and keeps every one of
 them to investigating: an agent proposes, KeyJutsu validates, you approve, and
-only KeyJutsu executes (§2.1).
+only KeyJutsu executes.
 
 ## Compatibility matrix
 
@@ -25,9 +25,9 @@ No invocation ever passes an agent's bypass or auto-approve options; a test
 **Limits, said plainly:**
 
 - **The live check** (`keyjutsu agents check --live`, one small request per
-  installed agent, on the owner's accounts) passed for Codex, Claude Code
-  and Copilot on 25 September 2026. It is the only live evidence; the rest of
-  the tests replay recorded answers.
+  installed agent, on your own accounts) passed for Codex, Claude Code and
+  Copilot on 25 September 2026. It is the only live evidence; the rest of the
+  tests replay recorded answers.
 - **Gemini's plan mode can be silently off.** Gemini CLI 0.32.1 only honours
   `--approval-mode plan` when `experimental.plan` is enabled in its
   `settings.json`; otherwise it warns, falls back to its default mode and

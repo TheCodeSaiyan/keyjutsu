@@ -51,7 +51,7 @@ of secret were taken out.
 keyjutsu plan review docker.json --agent claude --send
 ```
 
-A different agent works best: it doesn't share the first one's blind spots.
+A different agent is less likely to share the first one's blind spots.
 It can't change the plan.
 
 ## Run a plan
@@ -75,7 +75,7 @@ itself instead, if you want to watch.
 ## Approve a critical step
 
 ```powershell
-keyjutsu plan approve reset.json --out reset.approved.json --confirm remove-data="REMOVE LOCAL DOCKER DATA"
+keyjutsu plan approve docs/examples/clear-build-cache.json --out clear-build-cache.approved.json --confirm clear-cache="DELETE THE OLD BUILD CACHE"
 ```
 
 Run `plan approve` without `--confirm` first: it prints each critical step,

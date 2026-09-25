@@ -8,8 +8,8 @@ because it worked last time.
 
 - A run that completed, recorded in the history. Runs from the CLI are
   recorded unless you used `--ephemeral`. Runs from the desktop app aren't
-  recorded yet ([D26](../architecture/deviations.md#d26-no-desktop-history-or-technique-screens-yet)),
-  and it has no history or Technique screens, so this guide is CLI only.
+  recorded yet, and it has no history or Technique screens, so this guide is
+  CLI only.
 
 ## Why a Technique isn't a shortcut
 

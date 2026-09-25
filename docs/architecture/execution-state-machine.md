@@ -21,7 +21,7 @@ when the next step may start.
 | `TYPING` | Staged characters are going onto the shell's input line. | KeyJutsu |
 | `AWAITING_EXECUTION` | The whole command is on the line; waiting for the submit key. | KeyJutsu |
 | `EXECUTING` | Submitted; waiting for the shell to say the command finished. | KeyJutsu (keys swallowed, Ctrl+C and Esc passed on) |
-| `WAITING` | Waiting on an outside condition after a command. Defined, not entered yet: Milestone 8 waits for checks after the performance completes ([limits](milestone-8.md#limits)). | KeyJutsu |
+| `WAITING` | Waiting on an outside condition after a command. Defined, not entered yet: checks are waited for after the performance completes. | KeyJutsu |
 | `VALIDATING` | Checking the finished command against its contract. | KeyJutsu |
 | `AWAITING_USER_INPUT` | A user-input step: keys go to the shell for real. For a credential, KeyJutsu's command asks and the operator answers; after the last answer the step moves to `EXECUTING`. | The operator, through KeyJutsu |
 | `PAUSED` | Nothing advances until Resume. | KeyJutsu |
@@ -43,7 +43,7 @@ stateDiagram-v2
     TYPING --> EXECUTING: last character, auto-submit
     AWAITING_EXECUTION --> EXECUTING: submit key
     EXECUTING --> VALIDATING: shell reports D mark
-    EXECUTING --> WAITING: runtime wait (Milestone 8)
+    EXECUTING --> WAITING: runtime wait
     WAITING --> VALIDATING
     AWAITING_USER_INPUT --> VALIDATING: shell reports D mark
     AWAITING_USER_INPUT --> EXECUTING: last answer given (credential)
@@ -82,28 +82,27 @@ the next step starts (`VALIDATING → PAUSED`).
 
 **Failure never resumes directly.** `FAILED` leads only to
 `REVALIDATION_REQUIRED` or `ABORTED`. A repair is new execution, and new
-execution is validated and approved like anything else. That is specification
-§2.3 expressed as missing edges rather than as a rule someone has to remember.
+execution is validated and approved like anything else. That rule is
+expressed as missing edges rather than as a rule someone has to remember.
 
 **Ctrl+C is always real.** During `EXECUTING` it reaches the running process
 and the shell then reports the failure. During `TYPING` it also reaches the
 shell, which abandons the half-typed line, so the engine pauses and retypes
 the step from its first character on resume. Swallowing it instead would have
-been simpler and wrong: the specification says Ctrl+C is a genuine interrupt.
+been simpler and wrong: Ctrl+C has to be a genuine interrupt.
 
 **Esc is never a disarm.** While a command runs, Esc goes to it. While
 KeyJutsu owns the input line, Esc is swallowed, because PSReadLine and cmd
 both clear the line on Esc and the staged text would silently vanish from the
-shell while the engine still thought it was there. There is a second reason
-found while testing: ESC followed quickly by CR reaches PSReadLine as
-Alt+Enter, which adds a continuation line instead of submitting.
+shell while the engine still thought it was there. And ESC followed quickly
+by CR reaches PSReadLine as Alt+Enter, which adds a continuation line instead
+of submitting.
 
 **Disarming erases what was typed.** A disarm while a staged command is part
 way onto the line (in `TYPING`, `AWAITING_EXECUTION`, or paused from either)
 sends one DEL per character typed. Without it the fragment stays on the
-prompt and runs if the operator presses Enter. This was found by driving the
-desktop app: disarming from the overlay, which pauses first, left
-`Get-Comput` on the line. The regression test is
+prompt and runs if the operator presses Enter. Disarming from the operator
+controls, which pause first, is the case that shows it; the test is
 `disarming_while_paused_mid_command_erases_the_partial_input`.
 
 **`COMPLETE` holds the keyboard.** After the last step KeyJutsu keeps
@@ -113,8 +112,7 @@ operations work, not performance.
 
 **A shell without exit codes is not a pass.** cmd.exe cannot report an exit
 code in its prompt, so its steps finish as `Unverified`, recorded as such and
-never counted as success. See
-[deviations](deviations.md#d3-cmdexe-cannot-report-exit-codes).
+never counted as success.
 
 ## Where completion comes from
 

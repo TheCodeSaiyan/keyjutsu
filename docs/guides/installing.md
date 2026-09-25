@@ -10,7 +10,7 @@ and `keyjutsu doctor` has told you whether this machine is ready.
 - **An Administrator password, once.** The installer puts KeyJutsu in Program
   Files for every user, and that needs one UAC prompt. The reason is the
   elevation broker: it is started as Administrator, so it has to live where
-  only Administrators can replace it ([D29](../architecture/deviations.md#d29-installed-for-every-user-and-signed-only-when-a-certificate-is-configured)).
+  only Administrators can replace it.
 - **The installer,** `KeyJutsu_0.1.0_x64-setup.exe`. No release has been
   published yet, so build it: `pnpm desktop:build`, from a clone with Rust and
   Node installed, leaves it in `target/release/bundle/nsis/`.
@@ -29,7 +29,7 @@ UAC prompt.
 
 If the machine has no WebView2 runtime, the installer fetches it from
 Microsoft, which needs the network. Windows 11 normally has it already; the
-clean Windows Sandbox this was tested on didn't, and fetching it took most of
+clean Windows 11 this was tested on didn't, and fetching it took most of
 the 77 seconds the install took.
 
 ### 2. Answer the two questions
@@ -72,9 +72,9 @@ KeyJutsu 0.1.0
 
 The desktop app runs the same checks the first time it opens:
 
-![KeyJutsu's first screen: the readiness checks, each ticked. Windows 11 Pro, x64, ConPTY, staged input for PowerShell 7, Windows PowerShell 5.1 and Command Prompt, telemetry off, four AI agents found, the elevation broker installed and encrypted storage. Below them, Start using KeyJutsu and Try the safe demo.](../images/first-run.png)
+![KeyJutsu's first screen on a clean Windows 11: the readiness checks, each ticked. Windows 11, x64, ConPTY, staged input for Windows PowerShell 5.1 and Command Prompt, telemetry off, two AI agents found, the elevation broker installed and encrypted storage. Below them, Start using KeyJutsu and Try the safe demo.](../images/first-run.png)
 
-Every line is checked for real rather than assumed. "Staged input" means a
+Every line comes from actually trying it. "Staged input" means a
 shell was started in a pseudo-console and KeyJutsu typed into it, so an `ok`
 there means performances will work in that shell. With PowerShell 7 installed
 you get a line for it too.

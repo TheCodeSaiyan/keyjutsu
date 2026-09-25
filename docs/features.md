@@ -29,18 +29,19 @@ keyjutsu demo --clean
 KeyJutsu doesn't bring its own AI. It runs the agent CLI you already have,
 Codex, Claude Code, Gemini, GitHub Copilot or Cursor, under your account, and
 keeps each one to investigating: every one is started in its own read-only
-mode, and what it returns is a plan, which is data, not a script. An agent's
+mode, and what it returns is a plan: steps and their commands, which
+KeyJutsu reads rather than runs. An agent's
 claim that a step is ready, proved or approved is refused as part of the
 format, because those are KeyJutsu's to decide.
 
-Before anything is sent, you see exactly what would go. Secret-looking
+Before anything is sent, you see what would go. Secret-looking
 things (tokens, keys, private keys, `password=` lines) are redacted from
 everything sent: the task, pasted text, files, your guidance and the plan
 itself.
 
-On 25 September 2026, the live check passed for Codex, Claude Code and
-GitHub Copilot. Gemini failed, being signed out and with plan mode off, and
-KeyJutsu refuses to run it when its read-only mode silently falls back.
+At the last live check, Codex, Claude Code and GitHub Copilot passed.
+Gemini's plan mode can be switched off silently in its own settings, so
+KeyJutsu refuses its answer whenever it falls back out of read-only mode.
 
 ```powershell
 keyjutsu agents
@@ -67,7 +68,7 @@ a real one; there's a test that tries exactly that.
 keyjutsu plan validate spooler.json
 ```
 
-## Approval that means something
+## Approval that's sealed to what it approved
 
 Approving seals the plan into a snapshot: each step bound to a hash of what
 it runs and everything before it. Change a step and its approval, and every
@@ -105,10 +106,9 @@ keyjutsu run spooler.approved.json
 ## Credentials you type yourself
 
 A step that needs a password or token hands the keyboard back: you press
-Enter and type it into PowerShell's own masked prompt. KeyJutsu never types it,
-never sees it and never stores it. Keys pressed after your answer are held,
-so a stray one can't spill into the next prompt; that was found by a real
-shell test, not reasoned out.
+Enter and type it into PowerShell's own masked prompt. KeyJutsu never types
+it and never stores it. Keys pressed after your answer are held,
+so a stray one can't spill into the next prompt.
 
 ## Administrator steps, asked for once
 
@@ -116,8 +116,8 @@ Steps that need Administrator run through KeyJutsu's elevation broker,
 started with one UAC prompt before the performance, so no prompt appears
 halfway through. The broker runs only approved steps, identified by the
 snapshot's hash and the step's; there is no request that carries a command.
-In Windows Sandbox, with UAC on, it ran an approved step as Administrator and
-refused an altered one.
+On a clean Windows 11 with UAC on, it ran an approved step as Administrator
+and refused an altered one.
 
 ## Recovery, when you say so
 
@@ -158,7 +158,7 @@ A plan can be written in phases, with a Windows restart, a sign-out, a new
 shell, or a WSL or Docker restart between them. KeyJutsu stops at the
 boundary, records what should change, and on resume checks the restart
 happened, the machine still matches, and everything the earlier phases did
-still holds. It was run across a real Windows restart in Windows Sandbox.
+still holds. It has been run across a real Windows restart.
 
 ## History and Techniques
 
@@ -178,7 +178,7 @@ boundary without resuming past it; the CLI does both.
 
 ## Checked against its own rules
 
-The specification's eight release gates are named lists of tests, 78 in all,
+The eight release gates are named lists of tests, 78 in all,
 run by `pnpm release:gates` and in CI; a renamed or deleted test fails its
 gate. Untrusted inputs are fuzzed as part of the ordinary suite: plans,
 snapshots, broker requests and terminal output. Fuzzing the terminal scanner

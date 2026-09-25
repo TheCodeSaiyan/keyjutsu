@@ -28,7 +28,7 @@ In the desktop app, the first screen has **Try the safe demo**. It stages
 the same three commands; open **Terminal**, choose the **Clean** profile, and
 press **Arm KeyJutsu** to begin:
 
-![The Terminal screen with the safe demo ready. On the left, the mode (Performance selected), Turbo, what submits a command, the demo's read-only commands and the red Arm KeyJutsu button. On the right, PowerShell 7 with the Clean profile, waiting at its prompt.](../images/terminal.png)
+![The Terminal screen with the safe demo ready. On the left, the mode (Performance selected), Turbo, what submits a command, the demo's read-only commands and the red Arm KeyJutsu button. On the right, Windows PowerShell with the Clean profile, waiting at its prompt.](../images/terminal.png)
 
 ### 2. Mash the keyboard
 
@@ -49,8 +49,7 @@ $PSVersionTable | Select-Object PSVersion, PSEdition
 Get-Volume | Where-Object DriveLetter | Sort-Object DriveLetter | Format-Table DriveLetter, FileSystemLabel, FileSystem, SizeRemaining, Size -AutoSize
 ```
 
-It takes about five hundred keys: 491 on the development machine, 595 on a
-clean Windows Sandbox. KeyJutsu knows a command has finished because the
+It takes about six hundred keys: 595 on a clean Windows 11. KeyJutsu knows a command has finished because the
 shell says so, with a mark its prompt prints, not because some time has
 passed. A slow `Get-ComputerInfo` just takes longer to finish.
 
@@ -92,9 +91,8 @@ operator controls, small and in a corner, for you rather than anyone watching:
 ![A performance, paused. The terminal shows Get-ComputerInfo -Property OsNa, typed so far by 31 keys. In the corner, the operator controls: step 01, Describe this computer, paused, 31 of 89 characters typed, next Show the PowerShell version, 0 of 3 done, with Resume and Disarm.](../images/performance.png)
 
 The disarm chord works in every state, and it's handled before anything else
-looks at the key, so nothing can hold on to it. Esc isn't the disarm, because
-people press it by reflex and a performance ended by a twitch is worse than
-one that's hard to end by accident.
+looks at the key, so nothing can hold on to it. Esc isn't the disarm, because people press it by reflex, and a performance
+shouldn't end on a twitch.
 
 ## Try the other modes
 

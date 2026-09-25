@@ -11,7 +11,7 @@ about what can reach the shell, which hold in every mode.
 | `performance` | types the next character | per `--submit` | the show: the default |
 | `assisted` | types a short burst, up to the end of a word | per `--submit` | long commands, fewer keys |
 | `auto` | nothing: it types and runs everything by itself | by itself | watching rather than playing |
-| `direct` | nothing: each command is sent whole, with no typing effect | by itself | getting it done |
+| `direct` | nothing: each command is sent whole, with no typing effect | by itself | long or quiet steps |
 
 `--turbo` changes `performance` to a word per key rather than a character.
 A plan can set its own default mode and a step can override it, so a

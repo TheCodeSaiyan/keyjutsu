@@ -72,11 +72,11 @@ and then checked: its internal checks run quietly, its visible checks are
 typed like any other command, and the next step starts only when the shell
 reports the last one finished and every check passed.
 
-A step can ask for something KeyJutsu won't fake:
+Some steps hand the keyboard back to you:
 
 - **A credential.** The window's title says "Credential required", and the
   shell shows its own masked prompt. Stop mashing, press Enter, and type the
-  secret yourself. KeyJutsu never types it, never sees it and never stores it:
+  secret yourself. KeyJutsu never types it and never stores it:
   it goes straight into PowerShell's `Read-Host -AsSecureString`, and keys you
   press after your answer are held so they can't spill into the next prompt.
   The variable is removed when the plan completes or fails; after a disarm

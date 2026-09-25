@@ -18,10 +18,8 @@ KeyJutsu's own checks have not allowed.
 
 ## Repository layout
 
-What exists now is marked ✓. The rest is the layout the specification's later
-milestones fill in; each crate appears in the milestone that gives it its
-first real consumer (see [ADR 0005](adr/0005-crates-arrive-with-consumers.md)),
-not before.
+Each crate exists because something uses it
+([ADR 0005](adr/0005-crates-arrive-with-consumers.md)).
 
 ```text
 keyjutsu/
@@ -48,10 +46,8 @@ keyjutsu/
 └── .github/workflows/            ✓ CI
 ```
 
-`packages/ui` from the specification's suggested layout is not created: its
-only consumer would be the desktop app, which is where those components live
-until a second consumer exists. Recorded as
-[deviation D4](deviations.md#d4-no-packagesui-yet).
+There is no shared `packages/ui`: its only consumer would be the desktop app,
+which is where those components live until a second consumer exists.
 
 ## Crate boundaries
 
@@ -123,9 +119,7 @@ probe types a command and checks what the shell actually ran.
 The CLI follows the same path with crossterm in place of xterm.js, and answers
 ConPTY's cursor-position queries itself because there is no renderer to do it.
 
-## Where each specification invariant is enforced today
+## Where each invariant is enforced
 
 See [THREAT_MODEL.md](../../THREAT_MODEL.md#invariants), which lists every
-invariant with its current status, where it is enforced and which test proves
-it. Most invariants belong to milestones that are not built yet, and the table
-says so rather than implying otherwise.
+invariant with its status, where it is enforced and which test proves it.

@@ -10,16 +10,17 @@ checked and approved by you first.**
 [![Licence](https://img.shields.io/badge/licence-GPL--3.0--only-informational)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-informational)](docs/guides/installing.md)
 
-Underneath the show, the idea is serious. An AI agent you already use
+Under the typing, it's a way to let an AI agent's fix run without trusting
+the agent. An AI agent you already use
 investigates your problem and proposes a plan. KeyJutsu checks every command
 against your actual machine, without running any of them. You read it and
 approve it. Only then does anything run, one keystroke of yours at a time,
 with each step checked after it runs.
 
-> **Status: early.** All 17 milestones of the specification are built, and
-> the eight release gates pass. Early means there's no published release or
-> signed installer yet, and the gaps the
-> [threat model](THREAT_MODEL.md#not-covered) lists are real.
+> **Status: early.** Everything described here works, and the release
+> gates pass. Early means there's no published release or signed installer
+> yet, and the gaps the [threat model](THREAT_MODEL.md#not-covered) lists are
+> real.
 
 ## Start here
 
@@ -48,8 +49,8 @@ takes the terminal back at any moment.
 keyjutsu demo --clean
 ```
 
-On a clean Windows 11 in Windows Sandbox, the demo's three commands took 595
-mashed keys, and not one of those keys reached the shell as itself.
+On a clean Windows 11, the demo's three commands took 595 mashed keys, and
+not one of those keys reached the shell as itself.
 
 ![A performance, paused. The terminal shows Get-ComputerInfo -Property OsNa, typed so far by 31 keys. In the corner, the operator controls: step 01, Describe this computer, paused, 31 of 89 characters typed, next Show the PowerShell version, 0 of 3 done, with Resume and Disarm.](docs/images/performance.png)
 
@@ -68,7 +69,7 @@ keyjutsu plan propose "Find out why the Print Spooler keeps stopping" --agent cl
 
 [Getting a plan from an agent](docs/guides/planning.md)
 
-### Checks that run nothing, and approval that means something
+### Checks that run nothing, and an approval that seals the plan
 
 Validation reads every command through PowerShell's own parser and checks it
 against this machine: does it exist, are its parameters real, what does it
@@ -84,7 +85,7 @@ keyjutsu plan approve spooler.json --out spooler.approved.json
 
 ![The KeyJutsu Plan screen. Two steps of the example plan, both READY and low risk. The first is selected, showing its command, Get-Service -Name Winmgmt, the evidence behind its readiness, and Edit, Retry step with agent, Move and Remove. At the foot, 2/2 ready, no elevation, and Validate and Approve plan.](docs/images/plan-workspace.png)
 
-### A run that checks itself, and stops rather than guesses
+### A run that checks each step, and stops at the first failure
 
 Before anything's typed, the machine is compared with the one the plan was
 approved on. After each step, its checks run. Passwords are typed by you
@@ -146,9 +147,9 @@ pass.
 
 [The documentation index](docs/README.md) has everything: guides,
 plain-language pages, the [command reference](docs/commands.md),
-[recipes](docs/recipes.md), and the internals, from the
-[architecture](docs/architecture/overview.md) to every
-[deviation from the specification](docs/architecture/deviations.md).
+[recipes](docs/recipes.md), and how it's built, from the
+[architecture](docs/architecture/overview.md) to the
+[decisions](docs/architecture/adr/README.md) behind it.
 
 ## Help
 
@@ -173,5 +174,5 @@ You can use, study, change and share KeyJutsu freely. If you distribute a
 modified version, you must publish its source under the same licence, so a
 closed fork isn't possible. The libraries KeyJutsu builds on keep their own
 permissive licences (MIT, Apache-2.0, BSD, Zlib, ISC, MPL-2.0), all of which
-can be combined with GPL-3.0. Why this licence and not the Apache-2.0 the
-specification names: [ADR 0012](docs/architecture/adr/0012-gpl-3-licence.md).
+can be combined with GPL-3.0. Why this licence:
+[ADR 0012](docs/architecture/adr/0012-gpl-3-licence.md).

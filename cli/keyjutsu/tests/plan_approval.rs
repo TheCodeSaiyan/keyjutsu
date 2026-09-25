@@ -133,7 +133,7 @@ fn an_edited_snapshot_fails_verification() {
     assert!(text(&verify).contains("altered"), "{}", text(&verify));
 }
 
-/// Milestone 17: a snapshot with consistent hashes is still refused unless
+/// A snapshot with consistent hashes is still refused unless
 /// this account approved it here. Another store stands in for another
 /// account or machine: it has its own key and none of these approvals.
 #[test]

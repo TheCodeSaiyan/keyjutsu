@@ -21,9 +21,8 @@ start at step 3.
 The agent proposes and nothing more. It runs in its own read-only mode, so it
 can look but not change anything, and what it hands back is data, not
 commands to run. KeyJutsu then checks the plan itself, against this machine,
-and you approve it. Only after that can anything be typed. An agent that is
-wrong, careless or misled by something it read gets as far as a plan you
-decline.
+and you approve it. Only after that can anything be typed. If the agent is wrong, or something it read misled it, the worst it can
+produce is a plan you can turn down.
 
 ## Steps
 
@@ -34,7 +33,7 @@ Write it, choose the agent, and add any context with **+ Add context**: an
 error message, a log excerpt. Then **Plan task →**. **Open plan file…** opens
 a plan you already have.
 
-![The New task screen. "What do you want KeyJutsu to do?", a box for the task, + Add context, Open plan file…, the agent to ask (Codex CLI 0.154.0) and Plan task. Below, what this machine has: the agents, the terminal, how Administrator steps are handled, and no telemetry.](../images/new-task.png)
+![The New task screen. "What do you want KeyJutsu to do?", a box for the task, + Add context, Open plan file…, the agent to ask and Plan task. Below, what this machine has: the agents, the terminal and its shell, how Administrator steps are handled, and no telemetry.](../images/new-task.png)
 
 From the CLI:
 
@@ -51,6 +50,8 @@ Request for Claude Code 2.1.282, in its read-only mode:
 
 Nothing was sent. Add --send to send this request.
 ```
+
+The version shown is whichever one you have installed.
 
 Add `--file` for a file to include and `--folder` for a folder the agent may
 investigate. Anything that looks like a secret, such as a token, a key or a
@@ -163,7 +164,7 @@ keyjutsu plan approve docs/examples/check-a-service.json --out check-a-service.a
 
 ```text
 Sealed 2 steps into check-a-service.approved.json
-Snapshot 957593ac4bf41d5f4f763e9f721d40d7220e6496da0db73d6b597c467203c189
+Snapshot f2aefa92427f82319b5025808bf5f943a55013a1b30a37ddb7b204dcc4edb18d
 ```
 
 Approving validates once more, then seals the plan into a snapshot: every
@@ -175,22 +176,22 @@ you try to run it.
 
 A **critical** step is never covered by approving the plan. It needs its own
 typed phrase, and KeyJutsu shows you what it runs and why it's critical
-first:
+first. For [a plan that deletes a build cache](../examples/clear-build-cache.json):
 
 ```text
 Not sealed: these critical steps need their own typed confirmation.
 
-  CRITICAL ACTION  remove-data: Remove local Docker data
-    runs:          Remove-Item -Recurse -Force -LiteralPath C:/ProgramData/Docker/data
-    target:        C:/ProgramData/Docker/data (FileDeleted)
-    impact:        Deletes every local container, image and volume.
+  CRITICAL ACTION  clear-cache: Delete the old build cache
+    runs:          Remove-Item -Recurse -Force -LiteralPath C:/Users/Public/BuildCache
+    target:        C:/Users/Public/BuildCache (FileDeleted)
+    impact:        Deletes the whole folder; it cannot be brought back, only rebuilt.
     why critical:  Remove-Item -Recurse deletes a whole tree
-    why critical:  runs as Administrator
-    why critical:  irreversibly deletes C:/ProgramData/Docker/data
+    why critical:  irreversibly deletes C:/Users/Public/BuildCache
     why critical:  declared irreversible
-    reversibility: None: Images can be pulled again; volumes are gone.
-    recovery:      None
-    confirm: --confirm remove-data="REMOVE LOCAL DOCKER DATA"
+    dry run:       `Remove-Item -Recurse -Force -LiteralPath C:/Users/Public/BuildCache` -WhatIf: What if: Performing the operation "Remove Directory" on target "C:\Users\Public\BuildCache".
+    reversibility: None: The cache is rebuilt on the next build.
+    recovery:      none stated
+    confirm: --confirm clear-cache="DELETE THE OLD BUILD CACHE"
 ```
 
 In the app the same appears as a dialog, with **Approve critical step**
@@ -206,8 +207,8 @@ keyjutsu plan verify check-a-service.approved.json --environment
 ```
 
 ```text
-Intact: 2 steps approved, sealed 2026-09-25T18:45:53Z
-Snapshot 957593ac4bf41d5f4f763e9f721d40d7220e6496da0db73d6b597c467203c189
+Intact: 2 steps approved, sealed 2026-09-25T20:24:37Z
+Snapshot f2aefa92427f82319b5025808bf5f943a55013a1b30a37ddb7b204dcc4edb18d
 Environment unchanged since approval.
 ```
 

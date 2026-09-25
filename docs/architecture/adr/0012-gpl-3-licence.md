@@ -46,4 +46,3 @@ dependency could not be used.
   place before outside contributions arrive, not after.
 - The owner, as sole copyright holder today, can still offer KeyJutsu under
   other terms.
-- Recorded as [deviation D11](../deviations.md#d11-licence-is-gpl-30-only-not-apache-20).

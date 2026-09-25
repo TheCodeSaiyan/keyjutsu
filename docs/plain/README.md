@@ -39,10 +39,9 @@ KeyJutsu sits between the agent and your computer.
   **approving**.
 - Only then does anything run.
 
-And the fun part: when it runs, you **mash your keyboard**, any keys at all,
-and the approved commands type themselves out perfectly, one letter per key,
-and run for real. It looks like expert typing. The typing is theatre. The
-commands are real.
+When it runs, you **mash your keyboard**, any keys at all, and the approved
+commands type themselves out, one letter per key, and run. It looks like
+expert typing. Your keys don't choose the letters, but the commands are real.
 
 ## What it won't do
 
@@ -51,8 +50,9 @@ commands are real.
   yourself, into a box that hides it.
 - It won't run a very risky step, like deleting a whole folder, unless you've
   typed a sentence to confirm that exact step.
-- It won't send anything about you anywhere. It has no telemetry. The agent
-  talks to its own company under your own account; KeyJutsu doesn't.
+- KeyJutsu itself sends nothing about you anywhere. It has no telemetry.
+  The agent talks to its own company under your own account; KeyJutsu
+  doesn't.
 
 ## What you need before you start
 

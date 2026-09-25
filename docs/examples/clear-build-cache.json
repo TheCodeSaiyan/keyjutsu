@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "clear-build-cache",
+  "task_id": "docs-example",
+  "title": "Clear the old build cache",
+  "target": { "id": "local", "kind": "local_windows" },
+  "agent": { "name": "codex", "version": "0.154.0" },
+  "steps": [
+    {
+      "id": "clear-cache",
+      "title": "Delete the old build cache",
+      "objective": "The cache folder is gone.",
+      "kind": "command",
+      "shell": { "kind": "windows_powershell" },
+      "commands": [
+        { "text": "Remove-Item -Recurse -Force -LiteralPath C:/Users/Public/BuildCache" }
+      ],
+      "expected_effects": [{ "kind": "file_deleted", "target": "C:/Users/Public/BuildCache" }],
+      "reversibility": { "level": "none", "notes": "The cache is rebuilt on the next build." },
+      "proposed_risk": {
+        "level": "critical",
+        "rationale": "Deletes the whole folder; it cannot be brought back, only rebuilt."
+      }
+    }
+  ]
+}

@@ -7,16 +7,15 @@ about each threat, including the ones that are not dealt with yet.
 
 It is kept current with the code. Each invariant below carries its actual
 status, and where protection is partial the table says so rather than
-implying protection that does not exist. It was last reviewed against the
-implementation at Milestone 17, the security hardening pass; the release
-gates of §57 are named test lists run by `pnpm release:gates` and in CI.
+implying protection that does not exist. The release gates below are named
+test lists, run by `pnpm release:gates` and in CI.
 
 ## What is being protected
 
 | Asset | Why it matters |
 | --- | --- |
 | The user's machine state | Commands change it for real, sometimes irreversibly. |
-| The operator's authority | Nothing should run that the operator did not approve (from Milestone 4). |
+| The operator's authority | Nothing should run that the operator did not approve. |
 | Credentials and secrets | Typed by the operator, needed by commands, never meant to be stored or shown. |
 | Terminal output and task content | Can contain anything, including secrets printed by commands. |
 | Shell history | The user's own history file, readable by PSReadLine's predictions. |
@@ -31,7 +30,7 @@ gates of §57 are named test lists run by `pnpm release:gates` and in CI.
 - **A compromised renderer**: script running in the desktop webview.
 - **Another local process** running as the same user, which can read memory
   and command lines but should not be able to escalate through KeyJutsu.
-- **An imported Technique** from someone else (Milestone 14).
+- **An imported Technique** from someone else.
 - **The operator by accident**: a key pressed at the wrong moment.
 
 ## Trust boundaries
@@ -53,11 +52,11 @@ it is, and the row says which part is not.
 
 | # | Invariant | Status | Where, and the test |
 | --- | --- | --- | --- |
-| 1 | Agent output is never execution authority. | Held for everything built so far | Agents run in their read-only modes (`every_invocation_asks_for_read_only_investigation`, `no_invocation_ever_bypasses_the_agents_own_safeguards`); what they return is a proposal that must pass `parse_proposal`, which refuses any claim of readiness, proof, hashes or approval; KeyJutsu decides control flow and validates independently; the agent's identity is KeyJutsu's to state. Execution (M8) follows the plan's walk from real outcomes, never from what an agent says happened (`branches_follow_real_outcomes`). |
-| 2 | Secrets never enter agent context. | Partial | Everything KeyJutsu sends is redacted by pattern first: pasted text and files, the task, the operator's guidance for a revision, what validation found, and the plan itself, since an edited step may hold a value the operator typed (`a_secret_in_pasted_context_never_reaches_the_agent`, `no_secret_reaches_an_agent_by_any_route`; before Milestone 17 only pasted context was). Credentials never pass through KeyJutsu at all (invariant 7). Unrecognisable secrets are not caught, and a folder the agent investigates is read by the agent, not KeyJutsu; the manifest warns about secret-looking files there. |
+| 1 | Agent output is never execution authority. | Held for everything built so far | Agents run in their read-only modes (`every_invocation_asks_for_read_only_investigation`, `no_invocation_ever_bypasses_the_agents_own_safeguards`); what they return is a proposal that must pass `parse_proposal`, which refuses any claim of readiness, proof, hashes or approval; KeyJutsu decides control flow and validates independently; the agent's identity is KeyJutsu's to state. Execution follows the plan's walk from real outcomes, never from what an agent says happened (`branches_follow_real_outcomes`). |
+| 2 | Secrets never enter agent context. | Partial | Everything KeyJutsu sends is redacted by pattern first: pasted text and files, the task, the operator's guidance for a revision, what validation found, and the plan itself, since an edited step may hold a value the operator typed (`a_secret_in_pasted_context_never_reaches_the_agent`, `no_secret_reaches_an_agent_by_any_route`). Credentials are typed into the shell's own masked prompt and never kept, logged or sent by KeyJutsu (invariant 7). Unrecognisable secrets are not caught, and a folder the agent investigates is read by the agent, not KeyJutsu; the manifest warns about secret-looking files there. |
 | 3 | Approved execution snapshots are immutable. | Held, up to Windows' own boundary | `ApprovedSnapshot` has no mutating methods and re-checks every hash on load (`any_edit_to_a_stored_snapshot_is_refused`, ten kinds of edit; `no_edit_to_a_snapshot_is_accepted_as_something_else`, 3,000 random edits per run). The hashes alone are unkeyed, so sealing also records the snapshot hash in the DPAPI-keyed encrypted store, and `run` and `recover` refuse a snapshot this Windows account never approved on this machine (`a_snapshot_runs_only_if_this_account_approved_it`, `run_refuses_a_snapshot_this_account_did_not_approve`). A program running as the same user can ask DPAPI too, as it can run commands directly; that is Windows' boundary. The desktop runs the snapshot it holds in memory. |
 | 4 | Plan mutation invalidates affected approval. | Held | Approvals bind to step hashes that chain through predecessors ([ADR 0010](docs/architecture/adr/0010-plan-hashing.md)); `changing_a_step_invalidates_it_and_everything_after_it`; property test `hashes_and_diff_agree_on_what_a_change_affects`. |
-| 5 | The elevated broker accepts only authorised structured operations. | Held | One closed request type, *run approved step X of snapshot S with hash H*, checked against the broker's own verified copy; no request carries a command. Refuses altered commands, unknown plans, steps that need no elevation, unknown steps, other protocol versions, the wrong secret and any process but its launcher (`crates/keyjutsu-broker/tests/broker.rs`; each central rule fails a test when removed). Real elevation across UAC in Windows Sandbox: an unelevated client, an elevated broker, an HKLM write ([milestone-10.md](docs/architecture/milestone-10.md)). |
+| 5 | The elevated broker accepts only authorised structured operations. | Held | One closed request type, *run approved step X of snapshot S with hash H*, checked against the broker's own verified copy; no request carries a command. Refuses altered commands, unknown plans, steps that need no elevation, unknown steps, other protocol versions, the wrong secret and any process but its launcher (`crates/keyjutsu-broker/tests/broker.rs`; each central rule fails a test when removed). Real elevation across UAC, in Windows Sandbox: an unelevated client, an elevated broker, an HKLM write. |
 | 6 | Critical actions need dedicated semantic confirmation. | Held | Whole-plan approval never covers a critical step; each needs its typed phrase, also checked on load. "Critical" is KeyJutsu's own assessment (validation, M5), which the agent's label can raise but not lower: `recursive_removal_is_critical_whatever_the_agent_says`, `keyjutsus_own_critical_rating_needs_the_typed_phrase_even_if_the_agent_said_low`. An approval older than an hour is confirmed again before the step runs: in the desktop just before it, in the CLI before the session starts (`an_old_approval_of_a_critical_step_is_confirmed_again_before_the_run`, which fails if it never or always asks). The desktop run-time check is compared by the executor (`a_critical_step_is_confirmed_again_just_before_it_runs`). |
 | 7 | Credential entry cannot be staged typing. | Held | A credential step can have no commands and says only what it asks for (fixtures `staged-credential`, `credential-without-request`). The operator types the secret into PowerShell's own masked prompt; KeyJutsu writes the prompt command directly and never performs it, starts it only on the operator's Enter, and swallows keys after the last answer ([ADR 0015](docs/architecture/adr/0015-credentials-through-the-shells-masked-prompt.md)). `a_credential_is_entered_and_used_without_being_seen_or_kept`, `run_asks_for_a_credential_in_the_shells_masked_prompt`. |
 | 8 | Telemetry cannot contain task or terminal contents. | Held, trivially | KeyJutsu has no telemetry, crash reporting or network code of any kind. |
@@ -83,7 +82,7 @@ it is, and the row says which part is not.
 | An agent proposes an `eval`-style condition to run code during evaluation. | Conditions are a closed vocabulary with no expression form, in the schema and in the Rust model; the evaluator has nothing that could execute anything. | Held (fixture `free-form-condition`; `keyjutsu_plan::condition`). |
 | An agent's plan branches on a step that has not run, to steer control flow. | Conditions may only ask about steps that must have finished by then; anything else is refused before the plan is accepted. | Held (`condition-on-later-step`). |
 | A missing fact is treated as true or false and the wrong branch runs. | Evaluation is three-valued; an undecidable branch waits and names the facts it needs. | Held (`a_missing_fact_is_unknown_and_named`, `a_decided_condition_stays_decided_when_more_is_known`). |
-| A crafted plan crashes or hangs KeyJutsu. | 1 MiB limit, serde_json's nesting limit, schema then structure checks, no recursion over untrusted depth beyond those limits. | Held for what property testing reaches: generated and mutated plans, snapshots, broker requests, frames and terminal output, tens of thousands of cases per run. Not coverage-guided ([D30](docs/architecture/deviations.md#d30-fuzzing-is-property-based-not-coverage-guided)). |
+| A crafted plan crashes or hangs KeyJutsu. | 1 MiB limit, serde_json's nesting limit, schema then structure checks, no recursion over untrusted depth beyond those limits. | Held for what property testing reaches: generated and mutated plans, snapshots, broker requests, frames and terminal output, tens of thousands of cases per run. Not coverage-guided. |
 | A command reads differently on the approval screen from how it runs. | Commands (and visible checks and recovery commands) containing control, bidirectional-override, zero-width or other invisible characters are refused as a structural problem, whoever wrote them; parameter values may not contain them either. | Held (fixture `hidden-bidi-override`, `an_imported_technique_cannot_claim_trust_or_hide_what_it_runs`). |
 | A reader misinterprets a future plan format. | Any version other than 1.0 is refused by name before anything else is read. | Held (`a_future_version_is_refused_by_name_not_guessed_at`). |
 | PSReadLine predictions show sensitive history on screen during a performance. | The clean profile turns predictions off and saves no history. The detected profile keeps the user's settings. | **Partial.** With the detected profile, predictions can show anything in the user's history. [ADR 0009](docs/architecture/adr/0009-clean-profile-hides-history.md). |
@@ -95,7 +94,7 @@ it is, and the row says which part is not.
 | Validation executes an agent's command before approval. | Validation parses and looks up; it never runs a named program. The only exception is `-WhatIf` for literal-argument built-in management cmdlets, under `$WhatIfPreference` so a trailing comment cannot cancel it. | Held (`a_trailing_comment_cannot_turn_a_dry_run_into_a_real_one`, `expressions_are_never_evaluated_by_a_dry_run`); [ADR 0014](docs/architecture/adr/0014-validation-runs-nothing-it-validates.md). |
 | Looking commands up imports a module whose loading code runs. | `Get-Command` may import modules from the machine's module path to answer. Those modules are already installed; the plan cannot add one. | Accepted, stated. |
 | A profile alias or function hides what a command really is. | Validation runs without the profile and reports such names as not found. | Held, at the cost of blocking steps that rely on a profile. |
-| A stored snapshot is edited to run something else. | Every hash is re-checked on load. | Partial: stops accidental and naive edits; a forger with write access can recompute unkeyed hashes (D14). |
+| A stored snapshot is edited to run something else. | Every hash is re-checked on load, and a snapshot runs only if this account's approval of it is recorded in the encrypted store. | Held up to Windows' boundary (invariant 3). |
 
 | An agent claims to be another agent, or claims KeyJutsu's authority. | The plan's `agent` field is overwritten with the agent actually run; KeyJutsu-owned fields are refused in any proposal. | Held (`a_proposal_is_accepted_and_stamped_with_the_agent_that_really_wrote_it`). |
 | A revision quietly changes steps it was not asked to. | A step revision may return one step, with the same id; the rest of the plan is KeyJutsu's copy. | Held (`a_step_revision_changes_that_step_only_and_discards_validation`). |
@@ -107,10 +106,10 @@ it is, and the row says which part is not.
 | After a crash, a step whose effect is unknown is assumed to have worked, or run twice. | It is recorded as in doubt; a resumed run refuses to start until the operator settles it. | Held (`a_step_left_in_doubt_blocks_until_the_operator_settles_it`). |
 | A resumed run skips a step that changed since it last succeeded. | Earlier results count only where the step's hash in the new snapshot is the same. | Held (`a_changed_step_runs_again_even_though_it_succeeded_before`). |
 | A checkpoint is edited to mark steps as done so they are skipped. | Results are matched to step hashes, so an edit cannot make a changed or new step count; every save records the checkpoint's SHA-256 in the encrypted store, and resuming or recovering refuses a file that differs. | Held up to Windows' boundary (`an_edited_checkpoint_is_refused`). The record keeps the previous save too, so a crash between recording and writing leaves a checkpoint that loads (`a_crash_between_recording_and_writing_leaves_a_checkpoint_that_loads`); the cost is that that one previous version is also accepted. |
-| A step runs with no record that it started, so a crash leaves it looking unrun. | The checkpoint that marks a step as started must be written before the step starts; if it cannot be, the step does not run. | Held (`a_step_that_cannot_be_recorded_as_starting_does_not_run`; before Milestone 17 a failed write was ignored). |
-| Two processes opening the store at once each make a key, and records made under one become unreadable. | The key is created under a unique name and linked into place, which fails if one exists; the loser uses the winner's. | Held (`a_store_opened_by_many_at_once_keeps_one_key`; found when parallel tests lost approvals). |
+| A step runs with no record that it started, so a crash leaves it looking unrun. | The checkpoint that marks a step as started must be written before the step starts; if it cannot be, the step does not run. | Held (`a_step_that_cannot_be_recorded_as_starting_does_not_run`). |
+| Two processes opening the store at once each make a key, and records made under one become unreadable. | The key is created under a unique name and linked into place, which fails if one exists; the loser uses the winner's. | Held (`a_store_opened_by_many_at_once_keeps_one_key`). |
 | Mashed keys land in a credential prompt. | A credential step starts only on Enter; `Start` from any front end is ignored for it. | Held (`a_line_that_asks_the_operator_waits_for_enter_and_is_never_performed`, `a_line_that_asks_the_operator_is_not_started_for_them`). |
-| Keys typed after the answer land on the next prompt line. | After the last Enter the answer needs, keys are swallowed until the command finishes. | Held (`keys_after_the_last_answer_do_not_reach_the_next_prompt`; found by the real-shell test). |
+| Keys typed after the answer land on the next prompt line. | After the last Enter the answer needs, keys are swallowed until the command finishes. | Held (`keys_after_the_last_answer_do_not_reach_the_next_prompt`). |
 | A secret is shown on screen, kept in history, or written to a checkpoint. | PowerShell's masked prompt; the value never passes through KeyJutsu's own state; cmd credential steps are refused. | Held for what KeyJutsu writes, checked on the raw terminal output, `Get-History`, the checkpoint and every event. **Limit:** a plan can print it by using the variable carelessly; validation does not flag that yet. |
 | A credential outlives the run. | `Remove-Variable` when the plan completes or fails. | **Partial:** after a disarm KeyJutsu types nothing, so the variable lasts until that shell exits. |
 | An edit in the window slips past the plan's rules. | Every edit is re-read in Rust as a whole plan (schema, structure, graph); a refused edit leaves the draft unchanged. | Held (`an_edit_the_plan_would_refuse_leaves_the_draft_as_it_was`). |
@@ -139,20 +138,20 @@ it is, and the row says which part is not.
 | A recovery restores from a backup that was altered afterwards. | Each backup's SHA-256 is recorded at capture and checked before use; a mismatch is refused, and the checkpoint holding the hashes is itself checked against the encrypted store. | Held (`a_backup_changed_since_it_was_taken_is_not_used`, `an_edited_checkpoint_is_refused`), up to Windows' boundary. |
 | Recovery touches state the plan never declared. | Only declared captures are restored; a key or service a step created is not deleted. | Held (`a_failed_reversible_task_is_recovered_without_touching_anything_else` checks a neighbouring file's bytes and timestamp and a neighbouring registry value). |
 | A reversible step runs without its recovery in place. | Captures are taken and verified before the step is armed; if that fails, the step does not run. | Held (`a_step_whose_recovery_cannot_be_prepared_does_not_run`). |
-| After a failure the keyboard stays with KeyJutsu. | Any outcome other than completion disarms. | Held (`a_failing_internal_check_fails_the_step`; found by the CLI recovery test). |
+| After a failure the keyboard stays with KeyJutsu. | Any outcome other than completion disarms. | Held (`a_failing_internal_check_fails_the_step`). |
 | Keys pressed between steps are typed into the shell for real. | While a plan runs, the CLI holds keys that arrive with nothing armed. | Held (CLI `run_executes_an_approved_snapshot_in_performance_mode`, which fails without the hold). |
 | The installer, or a program in it, is swapped for another. | CI signs the installer when the signing certificate is configured. | **Partial**: nothing is signed until a certificate is configured, and even then only the installer is, not the programs inside it. Windows then warns about an unknown publisher; SmartScreen reputation is not earned yet. |
 | Something else takes the broker's place, and is run elevated. | The installer is per-machine, into Program Files, which only Administrators can write; KeyJutsu starts only the `keyjutsu-broker.exe` beside its own program. | Held by Windows' file permissions. A development build run from a user-writable folder has no such protection. |
 | The PATH entry makes `keyjutsu` shadow another program, or another program shadow a system one. | The install folder is appended to the user's PATH, never prepended, and only if it is not already there; the entry is removed on uninstall. | Held (`path_with` and `path_without` tests; the Sandbox install trial checks the entry arrives and goes). |
 | A crafted folder name turns "Open KeyJutsu here" into a different command. | The folder is passed quoted as one argument (`--cwd "%V"`); Windows folder names cannot contain `"`. The only quoting quirk, a drive root's `"C:\"`, is repaired. | Held (`a_drive_root_survives_windows_quoting`). |
-| Uninstalling leaves KeyJutsu reachable. | The uninstaller removes the PATH entry and both Explorer menus before the files. | Held (Sandbox install trial). The encrypted history in the user's profile is left, as the operator's data; `keyjutsu store clear --history --techniques` removes it. |
+| Uninstalling leaves KeyJutsu reachable. | The uninstaller removes the PATH entry and both Explorer menus before the files. | Held (the install trial on a clean Windows 11). The encrypted history in the user's profile is left, as the operator's data; `keyjutsu store clear --history --techniques` removes it. |
 
 ## Release gates
 
-§57 names eight gates. Each is a list of named tests in
+There are eight gates. Each is a list of named tests in
 `scripts/release-gates.mjs`, run by `pnpm release:gates` and in CI after the
 full suite. A test that is missing fails its gate, so renaming or deleting one
-cannot quietly take it out. At Milestone 17 all eight pass: broker security
+cannot quietly take it out. All eight pass: broker security
 (10 tests), plan integrity (13), secret handling (8), the execution state
 machine (16), schema validation (7), supported-shell compatibility (8),
 critical rollback (10) and the credential boundary (6).
@@ -166,7 +165,8 @@ What this document does not claim, gathered in one place:
   commands itself without KeyJutsu. Nothing short of a separate account
   defends against it, and KeyJutsu does not try.
 - **xterm.js** renders all terminal output and has not been fuzzed here.
-- **Fuzzing is property-based, not coverage-guided** (D30).
+- **Fuzzing is property-based, not coverage-guided.** It runs in the ordinary
+  test suite; long coverage-guided runs are not set up.
 - **The broker pipe's DACL** is Windows-enforced and has not been tested from
   a second account.
 - **Secrets the redactor does not recognise** reach an agent if the operator
@@ -174,4 +174,4 @@ What this document does not claim, gathered in one place:
 - **A plan can print a credential** by using its variable carelessly;
   validation does not flag that.
 - **A sign-out boundary** has not been crossed for real.
-- **Unsigned installers** until a signing certificate is configured (D29).
+- **Unsigned installers** until a signing certificate is configured.

@@ -45,7 +45,7 @@ plan
 
 A step has a `kind`: `command`, `validation`, `manual`, `user_input` or
 `credential`. Command and validation steps must bind a shell and list
-commands; a command is never shell-agnostic (§14). A credential step can have
+commands; a command is never shell-agnostic. A credential step can have
 no commands and is always `user_input`, so no secret can ever be staged typing.
 It says what it asks for instead, and only a credential step may:
 
@@ -100,7 +100,7 @@ narrow what gets through (`crates/keyjutsu-plan/src/parse.rs`):
    overflowing the stack.
 2. **Version.** `schema_version` is read first. Anything but `1.0` is refused
    by name ("schema version 2.0 is not supported; this KeyJutsu reads 1.0"),
-   never interpreted by guessing (§50).
+   never interpreted by guessing.
 3. **Schema.** The document is checked against the schemas compiled into
    KeyJutsu. The one external reference they make, proposal to plan, is
    resolved from memory; anything else is refused, so no schema is ever
@@ -135,7 +135,7 @@ asked to revise a plan sees everything that is wrong in one go.
 
 ## Control flow
 
-KeyJutsu, not the agent, decides what runs next (§10).
+KeyJutsu, not the agent, decides what runs next.
 `keyjutsu_plan::frontier` takes the plan and what has happened so far and
 returns the steps that are ready, the steps no branch leads to, and whether
 the plan has halted or finished:
@@ -148,7 +148,7 @@ the plan has halted or finished:
   side of a branch is skipped, which is what lets the two sides meet again.
 - A step waits for everything in `depends_on`; if one of those was skipped,
   it is skipped too.
-- Any failure halts the plan, whatever the graph says (§2.3).
+- Any failure halts the plan, whatever the graph says.
 - The order is deterministic: every step after its predecessors, ties broken
   by the order the plan lists them in.
 
@@ -183,9 +183,9 @@ leading run of numbers, compared part by part.
 added, removed and changed, field by field. A change to what a step *does*
 makes it and every step after it in the graph need revalidation; a change to
 its title, objective or reason does not. Changing the target, requirements or
-environment assumptions affects every step. This is §11's "Step 3 changed;
-steps 4, 5 and 7 need revalidation", and it is what approval (Milestone 4)
-will use to decide which approvals a change withdraws.
+environment assumptions affects every step. This is what approval uses to
+decide which approvals a change withdraws: change step 3, and steps 4, 5 and
+7 need validating again if they follow it.
 
 ## Fixtures
 

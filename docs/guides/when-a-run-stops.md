@@ -4,9 +4,7 @@
 machine back as it was, repaired the plan and carried on, or crossed the
 restart the plan was waiting for.
 
-A plan stops for one of four reasons, and each has its own way on. What they
-share is that KeyJutsu never decides for you: nothing is rolled back, retried
-or resumed until you say so.
+A plan stops for one of four reasons, and each has its own way on. In all four, nothing is rolled back, retried or resumed until you say so.
 
 ## A step failed
 
@@ -117,9 +115,7 @@ Then: keyjutsu run fix.approved.json --resume
 ```
 
 KeyJutsu doesn't restart your machine, and doesn't start itself after you
-sign in: restarting someone's computer is the most disruptive thing a tool
-can do, and resuming by itself would run the next phase before anyone looked
-([D27](../architecture/deviations.md#d27-the-operator-crosses-the-boundary-keyjutsu-checks-it)).
+sign in: restarting someone's computer is about as disruptive as a tool gets, and resuming by itself would run the next phase before anyone looked.
 
 When you resume, it asks for `RESUME` typed out, then checks, in this order:
 
@@ -133,7 +129,7 @@ When you resume, it asks for `RESUME` typed out, then checks, in this order:
    completed step runs again, and nothing is assumed to have survived the
    restart.
 
-This has been done across a real Windows restart, in Windows Sandbox. A
+This has been done across a real Windows restart. A
 sign-out has only been tested with its identity faked, and the desktop app
 stops at a boundary but can't resume past one yet; resume from the CLI.
 

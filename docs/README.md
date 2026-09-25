@@ -43,17 +43,6 @@ every term explained the first time it appears.
 
 - [Architecture overview](architecture/overview.md) — one Rust core, two front ends, and why
 - [Execution state machine](architecture/execution-state-machine.md) — how a performance moves between states
-- [Dependency graph](architecture/dependency-graph.md) — which crate needs which
 - [Decisions](architecture/adr/README.md) — the architecture decision records
-- [Deviations](architecture/deviations.md) — where KeyJutsu differs from its specification, and why
-- Milestone notes, each with what was built and what its "done when" rests on:
-  [0–2](architecture/milestones-0-2.md), [3](architecture/milestone-3.md),
-  [4](architecture/milestone-4.md), [5](architecture/milestone-5.md),
-  [6](architecture/milestone-6.md), [7](architecture/milestone-7.md),
-  [8](architecture/milestone-8.md), [9](architecture/milestone-9.md),
-  [10](architecture/milestone-10.md), [11](architecture/milestone-11.md),
-  [12](architecture/milestone-12.md), [13](architecture/milestone-13.md),
-  [14](architecture/milestone-14.md), [15](architecture/milestone-15.md),
-  [16](architecture/milestone-16.md), [17](architecture/milestone-17.md)
 - [Colour and design](brand/colour-system.md) — the design kit, and how its colours reach the app
 - [Contributing](../CONTRIBUTING.md) — building, testing, and the checks a change has to pass

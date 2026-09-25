@@ -15,7 +15,8 @@ printer keeps stopping."
 
 KeyJutsu first shows you **what it's about to send** to the AI agent. Nothing
 goes until you say so. If what you pasted contains something that looks like
-a password or a key, KeyJutsu takes it out first.
+a password or a key, KeyJutsu takes it out first. A password that doesn't
+look like one won't be caught, so don't paste one.
 
 ### 2. The agent investigates, and suggests
 

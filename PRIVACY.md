@@ -3,8 +3,8 @@
 ## What KeyJutsu sends anywhere
 
 KeyJutsu has no telemetry, no crash reporting, no remote diagnostics and no
-update check. That is true by construction, not by a setting: there is no
-code that could send any of it.
+update check. There's no code for any of it, so there's no setting to
+turn off.
 
 It makes network requests in one place: when you stage a plan's artifacts
 (`keyjutsu plan stage`, or Stage in the app), it downloads the URLs the plan
@@ -16,7 +16,7 @@ When you ask one for a plan, KeyJutsu runs it on your machine, and the agent
 talks to its own provider under your account; what it sends is governed by
 that provider, not by KeyJutsu. What KeyJutsu gives the agent is below.
 
-If telemetry is ever considered (§45), it will be off by default and built so
+If telemetry is ever considered, it will be off by default and built so
 it *cannot* carry prompts, commands, terminal output, file contents or
 secrets, by having no path from those to the telemetry code, rather than by
 filtering them out on the way.
@@ -42,7 +42,7 @@ All of it on this machine, under `%LOCALAPPDATA%\KeyJutsu`:
   be put back.
 
 Credentials are never stored: you type them into PowerShell's own masked
-prompt and they never pass through KeyJutsu (§25). The desktop app also
+prompt, and KeyJutsu doesn't keep them, log them or write them anywhere. The desktop app also
 remembers that you have seen the first-run screen, in the webview's local
 storage. The installer adds the install folder to your PATH and "Open
 KeyJutsu here" to Explorer, if you agree; uninstalling removes both and
@@ -79,4 +79,4 @@ Everything KeyJutsu sends is first redacted of anything that looks like a
 secret (tokens, keys, private keys, passwords in assignments). Secrets that
 do not look like one are not caught, and a folder you let an agent
 investigate is read by the agent itself, not filtered by KeyJutsu; the
-preview warns about files there that look sensitive (§9, §2.5).
+preview warns about files there that look sensitive.

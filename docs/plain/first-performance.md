@@ -42,7 +42,8 @@ When a command is finished, the next key you press runs it. You'll see
 information about your computer appear. While it's running, your keys are
 ignored, so nothing you press can get in the way.
 
-There are three commands. Together they take a few hundred key presses.
+There are three commands. Together they take about six hundred key
+presses.
 
 ### 4. Take the terminal back
 
@@ -51,7 +52,7 @@ When the third command has finished, hold down these four keys together:
 **Ctrl** + **Alt** + **Shift** + **K**
 
 This is called **disarming**. It hands the terminal back to you. You can do
-it at any moment, not only at the end. It always works.
+it at any moment, not only at the end, whatever KeyJutsu is doing.
 
 ### 5. Leave
 
@@ -70,6 +71,7 @@ KeyJutsu shows a short report. Each command should say **succeeded**.
 ## Keys worth remembering
 
 - **Ctrl + Alt + Shift + K**: stop, and take the terminal back.
-- **Ctrl + C**: interrupt a command that's running. This always works too.
+- **Ctrl + C**: interrupt a command that's running, even in the middle of a
+  performance.
 
 Next: [running a plan safely](running-a-plan.md).

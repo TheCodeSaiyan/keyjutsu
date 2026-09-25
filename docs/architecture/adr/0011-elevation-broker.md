@@ -41,7 +41,6 @@ so nothing built before then would make it harder.
 Administrator step cannot be typed into the operator's unelevated shell and
 run elevated, so it runs in the broker's shell and its output is shown in the
 terminal, marked as the broker's. It is not performed keystroke by keystroke.
-That is recorded as deviation D28.
 
 ## Consequences
 
@@ -52,9 +51,9 @@ That is recorded as deviation D28.
 - Same-user malware can always ask UAC for elevation itself; the broker adds
   no way round that boundary and removes none. What it guarantees is that
   what runs elevated is exactly what was approved.
-- Snapshot hashes are still unkeyed (D14): whoever can write the snapshot
-  before launch can recompute them. The launch pins the hash the operator's
-  KeyJutsu chose, which is what UAC is then asked about.
+- The launch pins the snapshot hash the operator's KeyJutsu checked, which
+  is what UAC is then asked about. KeyJutsu checks it against the approval
+  recorded in its encrypted store before launching.
 - The pipe's DACL and the launching-process check are enforced by Windows;
   the tests cover the process check and the name squatting, not an attempt
   from another account.

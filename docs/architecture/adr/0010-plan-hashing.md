@@ -45,6 +45,8 @@ change the steps bound to that shell, a tool change the steps that name it.
   title, so it only stops a forger who does not bother. Tamper resistance
   against a local attacker needs a keyed MAC under a DPAPI-protected key: the
   key belongs to encrypted storage (Milestone 14) and the verifier that
-  matters is the elevated broker (Milestone 10). Recorded as deviation D14.
+  matters is the elevated broker (Milestone 10). Milestone 17 closed this
+  differently: sealing records the snapshot hash in the DPAPI-keyed store,
+  and a snapshot without that record is refused.
 - **Tool versions are not in the fingerprint yet.** Paths are; asking a tool
   its version is validation's job (Milestone 5).

@@ -38,8 +38,7 @@ cmd.exe reports marks but no code. These run on every `cargo test` in
 ## Consequences and limits
 
 - **cmd.exe cannot report exit codes.** Its prompt is not re-evaluated for
-  `%ERRORLEVEL%`. Steps in cmd finish as `Unverified`. See
-  [deviation D3](../deviations.md#d3-cmdexe-cannot-report-exit-codes).
+  `%ERRORLEVEL%`. Steps in cmd finish as `Unverified`, never as success.
 - **The exit code can be stale in PowerShell** after a cmdlet failure that
   follows an earlier native failure, because `$LASTEXITCODE` is not reset.
   The engine treats success versus failure (`$?`) as the signal and the number

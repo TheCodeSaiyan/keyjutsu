@@ -42,8 +42,8 @@ administrator can change it.
 - **Add "Open KeyJutsu here" to Explorer?** Choose **Yes** if you'd like to
   right-click a folder and open KeyJutsu there. It's fine to say **No**.
 
-The installer may then download a small part of Windows it needs, called
-WebView2. That needs the internet. Most computers already have it.
+The installer may then download a part of Windows it needs, called
+WebView2. That needs the internet. Windows 11 usually has it already.
 
 ### 5. Open a terminal
 
