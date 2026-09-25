@@ -282,3 +282,18 @@ terminal ([ADR 0011](adr/0011-elevation-broker.md)). It is honest about what
 ran and where, but it is not a keystroke performance. Mirroring the broker's
 shell as a second, visible terminal that the operator performs into is the
 likely way to close the gap.
+
+## D29. Installed for every user, and signed only when a certificate is configured
+
+§60 asks for a signed installer pipeline. CI builds the installer on every
+run and signs it only when `WINDOWS_SIGNING_CERT` and
+`WINDOWS_SIGNING_PASSWORD` are configured; there is no certificate yet, so
+today's installers are unsigned and Windows warns about an unknown
+publisher. When one is configured, the installer is signed but the programs
+inside it are not; signing those too means a `signCommand` in the bundle
+configuration. The installer also installs for every user, into Program
+Files, rather than per user without a UAC prompt. That is deliberate: the
+elevation broker is started elevated, so it has to live where only
+Administrators can replace it. A per-user install would put it in a folder
+the user (and anything running as the user) can write, which would hand
+Administrator to whoever swaps the file.

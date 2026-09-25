@@ -14,13 +14,13 @@ agent proposes a plan, KeyJutsu checks it against your actual machine, you
 review and approve it, and only then does anything run, with each step checked
 after it runs.
 
-> **Status: early.** Milestones 0 to 15 of 17 are built: the real
+> **Status: early.** Milestones 0 to 16 of 17 are built: the real
 > terminal, the performance engine, the plan model, approval, validation,
 > agent integration, the desktop plan workspace, execution of approved
 > plans, credential gates, the elevation broker, recovery, staged downloads,
 > Git safety, an encrypted history with reusable Techniques, and plans that
-> cross restarts. Not yet: the installer (16) and the security hardening
-> pass (17). Planning, validation, approval and
+> cross restarts, and an installer. Not yet: the security hardening pass
+> (17). Planning, validation, approval and
 > execution work in the desktop app and in the CLI (`keyjutsu agents`,
 > `keyjutsu plan`, `keyjutsu run`, `keyjutsu recover`). Per milestone: [0–2](docs/architecture/milestones-0-2.md),
 > [3](docs/architecture/milestone-3.md), [4](docs/architecture/milestone-4.md),
@@ -30,11 +30,32 @@ after it runs.
 > [10](docs/architecture/milestone-10.md),
 > [11](docs/architecture/milestone-11.md), [12](docs/architecture/milestone-12.md),
 > [13](docs/architecture/milestone-13.md), [14](docs/architecture/milestone-14.md),
-> [15](docs/architecture/milestone-15.md).
+> [15](docs/architecture/milestone-15.md), [16](docs/architecture/milestone-16.md).
 
 Windows 11 x64 only for now.
 
-## Try it
+## Install
+
+`pnpm desktop:build` produces an installer in `target/release/bundle/nsis/`.
+It installs for every user into Program Files (so it asks for Administrator
+once), then asks two questions: put `keyjutsu` on your PATH, and add "Open
+KeyJutsu here" to Explorer's folder menus. `/S` installs silently and answers
+yes to both. Either can be changed later:
+
+```powershell
+keyjutsu setup path add|remove|status
+keyjutsu setup explorer add|remove|status
+```
+
+The programs are built with the C runtime linked in, so nothing else needs
+installing; the desktop app needs the WebView2 runtime, which Windows 11
+already has. Uninstall from Settings, or `uninstall.exe /S`: the PATH entry
+and the menus go before the files. Your encrypted history stays until
+`keyjutsu store clear`.
+
+Installers are not signed yet, so Windows warns about an unknown publisher.
+
+## Build from source
 
 You need Rust (1.88 or later), Node 22+, pnpm 9 and PowerShell 7 for the best
 experience; Windows PowerShell 5.1 and cmd work too.

@@ -11,6 +11,7 @@ mod history_cli;
 mod plans;
 mod recover_cli;
 mod run_cli;
+mod setup_cli;
 
 use std::process::ExitCode;
 
@@ -27,6 +28,37 @@ use keyjutsu_core::{SessionOptions, demo};
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Subcommand)]
+enum SetupCommand {
+    /// Put the folder holding keyjutsu.exe on your PATH, or take it off.
+    Path {
+        #[arg(value_enum)]
+        action: SetupAction,
+    },
+    /// "Open KeyJutsu here" on folders in Explorer.
+    Explorer {
+        #[arg(value_enum)]
+        action: SetupAction,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum SetupAction {
+    Add,
+    Remove,
+    Status,
+}
+
+impl SetupAction {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Add => "add",
+            Self::Remove => "remove",
+            Self::Status => "status",
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -156,6 +188,10 @@ enum Command {
         #[arg(long)]
         ephemeral: bool,
     },
+    /// What the installer offers: `keyjutsu` on your PATH, and "Open KeyJutsu
+    /// here" in Explorer. Each changes only your Windows account.
+    #[command(subcommand)]
+    Setup(SetupCommand),
     /// The encrypted history of past sessions.
     #[command(subcommand)]
     History(HistoryCommand),
@@ -329,8 +365,10 @@ enum PlanCommand {
 
 #[derive(clap::Args)]
 struct ShellArgs {
-    #[arg(long, value_enum, default_value_t = ShellChoice::Pwsh)]
-    shell: ShellChoice,
+    /// PowerShell 7 if it is installed, otherwise Windows PowerShell, which
+    /// every Windows has.
+    #[arg(long, value_enum)]
+    shell: Option<ShellChoice>,
     /// Skip your shell profile, history predictions and history saving.
     #[arg(long)]
     clean: bool,
@@ -372,9 +410,11 @@ enum SubmitChoice {
 impl ShellArgs {
     fn options(&self) -> SessionOptions {
         let mut options = SessionOptions::new(match self.shell {
-            ShellChoice::Pwsh => ShellKind::Pwsh,
-            ShellChoice::Powershell => ShellKind::WindowsPowershell,
-            ShellChoice::Cmd => ShellKind::Cmd,
+            Some(ShellChoice::Pwsh) => ShellKind::Pwsh,
+            Some(ShellChoice::Powershell) => ShellKind::WindowsPowershell,
+            Some(ShellChoice::Cmd) => ShellKind::Cmd,
+            None if keyjutsu_core::terminal::shell::locate(ShellKind::Pwsh).is_some() => ShellKind::Pwsh,
+            None => ShellKind::WindowsPowershell,
         });
         if self.clean {
             options.profile = ProfileMode::Clean;
@@ -428,6 +468,8 @@ fn main() -> ExitCode {
             })
         }
         Command::Git(GitCommand::Diff { snapshot }) => git_cli::diff(&snapshot),
+        Command::Setup(SetupCommand::Path { action }) => setup_cli::path(action.as_str()),
+        Command::Setup(SetupCommand::Explorer { action }) => setup_cli::explorer(action.as_str()),
         Command::History(HistoryCommand::List) => history_cli::history_list(),
         Command::History(HistoryCommand::Show { id }) => history_cli::history_show(&id),
         Command::History(HistoryCommand::Recheck { id }) => history_cli::history_recheck(&id),

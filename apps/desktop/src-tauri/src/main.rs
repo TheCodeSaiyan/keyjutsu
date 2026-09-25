@@ -598,7 +598,23 @@ async fn recovery_run(
     .map_err(|e| e.to_string())?
 }
 
+/// The folder after `--cwd`. Explorer passes a drive root as `"C:\"`, and
+/// Windows' argument rules read the `\"` as an escaped quote, so it arrives
+/// as `C:"`; that is put back as `C:\`.
+fn cwd_argument(args: impl IntoIterator<Item = String>) -> Option<String> {
+    let mut args = args.into_iter().skip_while(|a| a != "--cwd").skip(1);
+    let dir = args.next()?;
+    Some(match dir.strip_suffix('"') {
+        Some(rest) => format!("{rest}\\"),
+        None => dir,
+    })
+}
+
 fn main() {
+    // "Open KeyJutsu here" in Explorer passes the folder: terminals start there.
+    if let Some(dir) = cwd_argument(std::env::args()) {
+        let _ = std::env::set_current_dir(dir);
+    }
     let sessions = Arc::new(Sessions::default());
     let plans = Arc::new(Plans::default());
     // For checking the workspace on screen without driving the window: open
@@ -661,5 +677,30 @@ fn main() {
             eprintln!("KeyJutsu could not start: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cwd_argument;
+
+    fn args(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn the_folder_explorer_passes_is_where_terminals_start() {
+        assert_eq!(
+            cwd_argument(args(&["app.exe", "--cwd", "D:/git/project"])).as_deref(),
+            Some("D:/git/project")
+        );
+        assert_eq!(cwd_argument(args(&["app.exe"])), None);
+        assert_eq!(cwd_argument(args(&["app.exe", "--cwd"])), None);
+    }
+
+    #[test]
+    fn a_drive_root_survives_windows_quoting() {
+        // What `"C:\"` becomes after Windows' argument rules.
+        assert_eq!(cwd_argument(args(&["app.exe", "--cwd", "C:\""])).as_deref(), Some("C:\\"));
     }
 }

@@ -133,10 +133,15 @@ it is; **planned** names the milestone.
 | A reversible step runs without its recovery in place. | Captures are taken and verified before the step is armed; if that fails, the step does not run. | Held (`a_step_whose_recovery_cannot_be_prepared_does_not_run`). |
 | After a failure the keyboard stays with KeyJutsu. | Any outcome other than completion disarms. | Held (`a_failing_internal_check_fails_the_step`; found by the CLI recovery test). |
 | Keys pressed between steps are typed into the shell for real. | While a plan runs, the CLI holds keys that arrive with nothing armed. | Held (CLI `run_executes_an_approved_snapshot_in_performance_mode`, which fails without the hold). |
+| The installer, or a program in it, is swapped for another. | CI signs the installer when the signing certificate is configured. | **Partial**: nothing is signed until a certificate is configured, and even then only the installer is, not the programs inside it. Windows then warns about an unknown publisher; SmartScreen reputation is not earned yet. |
+| Something else takes the broker's place, and is run elevated. | The installer is per-machine, into Program Files, which only Administrators can write; KeyJutsu starts only the `keyjutsu-broker.exe` beside its own program. | Held by Windows' file permissions. A development build run from a user-writable folder has no such protection. |
+| The PATH entry makes `keyjutsu` shadow another program, or another program shadow a system one. | The install folder is appended to the user's PATH, never prepended, and only if it is not already there; the entry is removed on uninstall. | Held (`path_with` and `path_without` tests; the Sandbox install trial checks the entry arrives and goes). |
+| A crafted folder name turns "Open KeyJutsu here" into a different command. | The folder is passed quoted as one argument (`--cwd "%V"`); Windows folder names cannot contain `"`. The only quoting quirk, a drive root's `"C:\"`, is repaired. | Held (`a_drive_root_survives_windows_quoting`). |
+| Uninstalling leaves KeyJutsu reachable. | The uninstaller removes the PATH entry and both Explorer menus before the files. | Held (Sandbox install trial). The encrypted history in the user's profile is left, as the operator's data; `keyjutsu store clear` removes it. |
 
 ## Not covered yet
 
-The installer (Milestone 16) and the security hardening pass (Milestone 17). Those arrive with
-their milestones, and each milestone updates this document before it is
+The security hardening pass (Milestone 17). It arrives with
+its milestone, and each milestone updates this document before it is
 considered done. The release gates in the specification (§57) cannot pass
 until they do.
