@@ -193,7 +193,7 @@ pub fn what_if(program: &Path, line: &LineAnalysis, text: &str) -> Result<WhatIf
         return Err(AnalysisError::NotDryRunnable("it contains a control character"));
     }
     let script = format!(
-        "$WhatIfPreference = $true\n$ErrorActionPreference = 'Continue'\n$WarningPreference = 'SilentlyContinue'\n{text}"
+        "$WhatIfPreference = $true\n$ErrorActionPreference = 'Continue'\n$WarningPreference = 'SilentlyContinue'\n$ProgressPreference = 'SilentlyContinue'\n{text}"
     );
     let done = process::run(powershell(program, &script), "", WHAT_IF_LIMIT)?;
     let mut operations = Vec::new();
@@ -205,13 +205,45 @@ pub fn what_if(program: &Path, line: &LineAnalysis, text: &str) -> Result<WhatIf
             errors.push(line.to_owned());
         }
     }
-    errors.extend(done.stderr.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_owned));
+    errors.extend(
+        done.stderr
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !is_progress_only(l))
+            .map(str::to_owned),
+    );
     Ok(WhatIf { ran: true, operations, errors })
+}
+
+/// PowerShell with redirected output writes progress (such as "preparing
+/// modules for first use") to standard error as CLIXML. That is not an
+/// error: a clean dry run was being reported as failed whenever it happened.
+/// A CLIXML document is ignored only if every record in it is progress.
+pub fn is_progress_only(line: &str) -> bool {
+    if line == "#< CLIXML" {
+        return true;
+    }
+    if !line.starts_with("<Objs") {
+        return false;
+    }
+    let kinds: Vec<&str> = line.split("<Obj S=\"").skip(1).filter_map(|r| r.split('"').next()).collect();
+    !kinds.is_empty() && kinds.iter().all(|k| *k == "progress")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn progress_on_standard_error_is_not_an_error_but_an_error_record_is() {
+        // Seen for real: a clean dry run failed on this.
+        let progress = r#"<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><TN RefId="0"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N="SourceId">1</I64><PR N="Record"><AV> </AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>"#;
+        assert!(is_progress_only("#< CLIXML"));
+        assert!(is_progress_only(progress));
+        let error = r#"<Objs Version="1.1.0.1"><Obj S="progress" RefId="0"></Obj><S S="Error">Cannot find path</S><Obj S="Error" RefId="1"></Obj></Objs>"#;
+        assert!(!is_progress_only(error));
+        assert!(!is_progress_only("Remove-Item: Cannot find path"));
+    }
 
     fn line(json: serde_json::Value) -> LineAnalysis {
         serde_json::from_value(json).unwrap()

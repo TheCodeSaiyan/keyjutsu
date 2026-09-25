@@ -92,8 +92,13 @@ confirmation.
 
 One full-suite run failed `a_trailing_comment_cannot_turn_a_dry_run_into_a_real_one`
 (Milestone 5) at its second assertion: the file was not deleted, which is the
-safety property it exists for, but the dry run did not report a pass. It did
-not recur in eight runs of that test binary or in the next full-suite run
-(437 passed). The failure output was not kept, so the cause is not known;
-load on the machine at the time is the likeliest explanation, not a proven
-one.
+safety property it exists for, but the dry run did not report a pass. The
+cause was found when it recurred with its output kept: PowerShell, with its
+output redirected, wrote a progress record ("preparing modules for first
+use") to standard error as CLIXML, and the dry run counted anything on
+standard error as failure. It could make any clean dry run fail and put a
+step in review in normal use, not only in tests. The dry run now sets
+`$ProgressPreference = 'SilentlyContinue'` and ignores a CLIXML document made
+only of progress records; an error record still counts
+(`progress_on_standard_error_is_not_an_error_but_an_error_record_is`). The
+test failed twice in a row before the fix and passed three times after it.
