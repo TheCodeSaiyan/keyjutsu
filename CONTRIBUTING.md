@@ -84,12 +84,32 @@ git push origin main v0.2.0
 The tag starts `.github/workflows/release.yml`. It refuses a tag that
 disagrees with the version in the code, builds the installer, signs it and
 every program in it, installs it on a clean runner, runs `keyjutsu doctor`,
-uninstalls it and checks nothing was left, and only then publishes. The
+uninstalls it and checks nothing was left, then runs the portable build from
+a folder where nothing was installed, and only then publishes. The
 release page gets the tag's notes, the one-line installer
 (`scripts/install.ps1`, which checks the download against `SHA256SUMS` and its
 signature before running it), and whether this release is signed. Running the
 workflow from the Actions page builds and checks everything and publishes
 nothing, and says so in its title.
+
+The portable build, `KeyJutsu_X.Y.Z_x64-portable.zip`, is packed by
+`scripts/portable.ps1` from the programs the installer has just installed
+and checked, so it's signed exactly when they are. It holds the app and the
+CLI, and a `README.txt` saying what it doesn't do. It leaves out the
+elevation broker on purpose: the broker runs as Administrator, so it's only
+installed where only Administrators can replace it, and a portable folder is
+usually one the user can write to. The release run checks the zip doesn't
+carry it.
+
+The winget manifests are written by `scripts/winget.mjs` from the installer
+being published, with its hash, and kept as the `winget-manifests` artifact
+of the release run; nothing is sent to winget automatically. To submit a
+release, check them with `winget validate --manifest <folder>` and open a pull
+request adding the folder to
+[microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) under
+`manifests/t/TheCodeSaiyan/KeyJutsu/`. winget downloads the installer from the
+release page, so the repository has to be public for anyone else to install
+it that way.
 
 Signing uses Azure Trusted Signing through GitHub's OIDC token, so there is no
 certificate file to keep. It's switched on by the repository's `release`
