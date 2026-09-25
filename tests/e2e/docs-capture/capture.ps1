@@ -49,6 +49,7 @@ run 'plan-approve-critical-confirmed' @('plan', 'approve', 'clear-build-cache.js
     '--confirm', 'clear-cache=DELETE THE OLD BUILD CACHE')
 run 'plan-propose' @('plan', 'propose', 'Find out why the Print Spooler keeps stopping', '--agent', 'claude', '--out', 'spooler.json')
 run 'setup-status' @('setup', 'path', 'status')
+run 'diagnostics' @('diagnostics', 'preview')
 
 # The plans with this machine's validation recorded, for the Plan screen.
 foreach ($pair in @(@('check-a-service', 'validated'), @('clear-build-cache', 'critical-validated'))) {
@@ -102,6 +103,17 @@ d chord '^+k'                     # operator controls
 Start-Sleep -Seconds 2
 d capture '' 'performance'
 d chord '^%+k'                    # disarm
+Start-Sleep -Seconds 2
+
+# The diagnostic bundle: previewed, then saved, and the saved file kept to
+# compare with what the preview showed.
+d click 'Preview bundle'
+Start-Sleep -Seconds 25
+d capture '' 'diagnostics'
+d click 'Save bundle'
+Start-Sleep -Seconds 3
+Get-ChildItem "$env:LOCALAPPDATA\KeyJutsu\diagnostics\*.txt" -ErrorAction SilentlyContinue |
+    ForEach-Object { Copy-Item $_.FullName "$out\diagnostics-saved.txt"; log "saved bundle $($_.Name)" }
 
 launch "$kj\work\validated.json"
 d capture '' 'plan-workspace'

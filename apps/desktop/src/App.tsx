@@ -24,6 +24,7 @@ import type {
 import { INPUT_OWNED, ipc } from "./ipc";
 import { TerminalView, type TerminalHandle } from "./components/TerminalView";
 import { ReadinessPanel } from "./components/ReadinessPanel";
+import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { Overlay } from "./components/Overlay";
 import { NewTask } from "./components/NewTask";
 import { PlanWorkspace } from "./components/PlanWorkspace";
@@ -745,6 +746,10 @@ export function App() {
                 <section>
                   <h2>Readiness</h2>
                   <ReadinessPanel report={report} />
+                </section>
+                <section>
+                  <h2>Diagnostics</h2>
+                  <DiagnosticsPanel />
                 </section>
               </aside>
             )}

@@ -115,6 +115,32 @@ async fn readiness_scan() -> Result<ReadinessReport, String> {
     tauri::async_runtime::spawn_blocking(readiness::scan).await.map_err(|e| e.to_string())
 }
 
+/// The bundle last shown to the operator: only that is ever saved, so what
+/// they read is what they get.
+#[derive(Default)]
+struct Diagnostics(Mutex<Option<String>>);
+
+#[tauri::command]
+async fn diagnostics_preview(diagnostics: State<'_, Arc<Diagnostics>>) -> Result<String, String> {
+    let text = tauri::async_runtime::spawn_blocking(keyjutsu_core::diagnostics::collect)
+        .await
+        .map_err(|e| e.to_string())?;
+    *locked(&diagnostics.0) = Some(text.clone());
+    Ok(text)
+}
+
+/// Saves the previewed bundle and shows it in Explorer. Nothing is sent.
+#[tauri::command]
+fn diagnostics_save(diagnostics: State<'_, Arc<Diagnostics>>) -> Result<String, String> {
+    let text = locked(&diagnostics.0).clone();
+    let text = text.ok_or("preview the bundle first: only a bundle you have seen is saved")?;
+    let file = keyjutsu_core::diagnostics::save(&text, &keyjutsu_core::diagnostics::default_dir())?;
+    let mut select = std::ffi::OsString::from("/select,");
+    select.push(&file);
+    let _ = std::process::Command::new("explorer.exe").arg(select).spawn();
+    Ok(file.display().to_string())
+}
+
 #[tauri::command]
 fn terminal_profile() -> TerminalProfile {
     profile::detect_terminal_profile()
@@ -781,8 +807,11 @@ fn main() {
     let app = tauri::Builder::default()
         .manage(sessions)
         .manage(plans)
+        .manage(Arc::new(Diagnostics::default()))
         .invoke_handler(tauri::generate_handler![
             readiness_scan,
+            diagnostics_preview,
+            diagnostics_save,
             terminal_profile,
             terminal_open,
             terminal_write,

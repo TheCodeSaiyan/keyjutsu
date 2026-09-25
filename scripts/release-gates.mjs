@@ -47,6 +47,8 @@ const gates = {
     "the_nonce_never_appears_in_debug_output",
     "a_credential_is_entered_and_used_without_being_seen_or_kept",
     "without_send_nothing_leaves_the_machine_and_nothing_is_written",
+    "the_bundle_names_no_one_and_holds_no_secret",
+    "the_preview_names_neither_the_user_nor_the_machine",
   ],
   "Execution state machine": [
     "mashing_arbitrary_keys_delivers_exactly_the_staged_command",

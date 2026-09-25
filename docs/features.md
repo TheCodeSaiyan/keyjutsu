@@ -170,6 +170,17 @@ approved here, with a note of which steps are on unfamiliar ground.
 
 [Reusing a plan that worked](guides/techniques.md)
 
+## Diagnostics you read before sharing
+
+When you need help, a diagnostic bundle gives someone the versions, the
+readiness checks and how each shell behaved, without your tasks, commands,
+output, name or secrets. You see all of it before it's saved, and KeyJutsu
+sends it nowhere: in the app, **Diagnostics** in the Terminal screen's side
+panel has **Preview bundle** and then **Save bundle**, and the CLI has
+`keyjutsu diagnostics preview` and `keyjutsu diagnostics save FILE`.
+
+[Commands](commands.md#keyjutsu-diagnostics-preview)
+
 ## A desktop app and a CLI, with one set of rules
 
 The desktop app (New task, Plan and Terminal) and the `keyjutsu` CLI drive

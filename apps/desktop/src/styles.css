@@ -601,6 +601,12 @@ pre.code {
   word-break: break-word;
 }
 
+/* The diagnostic bundle: long, so it scrolls within the panel. */
+pre.bundle {
+  max-height: 24rem;
+  overflow: auto;
+}
+
 /* Secondary with more weight: Save, Roll back. Not vermilion (kit §7). */
 button.secondary-strong {
   border-color: var(--text-2);

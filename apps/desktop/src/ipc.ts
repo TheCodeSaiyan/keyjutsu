@@ -26,6 +26,10 @@ import type {
  */
 export const ipc = {
   readinessScan: () => invoke<ReadinessReport>("readiness_scan"),
+  /** The diagnostic bundle, in full, as it would be saved. */
+  diagnosticsPreview: () => invoke<string>("diagnostics_preview"),
+  /** Save the bundle last previewed; returns where. */
+  diagnosticsSave: () => invoke<string>("diagnostics_save"),
   terminalProfile: () => invoke<TerminalProfile>("terminal_profile"),
 
   openTerminal: (request: OpenRequest, onMessage: (m: TerminalMessage) => void) => {

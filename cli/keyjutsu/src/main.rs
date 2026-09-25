@@ -152,6 +152,20 @@ enum StoreCommand {
 }
 
 #[derive(Subcommand)]
+enum DiagnosticsCommand {
+    /// Print the bundle: everything a save would write, and nothing else.
+    Preview,
+    /// Write the bundle to a plain text file, to read before sending it.
+    Save {
+        /// Where to write it.
+        file: std::path::PathBuf,
+        /// Replace an existing file.
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum GitCommand {
     /// KeyJutsu's changes alone, against each file as it was just before the run.
     Diff {
@@ -242,6 +256,10 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// A diagnostic bundle for someone helping you: versions, checks and
+    /// counts, with no tasks, commands, output or secrets. Nothing is sent.
+    #[command(subcommand)]
+    Diagnostics(DiagnosticsCommand),
     /// Open an ordinary interactive shell through KeyJutsu's terminal.
     Shell(ShellArgs),
     /// Run the safe, read-only demo performance.
@@ -507,6 +525,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Doctor { json } => doctor(json),
+        Command::Diagnostics(DiagnosticsCommand::Preview) => {
+            print!("{}", keyjutsu_core::diagnostics::collect());
+            ExitCode::SUCCESS
+        }
+        Command::Diagnostics(DiagnosticsCommand::Save { file, force }) => save_diagnostics(&file, force),
         Command::Agents { action: None, json } => agent_cli::list(json),
         Command::Agents { action: Some(AgentsCommand::Check { live }), .. } => agent_cli::check(live),
         Command::Plan(PlanCommand::Propose { task, agent, files, folder, out }) => {
@@ -657,6 +680,24 @@ fn session(options: SessionOptions, performance: Option<console::Performance>) -
         );
     }
     if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+}
+
+fn save_diagnostics(file: &std::path::Path, force: bool) -> ExitCode {
+    if file.exists() && !force {
+        eprintln!("keyjutsu: {} already exists; pass --force to replace it", file.display());
+        return ExitCode::FAILURE;
+    }
+    match std::fs::write(file, keyjutsu_core::diagnostics::collect()) {
+        Ok(()) => {
+            println!("Saved the diagnostic bundle to {}.", file.display());
+            println!("It is plain text: read it before you send it to anyone. Nothing has been sent.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("keyjutsu: could not write {}: {e}", file.display());
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn doctor(json: bool) -> ExitCode {

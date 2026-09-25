@@ -37,6 +37,8 @@ All of it on this machine, under `%LOCALAPPDATA%\KeyJutsu`:
 - **`runs`**: plans approved in the app, as readable JSON, with their
   checkpoints.
 - **`artifacts`**: staged downloads and where each came from.
+- **`diagnostics`**: diagnostic bundles saved from the app, as plain text.
+  They exist only when you save one; see below.
 - **Recovery captures**, beside a run's checkpoint: copies of what a
   reversible step said it would change, taken just before it ran, so it can
   be put back.
@@ -47,6 +49,26 @@ remembers that you have seen the first-run screen, in the webview's local
 storage. The installer adds the install folder to your PATH and "Open
 KeyJutsu here" to Explorer, if you agree; uninstalling removes both and
 leaves the store, as your data.
+
+## Diagnostic bundles
+
+A diagnostic bundle is for you to give someone helping with a problem. It
+is built only when you ask, shown to you in full, and saved as plain text;
+KeyJutsu never sends it. The app saves only the bundle you previewed.
+
+It holds the KeyJutsu and Windows versions, the readiness checks, the path
+and version of each shell and how it behaved when started in a
+pseudo-console, your Windows Terminal profile's name, font and command
+line, the paths of your PowerShell profile scripts with the three yes/no
+findings above, each agent's version and whether its credential file
+exists, and how many runs and Techniques the history holds.
+
+It leaves out tasks, plans, commands, terminal contents, what runs printed,
+environment variables and credentials. Your profile folder becomes
+`%USERPROFILE%`, your Windows user name `<user>` and the computer's name
+`<computer>`, and the text goes through the same pattern redaction as what
+agents are given. Redaction by pattern can miss a secret with no
+recognisable shape, which is one reason the bundle is shown to you first.
 
 ## What it reads
 

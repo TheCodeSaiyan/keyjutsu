@@ -138,5 +138,10 @@ everything in there.
 - **The installer stops with nothing installed.** On a machine without WebView2
   and without a network, it can't fetch the runtime and gives up. The CLI
   alone would work there, but there's no CLI-only installer yet.
+- **You need someone's help.** `keyjutsu diagnostics preview` prints what they
+  would need to know about this machine and KeyJutsu, without your tasks,
+  commands, name or secrets; `keyjutsu diagnostics save FILE` writes it out
+  for you to read and send. [Privacy](../../PRIVACY.md#diagnostic-bundles)
+  lists what's in it.
 
 Next: [your first performance](first-performance.md).
