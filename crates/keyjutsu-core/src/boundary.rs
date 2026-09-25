@@ -77,8 +77,9 @@ fn run(program: &str, args: &[&str]) -> Option<String> {
 /// The real identity of each boundary's far side.
 pub fn identity(kind: Boundary, session: &Session) -> Option<String> {
     match kind {
+        // Windows PowerShell is on every Windows; PowerShell 7 may not be.
         Boundary::WindowsRestart => run(
-            "pwsh",
+            "powershell.exe",
             &[
                 "-NoLogo",
                 "-NoProfile",

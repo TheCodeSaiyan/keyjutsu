@@ -267,5 +267,6 @@ thing a tool can do, it cannot be exercised by a test without restarting the
 machine the tests run on, and a mistaken auto-resume would run the next phase
 before anyone looked. Adding both (a `shutdown /r` after a typed
 confirmation, a RunOnce entry that opens the resume prompt rather than
-resuming) is straightforward once it can be tried on a machine that may be
-restarted.
+resuming) is straightforward, and there is now a machine to try it on: the
+Windows Sandbox restart trial (`tests/e2e/restart-trial`) already restarts a
+disposable Windows and resumes a plan across it.

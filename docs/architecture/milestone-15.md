@@ -53,6 +53,18 @@ environment → Phase 2, without assuming pre-restart state remains valid."
   holds", phase 2 does not run, and the operator is never asked to approve the
   broken state.
 
+**A real Windows restart**, in Windows Sandbox (25 September 2026,
+`tests/e2e/restart-trial/run.ps1`, networking off, only a staging folder
+mapped): phase 1 ran and stopped at the boundary with the boot time
+`2026-09-25T16:39:52.998Z`; resuming at once was refused ("the Windows
+restart has not happened yet"); the Sandbox restarted; resuming without a
+confirmation was refused; with one, the notice said `verified: true`, the
+marker from phase 1 was rechecked and found, there was no drift, and phase 2
+completed. Preparing it found that the restart check called PowerShell 7,
+which Sandbox (and many machines) does not have, so the check would have
+silently found nothing and resuming would have rested on the operator's word;
+it now uses Windows PowerShell, which every Windows has.
+
 A Technique produces an ordinary plan (Milestone 14), so these plans stand in
 for a Technique's; no Technique-specific code is involved in crossing a
 boundary.
@@ -68,9 +80,9 @@ confirmation.
 - **KeyJutsu does not restart Windows itself, and does not resume at sign-in**
   ([deviation D27](deviations.md#d27-the-operator-crosses-the-boundary-keyjutsu-checks-it)).
   The operator crosses the boundary and runs the resume.
-- **The Windows restart and sign-out were not crossed for real** in a test:
-  their identities are the real ones (`LastBootUpTime`, `whoami /logonid`),
-  but the tests inject them. The shell restart was crossed for real.
+- **A sign-out has not been crossed for real**; its identity (`whoami
+  /logonid`) is the real one but only injected in tests. The shell restart
+  and a Windows restart have been (below).
 - **The desktop app stops at a boundary but cannot resume past one yet**;
   the CLI can.
 - **Checks that only an exit code proves** (such as "the command succeeded")
