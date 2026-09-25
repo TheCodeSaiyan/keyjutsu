@@ -26,7 +26,12 @@ What was built, and what the "done when" in §60 rests on.
   and frozen.
 - **"Open KeyJutsu here"** starts the desktop app with `--cwd "<folder>"`, and
   terminals start there. A drive root arrives as `C:"` (Windows reads the
-  `\"` in `"C:\"` as an escaped quote) and is put back.
+  `\"` in `"C:\"` as an escaped quote) and is put back. As first shipped,
+  terminals didn't start there: the folder set the app's own working
+  directory, and every shell was still started in the home folder. The
+  Sandbox trial only checked the menu was registered. Taking the
+  documentation's screenshots found it, and a test on a real shell now
+  checks the folder (`a_terminal_opens_in_the_folder_explorer_passed`).
 - **The readiness scan** is `keyjutsu doctor`, and the same scan is on the
   desktop's first screen: Windows, ConPTY, each shell's staged typing and exit
   codes, agents, the broker and DPAPI storage, each reported as found.

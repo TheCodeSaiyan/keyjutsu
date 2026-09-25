@@ -219,6 +219,9 @@ export function App() {
     const size = term.current?.size() ?? { rows: 30, cols: 120 };
     ipc
       .openTerminal({ shell, profile: shellProfile, size }, (m: TerminalMessage) => {
+        // A replaced session still reports its own exit after the new one
+        // has opened; heard, it marked the new terminal as exited.
+        if (cancelled) return;
         if (m.kind === "output") term.current?.write(m.data);
         else onEvent(m.event);
       })

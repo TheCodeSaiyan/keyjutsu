@@ -109,17 +109,29 @@ fn terminal_profile() -> TerminalProfile {
     profile::detect_terminal_profile()
 }
 
+/// The folder "Open KeyJutsu here" was used on, if it was.
+static LAUNCH_FOLDER: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// A terminal as the window asked for it, started in the launch folder if
+/// there is one. Without it a shell starts in the user's home folder, and
+/// "Open KeyJutsu here" would open everywhere but there.
+fn session_options(request: &OpenRequest, launch_folder: Option<PathBuf>) -> SessionOptions {
+    let mut options = SessionOptions::new(request.shell);
+    options.profile = request.profile;
+    options.size = request.size;
+    options.cwd = launch_folder;
+    // xterm.js answers ConPTY's cursor queries itself.
+    options.intercept_cursor_queries = false;
+    options
+}
+
 #[tauri::command]
 fn terminal_open(
     request: OpenRequest,
     on_message: Channel<TerminalMessage>,
     sessions: State<'_, Arc<Sessions>>,
 ) -> Result<u32, String> {
-    let mut options = SessionOptions::new(request.shell);
-    options.profile = request.profile;
-    options.size = request.size;
-    // xterm.js answers ConPTY's cursor queries itself.
-    options.intercept_cursor_queries = false;
+    let options = session_options(&request, LAUNCH_FOLDER.get().cloned());
     let sink = Arc::new(ChannelSink { channel: on_message, forward: Mutex::new(None) });
     let session = Session::open(options, sink.clone()).map_err(message)?;
     let id = sessions.next.fetch_add(1, Ordering::SeqCst) + 1;
@@ -620,7 +632,8 @@ fn cwd_argument(args: impl IntoIterator<Item = String>) -> Option<String> {
 fn main() {
     // "Open KeyJutsu here" in Explorer passes the folder: terminals start there.
     if let Some(dir) = cwd_argument(std::env::args()) {
-        let _ = std::env::set_current_dir(dir);
+        let _ = std::env::set_current_dir(&dir);
+        let _ = LAUNCH_FOLDER.set(PathBuf::from(dir));
     }
     let sessions = Arc::new(Sessions::default());
     let plans = Arc::new(Plans::default());
@@ -689,7 +702,45 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::cwd_argument;
+    use super::{cwd_argument, session_options};
+
+    /// Found while taking the documentation's screenshots: the folder given
+    /// by "Open KeyJutsu here" was never passed to the shell, which started
+    /// in the home folder every time. Checked on a real shell, which reports
+    /// where it is at its prompt.
+    #[test]
+    fn a_terminal_opens_in_the_folder_explorer_passed() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+
+        use keyjutsu_core::headless::Collector;
+        use keyjutsu_core::ipc::OpenRequest;
+        use keyjutsu_core::terminal::{ProfileMode, ShellKind, TerminalSize};
+
+        let folder = std::env::temp_dir().join(format!("keyjutsu-open-here-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).expect("scratch folder");
+        let request = OpenRequest {
+            shell: ShellKind::WindowsPowershell,
+            profile: ProfileMode::Clean,
+            size: TerminalSize { rows: 24, cols: 100 },
+        };
+        let mut options = session_options(&request, Some(folder.clone()));
+        options.intercept_cursor_queries = true;
+        let session = keyjutsu_core::Session::open(options, Arc::new(Collector::new())).expect("a shell");
+        assert!(session.wait_ready(Duration::from_secs(30)), "no prompt");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while session.shell_location().is_none() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let here = session.shell_location();
+        session.close();
+        assert!(
+            here.as_deref().is_some_and(|h| keyjutsu_core::git::same_path(h, &folder)),
+            "the shell started in {here:?}, not {}",
+            folder.display()
+        );
+        assert_eq!(session_options(&request, None).cwd, None, "no folder given: the home folder");
+    }
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| (*s).to_owned()).collect()

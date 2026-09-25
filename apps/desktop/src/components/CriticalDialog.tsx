@@ -67,7 +67,15 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel }
           {c.impact.length > 0 && (
             <>
               <dt>Impact</dt>
-              <dd>{c.impact.join(" ")}</dd>
+              <dd>
+                {/* The agent's sentence, then KeyJutsu's reasons, which are
+                    fragments: joined with spaces they ran together. */}
+                <ul className="plain">
+                  {c.impact.map((i) => (
+                    <li key={i}>{i}</li>
+                  ))}
+                </ul>
+              </dd>
             </>
           )}
           <dt>Recovery</dt>
