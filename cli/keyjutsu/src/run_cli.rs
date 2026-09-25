@@ -258,23 +258,10 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     }
     options.cwd = Some(start.clone());
     let git_dir = git_folder(args.snapshot);
-    let mut baseline = Vec::new();
-    for (i, repo) in git::repositories(&start, snapshot.plan()).iter().enumerate() {
-        match git::record(repo, Some(&git_dir.join(i.to_string()))) {
-            Ok(r) => baseline.push(r),
-            Err(e) => eprintln!("keyjutsu: cannot record {} before the run: {e}", repo.display()),
-        }
-    }
-    if !baseline.is_empty()
-        && let Err(e) = std::fs::create_dir_all(&git_dir).and_then(|()| {
-            std::fs::write(
-                git_dir.join("baseline.json"),
-                serde_json::to_string_pretty(&baseline).unwrap_or_default(),
-            )
-        })
-    {
-        eprintln!("keyjutsu: cannot save the Git record: {e}");
-    }
+    // Recorded once the shell is running, from where it really is: a profile
+    // can change folder after KeyJutsu starts it.
+    let baseline: Arc<Mutex<Vec<git::RepoState>>> = Arc::default();
+    let isolated_in = args.isolate.map(|_| start.clone());
 
     let result: Arc<Mutex<Option<(Outcome, Checkpoint)>>> = Arc::new(Mutex::new(None));
     let (snap, out, mode) = (snapshot.clone(), result.clone(), args.mode);
@@ -285,7 +272,43 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         resume_gate,
         ..ExecuteOptions::default()
     };
+    let (plan_for_git, git_dir_c, baseline_c, start_c) =
+        (snapshot.plan().clone(), git_dir.clone(), baseline.clone(), start.clone());
     let controller: console::Controller = Box::new(move |session, events| {
+        let here = session.shell_location().unwrap_or(start_c);
+        // Isolation means nothing if the shell is not in the isolated tree.
+        if let Some(dir) = &isolated_in
+            && !git::same_path(&here, dir)
+        {
+            let reason = format!(
+                "the shell started in {} instead of the isolated {} (a profile that changes folder does this; use --clean)",
+                here.display(),
+                dir.display()
+            );
+            if let Ok(mut r) = out.lock() {
+                *r = Some((Outcome::Blocked { reason }, Checkpoint::new(snap.snapshot_hash())));
+            }
+            session.close();
+            return;
+        }
+        let mut recorded = Vec::new();
+        for (i, repo) in git::repositories(&here, &plan_for_git).iter().enumerate() {
+            match git::record(repo, Some(&git_dir_c.join(i.to_string()))) {
+                Ok(r) => recorded.push(r),
+                Err(e) => eprintln!("keyjutsu: cannot record {} before the run: {e}", repo.display()),
+            }
+        }
+        if !recorded.is_empty() {
+            let _ = std::fs::create_dir_all(&git_dir_c).and_then(|()| {
+                std::fs::write(
+                    git_dir_c.join("baseline.json"),
+                    serde_json::to_string_pretty(&recorded).unwrap_or_default(),
+                )
+            });
+        }
+        if let Ok(mut b) = baseline_c.lock() {
+            *b = recorded;
+        }
         let title = |t: &str| {
             let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::SetTitle(t));
         };
@@ -316,6 +339,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         return ExitCode::FAILURE;
     }
     let mut git_reports = Vec::new();
+    let baseline = baseline.lock().map(|b| b.clone()).unwrap_or_default();
     for (i, before) in baseline.iter().enumerate() {
         match git::report(before, &git_dir.join(i.to_string())) {
             Ok(r) => {

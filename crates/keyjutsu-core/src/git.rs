@@ -287,6 +287,11 @@ pub fn repositories(start: &Path, plan: &keyjutsu_plan::model::Plan) -> Vec<Path
     roots
 }
 
+/// Whether two paths name the same folder, ignoring case and slash style.
+pub fn same_path(a: &Path, b: &Path) -> bool {
+    same(a, b)
+}
+
 fn same(a: &Path, b: &Path) -> bool {
     a.display()
         .to_string()

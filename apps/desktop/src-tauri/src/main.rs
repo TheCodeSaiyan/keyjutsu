@@ -498,7 +498,8 @@ fn plan_run(
         // Record the repositories the plan works in, to tell its changes
         // from the operator's afterwards (§31).
         let git_dir = path.with_file_name("git");
-        let start = std::env::current_dir().unwrap_or_default();
+        // Where the shell really is: a profile may have changed folder.
+        let start = session.shell_location().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let baseline: Vec<(git::RepoState, PathBuf)> = git::repositories(&start, snapshot.plan())
             .iter()
             .enumerate()

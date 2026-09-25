@@ -121,6 +121,8 @@ struct Control {
     line_dirty: bool,
     ready: bool,
     exited: bool,
+    /// Where the shell's last prompt said it was.
+    location: Option<std::path::PathBuf>,
 }
 
 struct Inner {
@@ -165,6 +167,7 @@ impl Session {
                 line_dirty: false,
                 ready: false,
                 exited: false,
+                location: None,
             }),
             ready_signal: Condvar::new(),
             tick_generation: AtomicU64::new(0),
@@ -190,6 +193,12 @@ impl Session {
 
     pub fn shell_kind(&self) -> ShellKind {
         self.inner.pty.kind()
+    }
+
+    /// The folder the shell was in at its last prompt: where the next command
+    /// runs. A profile that changes folder is reflected here.
+    pub fn shell_location(&self) -> Option<std::path::PathBuf> {
+        self.inner.lock().location.clone()
     }
 
     /// The shell's process id, which tells one shell from the next across a
@@ -460,6 +469,7 @@ impl Inner {
                 let _ = self.pty.write(format!("\x1b[{row};{col}R").as_bytes());
             }
             ScanItem::Mark(mark) => self.mark(mark),
+            ScanItem::Location(path) => self.lock().location = Some(std::path::PathBuf::from(path)),
         }
     }
 
@@ -560,6 +570,7 @@ mod tests {
             line_dirty: false,
             ready: true,
             exited: false,
+            location: None,
         };
         note_operator_input(&mut c, b"dir");
         assert!(c.line_dirty);

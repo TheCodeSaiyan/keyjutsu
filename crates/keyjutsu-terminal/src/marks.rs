@@ -18,7 +18,8 @@ use std::fmt;
 const OSC_133: &[u8] = b"\x1b]133;";
 const CURSOR_QUERY: &[u8] = b"\x1b[6n";
 /// A mark longer than this is not ours; stop buffering and pass it through.
-const MAX_SEQUENCE: usize = 512;
+/// Long enough for a location mark with a long Windows path.
+const MAX_SEQUENCE: usize = 4096;
 
 /// A per-session secret stamped on every mark KeyJutsu's integration emits.
 #[derive(Clone, PartialEq, Eq)]
@@ -78,6 +79,9 @@ pub enum ScanItem {
     /// Bytes to show the user, with KeyJutsu's own marks removed.
     Output(Vec<u8>),
     Mark(ShellMark),
+    /// KeyJutsu's own `P` mark: the shell's current folder, reported by the
+    /// prompt, so KeyJutsu knows where commands will run.
+    Location(String),
     /// ConPTY asked where the cursor is (`ESC [ 6 n`) and is waiting for an
     /// answer. Only reported when the scanner was asked to intercept these.
     CursorQuery,
@@ -144,9 +148,9 @@ impl MarkScanner {
                         let body = &rest[OSC_133.len()..OSC_133.len() + body_len];
                         let total = OSC_133.len() + body_len + term_len;
                         match parse_mark(body, &self.nonce) {
-                            Some(mark) => {
+                            Some(item) => {
                                 flush(&mut out, &mut items);
-                                items.push(ScanItem::Mark(mark));
+                                items.push(item);
                             }
                             // Not ours: show it exactly as it arrived.
                             None => out.extend_from_slice(&rest[..total]),
@@ -194,8 +198,14 @@ fn find_terminator(s: &[u8]) -> Option<(usize, usize)> {
     None
 }
 
-fn parse_mark(body: &[u8], nonce: &Nonce) -> Option<ShellMark> {
+fn parse_mark(body: &[u8], nonce: &Nonce) -> Option<ScanItem> {
     let body = std::str::from_utf8(body).ok()?;
+    // `P;kj=<nonce>;cwd=<path>`: the path runs to the end, so a `;` in a
+    // folder name does not split it.
+    if let Some(rest) = body.strip_prefix("P;kj=") {
+        let (n, path) = rest.split_once(";cwd=")?;
+        return (n == nonce.as_str() && !path.is_empty()).then(|| ScanItem::Location(path.to_owned()));
+    }
     let mut parts = body.split(';');
     let kind = parts.next()?;
     let mut nonce_ok = false;
@@ -210,13 +220,13 @@ fn parse_mark(body: &[u8], nonce: &Nonce) -> Option<ShellMark> {
     if !nonce_ok {
         return None;
     }
-    Some(match kind {
+    Some(ScanItem::Mark(match kind {
         "A" => ShellMark::PromptStart,
         "B" => ShellMark::CommandStart,
         "C" => ShellMark::CommandExecuted,
         "D" => ShellMark::CommandFinished { exit_code: first_value.and_then(|v| v.parse().ok()) },
         _ => return None,
-    })
+    }))
 }
 
 #[cfg(test)]
@@ -361,5 +371,14 @@ mod tests {
         assert_eq!(a.as_str().len(), 32);
         assert!(a.as_str().bytes().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn the_shell_reports_its_folder_even_with_semicolons_in_it() {
+        let items = scanner().feed(b"x\x1b]133;P;kj=n0nce;cwd=C:\\Work;Files\\a b\x07y");
+        assert!(items.contains(&ScanItem::Location("C:\\Work;Files\\a b".into())), "{items:?}");
+        assert_eq!(output_of(&items), b"xy");
+        let spoof = scanner().feed(b"\x1b]133;P;kj=guess;cwd=C:\\Evil\x07");
+        assert!(!spoof.iter().any(|i| matches!(i, ScanItem::Location(_))), "a wrong nonce is only output");
     }
 }
