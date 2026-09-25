@@ -2,6 +2,7 @@
 // `cargo test`. Do not edit by hand; run `pnpm types:index`.
 export type { CheckResult } from "./generated/execute/CheckResult";
 export type { Checkpoint } from "./generated/execute/Checkpoint";
+export type { CriticalConfirmation } from "./generated/execute/CriticalConfirmation";
 export type { ExecutionEvent } from "./generated/execute/ExecutionEvent";
 export type { InProgress } from "./generated/execute/InProgress";
 export type { Outcome } from "./generated/execute/Outcome";

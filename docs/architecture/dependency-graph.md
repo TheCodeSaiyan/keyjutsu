@@ -50,6 +50,9 @@ flowchart TD
 - **M4 (approval) is done** ([milestone-4.md](milestone-4.md)).
 - **M5 (validation) is done** ([milestone-5.md](milestone-5.md)).
 - **M6 (agent integration) is done** ([milestone-6.md](milestone-6.md)).
+- **M7 (the plan workspace) is done** ([milestone-7.md](milestone-7.md)),
+  after M8, M9 and M11, so its screens could show execution, credentials and
+  recovery as they really work.
 - **M8 (execution) is done** ([milestone-8.md](milestone-8.md)).
 - **M9 (credential gates) is done** ([milestone-9.md](milestone-9.md)).
 - **M11 (recovery) is done** ([milestone-11.md](milestone-11.md)), ahead of

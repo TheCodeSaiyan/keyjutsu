@@ -656,3 +656,53 @@ fn a_user_name_and_password_are_asked_for_in_turn() {
     assert!(!t.out.snapshot().output.contains("pa55word"));
     t.session.close();
 }
+
+#[test]
+fn a_critical_step_is_confirmed_again_just_before_it_runs() {
+    use keyjutsu_core::execute::{CriticalConfirmation, CriticalGate};
+    let dir = scratch("critical-gate");
+    let victim = dir.join("victim");
+    let mut s = step("wipe", &format!("Remove-Item -Recurse -Force -LiteralPath {}", fwd(&victim)));
+    s["title"] = json!("Remove the victim folder");
+    let v = plan(json!([s]), json!([]));
+    let draft = parse_plan(&v.to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, ..Options::default() });
+    assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    assert_eq!(book.approve_all_except_critical(&validated, AT), ["wipe"], "KeyJutsu rates it critical");
+    book.approve(&validated, "wipe", AT, Some("REMOVE THE VICTIM FOLDER")).unwrap();
+    let snap = seal(&validated, &book, None, AT).unwrap();
+
+    let asked: Arc<Mutex<Vec<CriticalConfirmation>>> = Arc::default();
+    let with = |answer: Option<&'static str>| {
+        let asked = asked.clone();
+        let gate: CriticalGate = Arc::new(move |c: &CriticalConfirmation| {
+            asked.lock().unwrap().push(c.clone());
+            answer.map(str::to_owned)
+        });
+        ExecuteOptions { critical_gate: Some(gate), ..mode(ExecutionMode::Direct) }
+    };
+    let t = terminal();
+    for answer in [None, Some("yes"), Some("REMOVE THE VICTIM")] {
+        std::fs::create_dir_all(&victim).unwrap();
+        std::fs::write(victim.join("keep.txt"), "x").unwrap();
+        let (outcome, _, _) = run(&t, &snap, &with(answer), None);
+        assert!(
+            matches!(&outcome, Outcome::Blocked { reason } if reason.contains("not confirmed")),
+            "{answer:?}: {outcome:?}"
+        );
+        assert!(victim.join("keep.txt").exists(), "{answer:?}: it ran without confirmation");
+    }
+    let (outcome, _, _) = run(&t, &snap, &with(Some("REMOVE THE VICTIM FOLDER")), None);
+    assert_eq!(outcome, Outcome::Complete);
+    assert!(!victim.exists());
+    t.session.close();
+
+    let asked = asked.lock().unwrap();
+    assert_eq!(asked.len(), 4);
+    assert_eq!(asked[0].phrase, "REMOVE THE VICTIM FOLDER");
+    assert!(asked[0].commands[0].contains("Remove-Item -Recurse"));
+    assert!(asked[0].recovery.contains("cannot undo"), "{:?}", asked[0].recovery);
+}

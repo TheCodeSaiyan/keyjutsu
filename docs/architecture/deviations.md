@@ -217,3 +217,13 @@ needs an elevated process, UAC prompts and someone to answer them. The cost
 is that restoring services and HKLM values, which need elevation, fails and
 is reported as failed until the broker exists
 ([milestone-11.md](milestone-11.md#limits)).
+
+## D23. The plan workspace lists the plan rather than drawing it
+
+§60 asks for a plan "graph/list", and §11 for disabling steps. The workspace
+lists steps in graph order with their dependencies in the step detail; it
+does not draw edges. A plan with branches reads correctly as a list only
+because the order is the graph's, and a drawn graph (kit §16) is still owed.
+Disabling a step is not built because the plan schema has no field for it;
+removing the step does the same, and is refused while other steps depend on
+it, so the operator decides how to re-link them.

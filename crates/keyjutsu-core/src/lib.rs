@@ -13,6 +13,7 @@ pub mod ipc;
 pub mod readiness;
 pub mod recovery;
 pub mod session;
+pub mod workspace;
 
 pub use keyjutsu_agent as agent;
 pub use keyjutsu_execution as execution;

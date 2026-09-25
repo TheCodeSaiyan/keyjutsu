@@ -197,7 +197,31 @@ pub enum ExecutionEvent {
     },
 }
 
-#[derive(Debug, Clone)]
+/// What the operator is shown before a critical step runs (§28).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "execute/")]
+pub struct CriticalConfirmation {
+    pub step: String,
+    pub title: String,
+    pub commands: Vec<String>,
+    /// What it acts on, from the step's declared effects.
+    pub targets: Vec<String>,
+    /// Why it is needed and what it does, from the plan.
+    pub impact: Vec<String>,
+    /// How it would be undone, or that it cannot be.
+    pub recovery: String,
+    /// What validation found.
+    pub evidence: Vec<String>,
+    /// The phrase to type.
+    pub phrase: String,
+}
+
+/// Asks the operator to confirm a critical step just before it runs, and
+/// returns what they typed, or `None` if they declined. The executor, not
+/// the gate, decides whether it matches.
+pub type CriticalGate = std::sync::Arc<dyn Fn(&CriticalConfirmation) -> Option<String> + Send + Sync>;
+
+#[derive(Clone)]
 pub struct ExecuteOptions {
     /// The mode for steps that do not set one; the plan's default otherwise.
     pub mode: Option<EngineMode>,
@@ -207,6 +231,9 @@ pub struct ExecuteOptions {
     pub settled: BTreeMap<String, bool>,
     /// How long to wait for the shell to return to its prompt between steps.
     pub prompt_timeout: Duration,
+    /// Asked just before each critical step (§28). Without one, the typed
+    /// confirmation given at approval is all there is.
+    pub critical_gate: Option<CriticalGate>,
 }
 
 impl Default for ExecuteOptions {
@@ -217,7 +244,59 @@ impl Default for ExecuteOptions {
             checkpoint: None,
             settled: BTreeMap::new(),
             prompt_timeout: Duration::from_secs(120),
+            critical_gate: None,
         }
+    }
+}
+
+impl std::fmt::Debug for ExecuteOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExecuteOptions")
+            .field("mode", &self.mode)
+            .field("checkpoint", &self.checkpoint)
+            .field("settled", &self.settled)
+            .field("critical_gate", &self.critical_gate.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+/// The confirmation for a critical step, from the plan and its validation.
+pub fn critical_confirmation(plan: &keyjutsu_plan::model::Plan, step: &Step) -> CriticalConfirmation {
+    let state = plan.keyjutsu.as_ref().and_then(|k| k.steps.get(&step.id));
+    let mut impact: Vec<String> = step.proposed_risk.iter().map(|r| r.rationale.clone()).collect();
+    impact.extend(step.reason.iter().cloned());
+    if let Some(s) = state {
+        impact.extend(s.risk_reasons.iter().cloned());
+    }
+    let recovery = match (&step.recovery, &step.reversibility) {
+        (Some(r), _) if r.strategy == keyjutsu_plan::model::RecoveryStrategy::RestoreCapturedState => {
+            "KeyJutsu captures the current state first and can restore it".to_owned()
+        }
+        (Some(r), _) if r.strategy == keyjutsu_plan::model::RecoveryStrategy::Commands => {
+            "the plan has recovery commands".to_owned()
+        }
+        (_, Some(rev)) if rev.level == keyjutsu_plan::model::ReversibilityLevel::None => format!(
+            "NONE: this cannot be undone by KeyJutsu{}",
+            rev.notes.as_deref().map(|n| format!(". {n}")).unwrap_or_default()
+        ),
+        _ => "none declared: KeyJutsu cannot undo this".to_owned(),
+    };
+    CriticalConfirmation {
+        step: step.id.clone(),
+        title: step.title.clone(),
+        commands: step.commands.iter().map(|c| c.text.clone()).collect(),
+        targets: step.expected_effects.iter().map(|e| e.target.clone()).collect(),
+        impact,
+        recovery,
+        evidence: state
+            .map(|s| {
+                s.evidence
+                    .iter()
+                    .map(|e| format!("{}: {}", e.check, e.detail.as_deref().unwrap_or("")))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        phrase: keyjutsu_plan::approval::confirmation_phrase(step),
     }
 }
 
@@ -718,6 +797,25 @@ pub fn execute(
                 Outcome::Blocked { reason: "the shell did not return to its prompt".into() },
                 checkpoint,
             );
+        }
+        // A critical step is confirmed again, just before it runs.
+        if let Some(gate) = &options.critical_gate
+            && keyjutsu_plan::approval::is_critical(plan, step)
+        {
+            let ask = critical_confirmation(plan, step);
+            let typed = gate(&ask);
+            if typed.as_deref().map(str::trim) != Some(ask.phrase.as_str()) {
+                save(&checkpoint);
+                return finish(
+                    Outcome::Blocked {
+                        reason: format!(
+                            "critical step `{id}` was not confirmed, so it did not run{}",
+                            if typed.is_some() { " (the phrase did not match)" } else { "" }
+                        ),
+                    },
+                    checkpoint,
+                );
+            }
         }
         // Prepare the step's recovery before it runs, or do not run it.
         if step.recovery.as_ref().is_some_and(|r| !r.capture.is_empty()) {

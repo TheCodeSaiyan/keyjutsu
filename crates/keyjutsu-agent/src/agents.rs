@@ -11,7 +11,9 @@ use std::path::{Path, PathBuf};
 use keyjutsu_plan::model::AgentName;
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, ts_rs::TS)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, serde::Deserialize, ts_rs::TS,
+)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "agent/")]
 pub enum AgentKind {

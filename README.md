@@ -14,15 +14,15 @@ agent proposes a plan, KeyJutsu checks it against your actual machine, you
 review and approve it, and only then does anything run, with each step checked
 after it runs.
 
-> **Status: early.** Milestones 0 to 6, 8, 9 and 11 of 17 are built: the
-> real terminal, the performance engine, the plan model, approval,
-> validation, agent integration, execution of approved plans, credential
-> gates and recovery. The desktop app has no
-> plan workspace yet (Milestone 7), so today planning, validation, approval
-> and execution happen in the CLI (`keyjutsu agents`, `keyjutsu plan`,
-> `keyjutsu run`). Per milestone: [0–2](docs/architecture/milestones-0-2.md),
+> **Status: early.** Milestones 0 to 9 and 11 of 17 are built: the real
+> terminal, the performance engine, the plan model, approval, validation,
+> agent integration, the desktop plan workspace, execution of approved
+> plans, credential gates and recovery. Planning, validation, approval and
+> execution work in the desktop app and in the CLI (`keyjutsu agents`,
+> `keyjutsu plan`, `keyjutsu run`, `keyjutsu recover`). Per milestone: [0–2](docs/architecture/milestones-0-2.md),
 > [3](docs/architecture/milestone-3.md), [4](docs/architecture/milestone-4.md),
 > [5](docs/architecture/milestone-5.md), [6](docs/architecture/milestone-6.md),
+> [7](docs/architecture/milestone-7.md),
 > [8](docs/architecture/milestone-8.md), [9](docs/architecture/milestone-9.md),
 > [11](docs/architecture/milestone-11.md).
 
