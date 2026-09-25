@@ -65,7 +65,12 @@ impl Drop for TestKey {
     fn drop(&mut self) {
         let _ = std::process::Command::new("pwsh")
             .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
-            .arg(format!("Remove-Item -LiteralPath '{}' -Recurse -Force", self.0))
+            // The shared parent goes too once it is empty. Without -Recurse,
+            // removing it fails while another test's key is still inside.
+            .arg(format!(
+                "Remove-Item -LiteralPath '{}' -Recurse -Force; $p = 'HKCU:\\Software\\KeyJutsu-Tests'; if (-not (Get-ChildItem -LiteralPath $p)) {{ Remove-Item -LiteralPath $p -ErrorAction SilentlyContinue }}",
+                self.0
+            ))
             .output();
     }
 }
