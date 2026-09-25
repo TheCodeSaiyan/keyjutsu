@@ -576,7 +576,8 @@ fn plan_run(
             .collect();
         let (tx, rx) = channel();
         *locked(&sink.forward) = Some(tx);
-        let (outcome, _) = execute(
+        let started = fingerprint::now_rfc3339();
+        let (outcome, finished_checkpoint) = execute(
             &Driver { session: &session, events: &rx },
             &snapshot,
             resume,
@@ -599,15 +600,96 @@ fn plan_run(
             }),
             _ => None,
         };
-        let git = baseline.iter().filter_map(|(before, copies)| git::report(before, copies).ok()).collect();
+        let git: Vec<git::RepoReport> =
+            baseline.iter().filter_map(|(before, copies)| git::report(before, copies).ok()).collect();
+        // Recorded in the encrypted history, as the CLI records its runs, so
+        // a run that worked can become a Technique.
+        let finished = fingerprint::now_rfc3339();
+        let record = keyjutsu_core::history::SessionRecord {
+            id: keyjutsu_core::store::new_id(&finished),
+            started_at: started,
+            finished_at: finished,
+            task: snapshot.plan().title.clone().unwrap_or_else(|| snapshot.plan().task_id.clone()),
+            agent: snapshot.plan().agent.clone(),
+            snapshot: snapshot.to_json(),
+            checkpoint: Some(finished_checkpoint),
+            outcome: outcome.clone(),
+            git: git.clone(),
+        };
+        let session = open_store()
+            .and_then(|s| keyjutsu_core::history::save(&s, &record))
+            .map(|()| record.id.clone())
+            .ok();
         let _ = on_event.send(RunMessage::Done {
             outcome,
             snapshot: path.display().to_string(),
             checkpoint: checkpoint.display().to_string(),
             git,
+            session,
         });
     });
     Ok(())
+}
+
+/// Every recorded run, newest first.
+#[tauri::command]
+fn history_list() -> Result<Vec<keyjutsu_core::history::SessionSummary>, String> {
+    let mut list = keyjutsu_core::history::list(&open_store()?)?;
+    list.reverse();
+    Ok(list)
+}
+
+#[tauri::command]
+fn history_show(id: String) -> Result<keyjutsu_core::history::SessionRecord, String> {
+    keyjutsu_core::history::load(&open_store()?, &id)
+}
+
+/// Make a completed run into a Technique. Each pair is a parameter's name and
+/// the value in the run's plan that it stands for.
+#[tauri::command]
+fn technique_promote(
+    session: String,
+    name: String,
+    description: String,
+    params: Vec<(String, String)>,
+) -> Result<keyjutsu_core::technique::Technique, String> {
+    let store = open_store()?;
+    let record = keyjutsu_core::history::load(&store, &session)?;
+    let promote: Vec<keyjutsu_core::technique::Promote<'_>> = params
+        .iter()
+        .map(|(n, v)| keyjutsu_core::technique::Promote { name: n, description: "", value: v, pattern: None })
+        .collect();
+    let t = keyjutsu_core::technique::promote(
+        &record,
+        &name,
+        &description,
+        &promote,
+        &fingerprint::now_rfc3339(),
+    )?;
+    keyjutsu_core::technique::save(&store, &t)?;
+    Ok(t)
+}
+
+#[tauri::command]
+fn technique_list() -> Result<Vec<keyjutsu_core::technique::Technique>, String> {
+    keyjutsu_core::technique::list(&open_store()?)
+}
+
+#[tauri::command]
+fn technique_use(
+    id: String,
+    values: BTreeMap<String, String>,
+    plans: State<'_, Arc<Plans>>,
+) -> Result<keyjutsu_core::ipc::TechniqueDraft, String> {
+    let t = keyjutsu_core::technique::latest(&open_store()?, &id)?;
+    let draft = keyjutsu_core::technique::instantiate(&t, &values)?;
+    let fit = keyjutsu_core::technique::fit(&t, &draft, &fingerprint::collect(Some(draft.plan())));
+    let w = Workspace::open(&draft.to_json()).map_err(|e| e.to_string())?;
+    let view = w.view();
+    *locked(&plans.workspace) = Some(w);
+    *locked(&plans.sealed) = None;
+    *locked(&plans.failed) = None;
+    Ok(keyjutsu_core::ipc::TechniqueDraft { view, fit })
 }
 
 /// The operator's answer to a critical confirmation: what they typed, or
@@ -724,6 +806,11 @@ fn main() {
             workspace_stage,
             workspace_retry_step,
             workspace_fix_failure,
+            history_list,
+            history_show,
+            technique_promote,
+            technique_list,
+            technique_use,
             workspace_revise,
             workspace_review,
             workspace_approve,

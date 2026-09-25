@@ -178,7 +178,7 @@ fn diff_names_the_steps_that_need_revalidation() {
     assert!(out.status.success());
     let t = text(&out);
     assert!(t.contains("changed  date: commands"), "{t}");
-    assert!(t.contains("2 step(s) require revalidation"), "date and svc after it: {t}");
+    assert!(t.contains("2 steps require revalidation"), "date and svc after it: {t}");
 }
 
 /// `plan revise --session` reads the failure from the encrypted history, and

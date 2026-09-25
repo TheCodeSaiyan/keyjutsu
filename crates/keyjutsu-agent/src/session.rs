@@ -80,7 +80,7 @@ pub enum AgentError {
     /// for, so its answer, if any, was discarded (§6).
     #[error("{0}")]
     NotReadOnly(String),
-    #[error("no acceptable answer after {attempts} attempt(s); last problems: {}", problems.join("; "))]
+    #[error("no acceptable answer after {}; last problems: {}", keyjutsu_plan::count(*attempts, "attempt", "attempts"), problems.join("; "))]
     Unacceptable { attempts: usize, problems: Vec<String> },
     #[error("there is no step `{0}` to revise")]
     UnknownStep(String),

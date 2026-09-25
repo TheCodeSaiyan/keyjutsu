@@ -29,3 +29,8 @@ pub use hash::{EnvironmentFingerprint, step_hashes};
 pub use model::{Condition, Plan, Step};
 pub use parse::{PlanError, ValidPlan, parse_plan, parse_proposal};
 pub use walk::{Frontier, frontier};
+
+/// "1 step", "2 steps": a count as a person would say it.
+pub fn count(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}

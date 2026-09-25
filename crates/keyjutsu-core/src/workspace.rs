@@ -565,11 +565,25 @@ impl Workspace {
             });
         }
         if overall.unvalidated > 0 {
-            overall.blocking.push(format!("{} step(s) need validation", overall.unvalidated));
+            overall.blocking.push(format!(
+                "{} validation",
+                keyjutsu_plan::count(
+                    usize::try_from(overall.unvalidated).unwrap_or(usize::MAX),
+                    "step needs",
+                    "steps need"
+                )
+            ));
         }
         let not_ready = overall.needs_review + overall.blocked + overall.invalid;
         if not_ready > 0 {
-            overall.blocking.push(format!("{not_ready} step(s) are not ready"));
+            overall.blocking.push(format!(
+                "{} not ready",
+                keyjutsu_plan::count(
+                    usize::try_from(not_ready).unwrap_or(usize::MAX),
+                    "step is",
+                    "steps are"
+                )
+            ));
         }
         WorkspaceView {
             task: self.task.clone(),

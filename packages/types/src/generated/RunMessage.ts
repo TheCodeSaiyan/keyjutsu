@@ -9,6 +9,10 @@ import type { RepoReport } from "./git/RepoReport";
  */
 export type RunMessage = { "kind": "execution", event: ExecutionEvent, } | { "kind": "confirm", confirmation: CriticalConfirmation, } | { "kind": "done", outcome: Outcome, snapshot: string, checkpoint: string, 
 /**
- * What the run did to each Git repository it worked in (§31).
+ * What the run did to each Git repository it worked in.
  */
-git: Array<RepoReport>, };
+git: Array<RepoReport>, 
+/**
+ * The id it was recorded under in the encrypted history, if it was.
+ */
+session?: string, };

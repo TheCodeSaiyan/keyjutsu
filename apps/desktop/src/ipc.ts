@@ -1,8 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   agent,
+  history,
   plan,
   recovery,
+  technique,
   workspace,
   KeyChord,
   OpenRequest,
@@ -15,6 +17,7 @@ import type {
   TerminalMessage,
   TerminalProfile,
   TerminalSize,
+  TechniqueDraft,
 } from "@keyjutsu/types";
 
 /**
@@ -60,6 +63,16 @@ export const ipc = {
   stage: () => invoke<workspace.WorkspaceView>("workspace_stage"),
   retryStep: (agent: agent.AgentKind, step: string, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_retry_step", { agent, step, guidance }),
+  /** Recorded runs, newest first. */
+  history: () => invoke<history.SessionSummary[]>("history_list"),
+  historyShow: (id: string) => invoke<history.SessionRecord>("history_show", { id }),
+  /** Make a completed run a Technique; each pair is a parameter and the value it stands for. */
+  promote: (session: string, name: string, description: string, params: [string, string][]) =>
+    invoke<technique.Technique>("technique_promote", { session, name, description, params }),
+  techniques: () => invoke<technique.Technique[]>("technique_list"),
+  /** A Technique as a draft plan in the workspace, to validate and approve. */
+  useTechnique: (id: string, values: Record<string, string>) =>
+    invoke<TechniqueDraft>("technique_use", { id, values }),
   /** Ask the agent to fix the step the last run failed at, from what it printed. */
   fixFailure: (agent: agent.AgentKind, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_fix_failure", { agent, guidance }),

@@ -77,9 +77,12 @@ switch ($Action) {
     foreach ($try in 1..5) {
       $all = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond))
       if ($all.Count -eq 0) {
-        # A label styled in capitals is reported in capitals ("ARM KEYJUTSU").
-        $all = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
-          Where-Object { $_.Current.Name -ieq $Arg })
+        # A label styled in capitals is reported in capitals ("ARM KEYJUTSU"),
+        # and a list entry's name runs its lines together: match ignoring
+        # case, then by the start of the name.
+        $every = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition))
+        $all = @($every | Where-Object { $_.Current.Name -ieq $Arg })
+        if ($all.Count -eq 0) { $all = @($every | Where-Object { $_.Current.Name -like "$Arg*" }) }
       }
       $el = @($all | Where-Object { $controls -contains $_.Current.ControlType.ProgrammaticName }) + $all | Select-Object -First 1
       if ($el) { break }

@@ -353,10 +353,10 @@ pub fn check(live: bool) -> ExitCode {
         let result = agents.propose(&handle, task, &context, &fingerprint::now_rfc3339());
         match result {
             Ok(p) => println!(
-                "  ok     {:<20} {} ({} step(s))",
+                "  ok     {:<20} {} ({})",
                 info.name,
                 handle.version,
-                p.plan.plan().steps.len()
+                crate::count(p.plan.plan().steps.len(), "step", "steps")
             ),
             Err(e) => {
                 failures += 1;

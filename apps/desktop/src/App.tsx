@@ -29,6 +29,8 @@ import { NewTask } from "./components/NewTask";
 import { PlanWorkspace } from "./components/PlanWorkspace";
 import { CriticalDialog } from "./components/CriticalDialog";
 import { RunPanel } from "./components/RunPanel";
+import { HistoryView } from "./components/HistoryView";
+import { TechniquesView } from "./components/TechniquesView";
 import { confirmationFor } from "./plan";
 import mark from "./assets/mark.png";
 
@@ -87,7 +89,9 @@ export function App() {
     readFlag(FIRST_RUN_KEY) ? "workspace" : "first-run",
   );
   // Where the operator is: the task, the plan, or the terminal (§8).
-  const [space, setSpace] = useState<"task" | "plan" | "terminal">("task");
+  const [space, setSpace] = useState<"task" | "plan" | "terminal" | "history" | "techniques">(
+    "task",
+  );
   const [agents, setAgents] = useState<agent.AgentInfo[] | null>(null);
   const [ws, setWs] = useState<workspace.WorkspaceView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -493,6 +497,22 @@ export function App() {
                 Terminal
               </button>
             </li>
+            <li>
+              <button
+                aria-current={space === "history" ? "page" : undefined}
+                onClick={() => setSpace("history")}
+              >
+                History
+              </button>
+            </li>
+            <li>
+              <button
+                aria-current={space === "techniques" ? "page" : undefined}
+                onClick={() => setSpace("techniques")}
+              >
+                Techniques
+              </button>
+            </li>
           </ul>
           <p className="rail-foot small muted">
             Local target · {report?.windows.product ?? "Windows"}
@@ -521,6 +541,19 @@ export function App() {
               act("The agent is investigating…", () => ipc.propose(task, kind, context))
             }
             onOpen={(text) => act("Reading the plan…", () => ipc.openPlan(text))}
+          />
+        )}
+        {space === "history" && !fullTerminal && (
+          <HistoryView busy={busy !== null} onPromoted={() => setSpace("techniques")} />
+        )}
+        {space === "techniques" && !fullTerminal && (
+          <TechniquesView
+            busy={busy !== null}
+            onDraft={(draft) => {
+              setWs(draft.view);
+              setSealed(null);
+              setSpace("plan");
+            }}
           />
         )}
         {space === "plan" && ws && !fullTerminal && (

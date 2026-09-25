@@ -31,6 +31,7 @@ export type { StagedScript } from "./generated/StagedScript";
 export type { StagedStep } from "./generated/StagedStep";
 export type { StepOutcome } from "./generated/StepOutcome";
 export type { SubmitPolicy } from "./generated/SubmitPolicy";
+export type { TechniqueDraft } from "./generated/TechniqueDraft";
 export type { TerminalMessage } from "./generated/TerminalMessage";
 export type { TerminalProfile } from "./generated/TerminalProfile";
 export type { TerminalSize } from "./generated/TerminalSize";

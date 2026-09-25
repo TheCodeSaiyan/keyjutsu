@@ -286,7 +286,11 @@ pub fn verify(file: &Path, environment: bool) -> ExitCode {
         println!("No step depends on what changed.");
         ExitCode::SUCCESS
     } else {
-        println!("{} step(s) require revalidation: {}", affected.len(), affected.join(", "));
+        println!(
+            "{} revalidation: {}",
+            crate::count(affected.len(), "step requires", "steps require"),
+            affected.join(", ")
+        );
         ExitCode::FAILURE
     }
 }
@@ -322,7 +326,7 @@ pub fn diff(old: &Path, new: &Path) -> ExitCode {
     if d.affected.is_empty() {
         println!("No step needs revalidation.");
     } else {
-        println!("{} step(s) require revalidation:", d.affected.len());
+        println!("{} revalidation:", crate::count(d.affected.len(), "step requires", "steps require"));
         for id in &d.affected {
             let was = ha.get(id).map(|h| short(h)).unwrap_or("(new)");
             println!("  {id}  {was} -> {}", short(&hb[id]));

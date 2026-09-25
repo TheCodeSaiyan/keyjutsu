@@ -106,6 +106,36 @@ d chord '^%+k'                    # disarm
 launch "$kj\work\validated.json"
 d capture '' 'plan-workspace'
 
+# A run in the app, recorded, made a Technique and used again: the end of
+# the specification's V1 scenario. Direct mode, so no keys are needed.
+launch "$kj\work\validated.json"
+d click 'Terminal'
+Start-Sleep -Seconds 6
+d click 'Direct'
+d click 'Plan'
+Start-Sleep -Seconds 2
+d click 'Approve plan'
+Start-Sleep -Seconds 6
+d click 'Arm KeyJutsu'
+Start-Sleep -Seconds 30
+d capture '' 'run-complete'
+d click 'History'
+Start-Sleep -Seconds 3
+d click 'Check that Windows Management Instrumentation'
+Start-Sleep -Seconds 3
+d click 'Parameters, one per line'
+d keys 'service_name = Winmgmt'
+Start-Sleep -Seconds 1
+d capture '' 'history'
+d click 'Make a Technique'
+Start-Sleep -Seconds 3
+d click 'Check that Windows Management Instrumentation'
+Start-Sleep -Seconds 2
+d capture '' 'techniques'
+d click 'Make a draft plan'
+Start-Sleep -Seconds 5
+d capture '' 'technique-draft'
+
 launch "$kj\work\critical-validated.json"
 d click 'Approve plan'
 Start-Sleep -Seconds 4

@@ -162,7 +162,8 @@ still holds. It has been run across a real Windows restart.
 
 ## History and Techniques
 
-Every CLI run is recorded, encrypted, unless you ask it not to be. A run that
+Every run is recorded, encrypted, from the desktop app or the CLI; a CLI run
+can opt out with `--ephemeral`. A run that
 worked can become a Technique, with parameters, to use again. A Technique
 never runs because it worked before: it makes a draft that's validated and
 approved here, with a note of which steps are on unfamiliar ground.
@@ -173,8 +174,8 @@ approved here, with a note of which steps are on unfamiliar ground.
 
 The desktop app (New task, Plan and Terminal) and the `keyjutsu` CLI drive
 the same Rust core, so there's one implementation of what may reach a shell.
-The desktop has no history or Technique screens yet, and stops at a restart
-boundary without resuming past it; the CLI does both.
+The desktop stops at a restart boundary without resuming past it; the CLI
+can resume there.
 
 ## Checked against its own rules
 

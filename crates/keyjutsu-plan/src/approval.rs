@@ -170,11 +170,11 @@ impl ApprovalBook {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SealError {
-    #[error("{} step(s) are not approved as they stand: {}", .0.len(), .0.join(", "))]
+    #[error("{} not approved as they stand: {}", crate::count(.0.len(), "step is", "steps are"), .0.join(", "))]
     NotApproved(Vec<String>),
     /// Validation found these steps not READY (§12: a plan must not arm with
     /// a step that is blocked, invalid, awaiting review or awaiting revalidation).
-    #[error("{} step(s) are not ready: {}", .0.len(), .0.join(", "))]
+    #[error("{} not ready: {}", crate::count(.0.len(), "step is", "steps are"), .0.join(", "))]
     NotReady(Vec<String>),
 }
 

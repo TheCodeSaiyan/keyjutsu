@@ -81,12 +81,12 @@ pub enum PlanError {
     MissingVersion,
     #[error("schema version {found} is not supported; this KeyJutsu reads {supported}")]
     UnsupportedVersion { found: String, supported: String },
-    #[error("the plan does not match the schema ({} problem(s))", violations.len())]
+    #[error("the plan does not match the schema ({})", crate::count(violations.len(), "problem", "problems"))]
     Schema { violations: Vec<SchemaViolation> },
     /// The schema accepted it but the Rust model did not: the two disagree.
     #[error("internal error: the schema and the plan model disagree: {detail}")]
     ModelMismatch { detail: String },
-    #[error("the plan's structure is invalid ({} problem(s))", problems.len())]
+    #[error("the plan's structure is invalid ({})", crate::count(problems.len(), "problem", "problems"))]
     Invalid { problems: Vec<Problem> },
 }
 
