@@ -69,9 +69,13 @@ with "Proposed N steps in M attempt(s)", and the plan is written to
 
 ### 2. Read the plan
 
-In the desktop app, the **Plan** space lists the steps down the left. Select
-one to see its commands, what it's meant to achieve, the risk the agent put on
-it, and how it would be undone. From the CLI:
+In the desktop app, the **Plan** space lists the steps in the middle. Select
+one to see its commands, what it's meant to achieve, the evidence behind its
+readiness, its risk, and how it would be undone:
+
+![The KeyJutsu Plan screen. Two steps of the example plan, both READY and low risk. The first is selected, showing its command, Get-Service -Name Winmgmt, the evidence behind its readiness, and Edit, Retry step with agent, Move and Remove. At the foot, 2/2 ready, no elevation, and Validate and Approve plan.](../images/plan-workspace.png)
+
+From the CLI:
 
 ```powershell
 keyjutsu plan check spooler.json

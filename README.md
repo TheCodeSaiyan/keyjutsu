@@ -1,8 +1,5 @@
 <h1 align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/KeyJutsu-Design-Kit/assets/brand/keyjutsu_monogram_logo.png">
-    <img src="docs/brand/KeyJutsu-Design-Kit/assets/brand/keyjutsu_keycap_logo.png" alt="KeyJutsu" width="420">
-  </picture>
+  <img src="docs/brand/KeyJutsu-Design-Kit/assets/brand/keyjutsu_terminal_banner.png" alt="KeyJutsu. The terminal is real. The typing is theatre." width="860">
 </h1>
 
 **Mash random keys while real, validated commands type themselves perfectly
@@ -82,6 +79,8 @@ which no amount of key-mashing can produce.
 keyjutsu plan validate spooler.json
 keyjutsu plan approve spooler.json --out spooler.approved.json
 ```
+
+![The KeyJutsu Plan screen. Two steps of the example plan, both READY and low risk. The first is selected, showing its command, Get-Service -Name Winmgmt, the evidence behind its readiness, and Edit, Retry step with agent, Move and Remove. At the foot, 2/2 ready, no elevation, and Validate and Approve plan.](docs/images/plan-workspace.png)
 
 ### A run that checks itself, and stops rather than guesses
 

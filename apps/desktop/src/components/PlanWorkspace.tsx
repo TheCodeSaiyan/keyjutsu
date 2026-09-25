@@ -134,7 +134,7 @@ export function PlanWorkspace(props: Props) {
               {view.overall.needs_elevation ? "Elevation needed" : "No elevation"}
             </span>
             <span className="muted">
-              {view.overall.recovery_prepared ? "Recovery declared" : "Some recovery missing"}
+              {view.overall.recovery_prepared ? "Recovery: none missing" : "Some recovery missing"}
             </span>
           </div>
           <div className="row">
