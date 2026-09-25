@@ -210,7 +210,8 @@ pub fn what_if(program: &Path, line: &LineAnalysis, text: &str) -> Result<WhatIf
             .lines()
             .map(str::trim)
             .filter(|l| !l.is_empty() && !is_progress_only(l))
-            .map(str::to_owned),
+            .map(readable_error)
+            .filter(|l| !l.is_empty()),
     );
     Ok(WhatIf { ran: true, operations, errors })
 }
@@ -230,6 +231,76 @@ pub fn is_progress_only(line: &str) -> bool {
     !kinds.is_empty() && kinds.iter().all(|k| *k == "progress")
 }
 
+/// An error as PowerShell would have shown it. With its output redirected,
+/// PowerShell writes errors to standard error as CLIXML: the rendered error,
+/// colour codes included, split into `<S S="Error">` strings with control
+/// characters escaped as `_xHHHH_`. What people need is its first line (the
+/// command) and its last (the message); the lines between point at the
+/// column. Anything that isn't CLIXML is returned as it came.
+pub fn readable_error(line: &str) -> String {
+    if !line.starts_with("<Objs") {
+        return line.to_owned();
+    }
+    let text: String = line.split("<S S=\"Error\">").skip(1).filter_map(|s| s.split("</S>").next()).collect();
+    let text = unescape_clixml(&text);
+    let lines: Vec<&str> = text
+        .lines()
+        .map(|l| l.trim().trim_start_matches('|').trim())
+        .filter(|l| !l.is_empty() && !l.chars().all(|c| c == '~'))
+        .collect();
+    match (lines.first(), lines.last()) {
+        (Some(first), Some(last)) if lines.len() > 1 && first.ends_with(':') => format!("{first} {last}"),
+        (Some(_), Some(last)) => (*last).to_owned(),
+        _ => String::new(),
+    }
+}
+
+/// `_xHHHH_` escapes decoded, colour codes (ESC [ ... letter) dropped, and
+/// the XML entities put back.
+fn unescape_clixml(text: &str) -> String {
+    let mut decoded = String::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("_x") {
+        decoded.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let code = tail
+            .get(2..6)
+            .filter(|_| tail.get(6..7) == Some("_"))
+            .and_then(|h| u32::from_str_radix(h, 16).ok());
+        match code.and_then(char::from_u32) {
+            Some(c) => {
+                decoded.push(c);
+                rest = &tail[7..];
+            }
+            None => {
+                decoded.push_str("_x");
+                rest = &tail[2..];
+            }
+        }
+    }
+    decoded.push_str(rest);
+    let mut plain = String::new();
+    let mut chars = decoded.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else if c != '\r' {
+            plain.push(c);
+        }
+    }
+    plain
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,6 +314,20 @@ mod tests {
         let error = r#"<Objs Version="1.1.0.1"><Obj S="progress" RefId="0"></Obj><S S="Error">Cannot find path</S><Obj S="Error" RefId="1"></Obj></Objs>"#;
         assert!(!is_progress_only(error));
         assert!(!is_progress_only("Remove-Item: Cannot find path"));
+    }
+
+    /// Seen while writing the documentation: a failed dry run's reason was
+    /// the raw CLIXML, escaped colour codes and all, on screen and in the CLI.
+    #[test]
+    fn a_dry_run_error_reads_as_powershell_would_show_it() {
+        let raw = r#"<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">_x001B_[31;1mRemove-Item: _x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1mLine |_x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1m_x001B_[36;1m   5 | _x001B_[0m _x001B_[36;1mRemove-Item -Recurse -Force -LiteralPath C:/Users/Public/BuildCache_x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1m_x001B_[36;1m_x001B_[0m_x001B_[36;1m_x001B_[0m_x001B_[36;1m     | _x001B_[31;1m ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~_x001B_[0m_x000D__x000A_</S><S S="Error">_x001B_[31;1m_x001B_[36;1m_x001B_[36;1m_x001B_[0m_x001B_[36;1m_x001B_[0m_x001B_[36;1m_x001B_[31;1m_x001B_[31;1m_x001B_[36;1m     | _x001B_[31;1mCannot find path 'C:/Users/Public/BuildCache' because it does not exist._x001B_[0m_x000D__x000A_</S></Objs>"#;
+        assert_eq!(
+            readable_error(raw),
+            "Remove-Item: Cannot find path 'C:/Users/Public/BuildCache' because it does not exist."
+        );
+        let entities = r#"<Objs Version="1.1.0.1"><S S="Error">Get-Item: a &lt;b&gt; &amp; &quot;c&quot;_x000D__x000A_</S></Objs>"#;
+        assert_eq!(readable_error(entities), r#"Get-Item: a <b> & "c""#);
+        assert_eq!(readable_error("plain text stays"), "plain text stays");
     }
 
     fn line(json: serde_json::Value) -> LineAnalysis {
