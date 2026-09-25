@@ -139,7 +139,12 @@ fn the_same_snapshot_runs_in_every_mode() {
             let (session, done) = (t.session.clone(), done.clone());
             std::thread::spawn(move || {
                 while !done.load(Ordering::SeqCst) {
-                    let _ = session.key(&KeyChord::char('z'));
+                    // As the CLI and desktop do during a run: a key with no
+                    // performance owning the keyboard is held back, not typed
+                    // into the shell (it would dirty the line before arming).
+                    if session.snapshot().is_some_and(|s| s.owns_input) {
+                        let _ = session.key(&KeyChord::char('z'));
+                    }
                     std::thread::sleep(Duration::from_millis(3));
                 }
             })

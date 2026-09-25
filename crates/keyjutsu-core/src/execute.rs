@@ -227,6 +227,20 @@ pub struct CriticalConfirmation {
     pub phrase: String,
 }
 
+/// How long an approval of a critical step stands on its own. After this, or
+/// when the time it was approved cannot be read, the phrase is asked for
+/// again before the step runs.
+pub const RECONFIRM_AFTER_SECS: u64 = 3_600;
+
+/// Whether a snapshot sealed at `sealed_at` is old enough that its critical
+/// steps must be confirmed again before they run.
+pub fn needs_reconfirmation(sealed_at: &str, now_secs: u64) -> bool {
+    match crate::fingerprint::parse_rfc3339(sealed_at) {
+        Some(at) => now_secs.saturating_sub(at) > RECONFIRM_AFTER_SECS,
+        None => true,
+    }
+}
+
 /// Asks the operator to confirm a critical step just before it runs, and
 /// returns what they typed, or `None` if they declined. The executor, not
 /// the gate, decides whether it matches.

@@ -173,6 +173,39 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         resume_gate = Some(gate);
     }
 
+    // Critical steps approved more than an hour ago are confirmed again,
+    // here on the plain console, before anything starts (§28).
+    if keyjutsu_core::execute::needs_reconfirmation(snapshot.sealed_at(), fingerprint::now_secs()) {
+        let plan = snapshot.plan();
+        for id in snapshot.graph().topological_order() {
+            let Some(step) = plan.step(id) else { continue };
+            if !keyjutsu_core::plan::approval::is_critical(plan, step) {
+                continue;
+            }
+            let c = keyjutsu_core::execute::critical_confirmation(plan, step);
+            println!();
+            println!("CRITICAL ACTION  {}  (approved {})", c.title, snapshot.sealed_at());
+            for command in &c.commands {
+                println!("  runs:      {command}");
+            }
+            for target in &c.targets {
+                println!("  target:    {target}");
+            }
+            for i in &c.impact {
+                println!("  impact:    {i}");
+            }
+            println!("  recovery:  {}", c.recovery);
+            print!("Type {} to let it run: ", c.phrase);
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+            let mut line = String::new();
+            let _ = std::io::stdin().read_line(&mut line);
+            if line.trim() != c.phrase {
+                println!("Not confirmed. Nothing ran.");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+
     let shell = match snapshot.plan().steps.iter().find_map(|s| s.shell.as_ref().map(|sh| sh.kind)) {
         Some(ShellName::WindowsPowershell) => ShellKind::WindowsPowershell,
         Some(ShellName::Cmd) => ShellKind::Cmd,

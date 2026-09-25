@@ -46,9 +46,22 @@ the phrase. A mismatch or a decline stops the run with the step not run.
 phrase and with a near-miss, and checks the folder survives each time; only
 the exact phrase lets it run. With the comparison removed, the test fails.
 
-The CLI has no gate yet: its console is the performance, and there is
-nowhere to ask without drawing over it. `keyjutsu run` relies on the phrase
-typed at approval.
+**When it asks again** (decided with the owner after the first walkthrough,
+where being asked twice within a minute was redundant): the phrase typed at
+approval stands for an hour. A snapshot sealed longer ago, or whose sealing
+time cannot be read, has its critical steps confirmed again: in the desktop,
+in the dialog just before the step runs; in the CLI, on the plain console
+before the session starts, because its console is the performance
+(`needs_reconfirmation`; `an_old_approval_of_a_critical_step_is_confirmed_again_before_the_run`,
+which fails both if it never asks and if it always asks).
+
+**Seen with the owner** (25 September 2026): validate, approve with the
+typed phrase, run in Performance mode, the manual step, the critical dialog
+again before step 4 (at the time it always asked), completion and the run
+panel, on a trial plan confined to a scratch folder. The run panel's long
+checkpoint path overflowed the side panel; fixed. The desktop records Git
+state for the folder the app started in, while a profile that changes
+location (the owner's does) starts the shell elsewhere; not yet fixed.
 
 ## Done when
 

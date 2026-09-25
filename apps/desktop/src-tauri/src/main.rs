@@ -485,7 +485,13 @@ fn plan_run(
         mode: Some(config.mode),
         base: config,
         checkpoint: Some(checkpoint.clone()),
-        critical_gate: Some(gate),
+        // Approved in this window within the hour: the phrase typed at approval
+        // stands. Older than that, it is asked for again before the step runs.
+        critical_gate: keyjutsu_core::execute::needs_reconfirmation(
+            snapshot.sealed_at(),
+            fingerprint::now_secs(),
+        )
+        .then_some(gate),
         ..ExecuteOptions::default()
     };
     std::thread::spawn(move || {

@@ -104,9 +104,52 @@ pub fn rfc3339(secs: u64) -> String {
     format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z", rem / 3_600, rem % 3_600 / 60, rem % 60)
 }
 
+/// Seconds since 1970 for a timestamp in the form [`rfc3339`] writes
+/// (`YYYY-MM-DDTHH:MM:SSZ`, fractions ignored). `None` for anything else.
+pub fn parse_rfc3339(text: &str) -> Option<u64> {
+    let b = text.as_bytes();
+    if b.len() < 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':' {
+        return None;
+    }
+    if !text.ends_with('Z') {
+        return None;
+    }
+    let n = |r: std::ops::Range<usize>| text.get(r)?.parse::<i64>().ok();
+    let (year, month, day) = (n(0..4)?, n(5..7)?, n(8..10)?);
+    let (h, m, sec) = (n(11..13)?, n(14..16)?, n(17..19)?);
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || h > 23 || m > 59 || sec > 60 {
+        return None;
+    }
+    // Days from civil (the inverse of the conversion in `rfc3339`).
+    let y = year - i64::from(month <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let mp = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    u64::try_from(days * 86_400 + h * 3_600 + m * 60 + sec).ok()
+}
+
+/// Seconds since 1970, now.
+pub fn now_secs() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_back_what_it_writes() {
+        for secs in [0, 951_782_400, 1_790_294_400, 1_790_331_234, 4_107_542_399] {
+            assert_eq!(parse_rfc3339(&rfc3339(secs)), Some(secs));
+        }
+        assert_eq!(parse_rfc3339("2026-09-25T10:00:00.123Z"), Some(1_790_330_400));
+        assert_eq!(parse_rfc3339("yesterday"), None);
+        assert_eq!(parse_rfc3339("2026-13-01T00:00:00Z"), None);
+        assert_eq!(parse_rfc3339("2026-09-25T10:00:00+01:00"), None, "only the form KeyJutsu writes");
+    }
 
     #[test]
     fn formats_known_instants() {

@@ -1106,3 +1106,8 @@ button.destructive:disabled {
 .run-panel h2 + p {
   margin-top: 0;
 }
+
+/* Long paths wrap rather than widen the side panel. */
+.run-panel code {
+  word-break: break-all;
+}

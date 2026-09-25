@@ -535,3 +535,104 @@ fn run_tells_its_git_changes_from_yours_and_shows_its_diff() {
     assert!(text.contains("+keyjutsu-b"), "{text}");
     assert!(!text.contains("+mine"), "your untracked file is not KeyJutsu's:\n{text}");
 }
+
+/// A snapshot with one critical step (deleting `victim`), sealed at `at`.
+fn critical_snapshot(dir: &std::path::Path, victim: &std::path::Path, at: &str) -> std::path::PathBuf {
+    use keyjutsu_core::plan::{ApprovalBook, ValidPlan, parse_plan, seal};
+    use keyjutsu_core::validation::{Options, validate};
+    let fwd = victim.display().to_string().replace('\\', "/");
+    let draft = parse_plan(
+        &serde_json::json!({
+            "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+            "target": {"id": "local", "kind": "local_windows"},
+            "agent": {"name": "codex", "version": "1"},
+            "steps": [{"id": "wipe", "title": "Remove the victim", "objective": "Delete it.", "kind": "command",
+                       "shell": {"kind": "pwsh"}, "commands": [{"text": format!("Remove-Item -Recurse -Force -LiteralPath {fwd}")}]}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let report = validate(&draft, Options { dry_run: false, ..Options::default() });
+    let v = ValidPlan::revalidate(report.record_in(draft.plan(), at), false).unwrap();
+    let mut book = ApprovalBook::new();
+    assert_eq!(book.approve_all_except_critical(&v, at), ["wipe"]);
+    book.approve(&v, "wipe", at, Some("REMOVE THE VICTIM")).unwrap();
+    let snap = seal(&v, &book, None, at).unwrap();
+    let path = dir.join(format!("snap-{}.json", at.replace(':', "")));
+    std::fs::write(&path, snap.to_json()).unwrap();
+    path
+}
+
+fn wait_exit(
+    child: &mut Box<dyn portable_pty::Child + Send + Sync>,
+    screen: &Screen,
+) -> portable_pty::ExitStatus {
+    let deadline = Instant::now() + TIMEOUT;
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        assert!(Instant::now() < deadline, "keyjutsu run did not exit:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[test]
+fn an_old_approval_of_a_critical_step_is_confirmed_again_before_the_run() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-stale-critical");
+    let _ = std::fs::remove_dir_all(&dir);
+    let victim = dir.join("victim");
+    std::fs::create_dir_all(&victim).unwrap();
+    std::fs::write(victim.join("keep.txt"), "x").unwrap();
+    let stale = critical_snapshot(&dir, &victim, "2026-09-24T00:00:00Z");
+    let args = |snap: &std::path::Path| {
+        vec![
+            "run".to_owned(),
+            snap.display().to_string(),
+            "--mode".into(),
+            "direct".into(),
+            "--clean".into(),
+            "--ephemeral".into(),
+        ]
+    };
+
+    // Approved yesterday: asked again, and a wrong answer runs nothing.
+    let a = args(&stale);
+    let (mut child, screen, writer) = launch_in(&a.iter().map(String::as_str).collect::<Vec<_>>(), None);
+    assert!(screen.wait_for("Type REMOVE THE VICTIM to let it run"), "{}", screen.plain());
+    writer.lock().unwrap().write_all(b"yes\r").unwrap();
+    let status = wait_exit(&mut child, &screen);
+    assert!(!status.success());
+    assert!(screen.wait_for("Not confirmed. Nothing ran."), "{}", screen.plain());
+    assert!(victim.join("keep.txt").exists());
+
+    // The right phrase lets it run.
+    let (mut child, screen, writer) = launch_in(&a.iter().map(String::as_str).collect::<Vec<_>>(), None);
+    assert!(screen.wait_for("Type REMOVE THE VICTIM to let it run"), "{}", screen.plain());
+    writer.lock().unwrap().write_all(b"REMOVE THE VICTIM\r").unwrap();
+    let deadline = Instant::now() + TIMEOUT;
+    while victim.exists() {
+        assert!(Instant::now() < deadline, "the step never ran:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    writer.lock().unwrap().write_all(&win32_key(0x4B, 0x25, 0x0B, 0x1A)).unwrap();
+    writer.lock().unwrap().write_all(b"exit\r").unwrap();
+    assert!(wait_exit(&mut child, &screen).success(), "{}", screen.plain());
+
+    // Approved just now: the phrase typed at approval stands.
+    std::fs::create_dir_all(&victim).unwrap();
+    let fresh = critical_snapshot(&dir, &victim, &keyjutsu_core::fingerprint::now_rfc3339());
+    let a = args(&fresh);
+    let (mut child, screen, writer) = launch_in(&a.iter().map(String::as_str).collect::<Vec<_>>(), None);
+    let deadline = Instant::now() + TIMEOUT;
+    while victim.exists() {
+        assert!(Instant::now() < deadline, "a fresh approval should run without asking:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(!screen.plain().contains("to let it run"));
+    std::thread::sleep(Duration::from_millis(500));
+    writer.lock().unwrap().write_all(&win32_key(0x4B, 0x25, 0x0B, 0x1A)).unwrap();
+    writer.lock().unwrap().write_all(b"exit\r").unwrap();
+    wait_exit(&mut child, &screen);
+}
