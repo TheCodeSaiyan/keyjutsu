@@ -5,7 +5,7 @@
 .DESCRIPTION
     Published beside every release, so this is the whole install:
 
-        irm https://github.com/ntatschner/keyjutsu/releases/latest/download/install.ps1 | iex
+        irm https://github.com/TheCodeSaiyan/keyjutsu/releases/latest/download/install.ps1 | iex
 
     It downloads the installer and the release's SHA256SUMS, and refuses to go
     on if the installer's hash isn't the one listed, so a damaged or altered
@@ -25,7 +25,7 @@
     Install without asking, answering yes to both questions.
 
 .EXAMPLE
-    & ([scriptblock]::Create((irm https://github.com/ntatschner/keyjutsu/releases/latest/download/install.ps1))) -Version 0.2.0
+    & ([scriptblock]::Create((irm https://github.com/TheCodeSaiyan/keyjutsu/releases/latest/download/install.ps1))) -Version 0.2.0
 #>
 param(
     [string] $Version,
@@ -33,7 +33,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repository = 'ntatschner/keyjutsu'
+$repository = 'TheCodeSaiyan/keyjutsu'
 
 # Windows PowerShell 5.1 may still offer TLS 1.0 first, which GitHub refuses.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12

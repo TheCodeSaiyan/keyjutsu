@@ -7,7 +7,7 @@ that your computer is ready.
 
 You'll need the KeyJutsu installer. Its name is
 `KeyJutsu_0.1.0_x64-setup.exe`, and it's on the
-[releases page](https://github.com/ntatschner/keyjutsu/releases/latest). If
+[releases page](https://github.com/TheCodeSaiyan/keyjutsu/releases/latest). If
 that page is empty, no copy has been published yet, and someone who builds
 software has to make one for you.
 

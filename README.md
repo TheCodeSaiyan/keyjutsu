@@ -6,7 +6,7 @@
 and run in a real shell. The typing is theatre; everything that runs was
 checked and approved by you first.**
 
-[![CI](https://github.com/ntatschner/keyjutsu/actions/workflows/ci.yml/badge.svg)](https://github.com/ntatschner/keyjutsu/actions/workflows/ci.yml)
+[![CI](https://github.com/TheCodeSaiyan/keyjutsu/actions/workflows/ci.yml/badge.svg)](https://github.com/TheCodeSaiyan/keyjutsu/actions/workflows/ci.yml)
 [![Licence](https://img.shields.io/badge/licence-GPL--3.0--only-informational)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-informational)](docs/guides/installing.md)
 
@@ -115,7 +115,7 @@ values, and it's validated again rather than trusted because it worked once.
 Windows 11, x64. In PowerShell:
 
 ```powershell
-irm https://github.com/ntatschner/keyjutsu/releases/latest/download/install.ps1 | iex
+irm https://github.com/TheCodeSaiyan/keyjutsu/releases/latest/download/install.ps1 | iex
 ```
 
 It checks the download against the release's `SHA256SUMS` and its signature

@@ -12,7 +12,7 @@ and `keyjutsu doctor` has told you whether this machine is ready.
   elevation broker: it is started as Administrator, so it has to live where
   only Administrators can replace it.
 - **The installer,** `KeyJutsu_0.1.0_x64-setup.exe`, from the
-  [latest release](https://github.com/ntatschner/keyjutsu/releases/latest).
+  [latest release](https://github.com/TheCodeSaiyan/keyjutsu/releases/latest).
   Until the first release is published, build it: `pnpm desktop:build`, from
   a clone with Rust and Node installed, leaves it in
   `target/release/bundle/nsis/`.
@@ -28,7 +28,7 @@ programs carry their own C runtime; and agents can come later.
 The quickest way is one line in PowerShell:
 
 ```powershell
-irm https://github.com/ntatschner/keyjutsu/releases/latest/download/install.ps1 | iex
+irm https://github.com/TheCodeSaiyan/keyjutsu/releases/latest/download/install.ps1 | iex
 ```
 
 It downloads the installer, checks it against the release's `SHA256SUMS`
