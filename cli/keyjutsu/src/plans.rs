@@ -95,9 +95,16 @@ pub fn validate(file: &Path, dry_run: bool, json: bool) -> ExitCode {
         let not_ready = report.not_ready(&plan);
         println!();
         if not_ready.is_empty() {
-            println!("All {} steps are ready.", report.steps.len());
+            match report.steps.len() {
+                1 => println!("The step is ready."),
+                n => println!("All {n} steps are ready."),
+            }
         } else {
-            println!("{} of {} steps are not ready.", not_ready.len(), report.steps.len());
+            println!(
+                "{} of {} not ready.",
+                not_ready.len(),
+                crate::count(report.steps.len(), "step is", "steps are")
+            );
         }
     }
     if report.not_ready(&plan).is_empty() && report.problems.is_empty() {
@@ -228,7 +235,7 @@ pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool, d
         eprintln!("keyjutsu: cannot write {}: {e}", out.display());
         return ExitCode::FAILURE;
     }
-    println!("Sealed {} steps into {}", snapshot.step_hashes().len(), out.display());
+    println!("Sealed {} into {}", crate::count(snapshot.step_hashes().len(), "step", "steps"), out.display());
     println!("Snapshot {}", snapshot.snapshot_hash());
     ExitCode::SUCCESS
 }
@@ -245,7 +252,11 @@ pub fn verify(file: &Path, environment: bool) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("Intact: {} steps approved, sealed {}", snapshot.step_hashes().len(), snapshot.sealed_at());
+    println!(
+        "Intact: {} approved, sealed {}",
+        crate::count(snapshot.step_hashes().len(), "step", "steps"),
+        snapshot.sealed_at()
+    );
     println!("Snapshot {}", snapshot.snapshot_hash());
     if !environment {
         return ExitCode::SUCCESS;

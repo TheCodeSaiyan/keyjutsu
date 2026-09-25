@@ -234,7 +234,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
         assert!(Instant::now() < deadline, "keyjutsu run did not exit:\n{}", screen.plain());
         std::thread::sleep(Duration::from_millis(100));
     };
-    assert!(screen.wait_for("Complete: 1 steps."), "no outcome:\n{}", screen.plain());
+    assert!(screen.wait_for("Complete: 1 step."), "no outcome:\n{}", screen.plain());
     assert!(status.success(), "{status:?}");
     assert!(dir.join("snap.checkpoint.json").exists(), "a checkpoint was written");
     assert!(screen.plain().contains("Recorded as session"), "{}", screen.plain());

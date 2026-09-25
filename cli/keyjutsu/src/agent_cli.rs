@@ -156,9 +156,9 @@ pub fn propose(
             }
             println!();
             println!(
-                "Proposed {} steps in {} attempt(s); written to {}.",
-                p.plan.plan().steps.len(),
-                p.attempts,
+                "Proposed {} in {}; written to {}.",
+                crate::count(p.plan.plan().steps.len(), "step", "steps"),
+                crate::count(p.attempts, "attempt", "attempts"),
                 out.display()
             );
             println!("Next: keyjutsu plan validate {}", out.display());

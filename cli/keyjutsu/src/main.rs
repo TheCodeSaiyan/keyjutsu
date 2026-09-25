@@ -23,6 +23,11 @@ use keyjutsu_core::readiness::{self, CheckStatus};
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 use keyjutsu_core::{SessionOptions, demo};
 
+/// "1 step", "2 steps": a count as a person would say it.
+pub(crate) fn count(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 #[derive(Parser)]
 #[command(name = "keyjutsu", version, about = "Validated commands, theatrically typed.", long_about = None)]
 struct Cli {
@@ -279,7 +284,7 @@ struct AgentArgs {
     #[arg(long)]
     agent: String,
     /// Actually send the request. Without it, KeyJutsu shows what would be
-    /// sent and stops (§9: the context manifest comes before submission).
+    /// sent and stops.
     #[arg(long)]
     send: bool,
 }
@@ -631,7 +636,11 @@ fn session(options: SessionOptions, performance: Option<console::Performance>) -
         println!("{:>2}. {title}: {text}", index + 1);
     }
     if !titles.is_empty() && summary.outcomes.len() < titles.len() && !failed {
-        println!("{} of {} steps ran before the performance ended.", summary.outcomes.len(), titles.len());
+        println!(
+            "{} of {} ran before the performance ended.",
+            summary.outcomes.len(),
+            count(titles.len(), "step", "steps")
+        );
     }
     if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
 }
@@ -692,9 +701,9 @@ fn plan_check(file: &std::path::Path, stored: bool) -> ExitCode {
         Ok(valid) => {
             let plan = valid.plan();
             println!(
-                "{}: valid ({} steps)",
+                "{}: valid ({})",
                 plan.title.as_deref().unwrap_or(&plan.plan_id),
-                plan.steps.len()
+                count(plan.steps.len(), "step", "steps")
             );
             println!();
             for (n, id) in valid.graph().topological_order().enumerate() {

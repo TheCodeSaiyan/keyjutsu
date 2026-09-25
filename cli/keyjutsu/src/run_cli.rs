@@ -451,7 +451,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             ExitCode::SUCCESS
         }
         Outcome::Complete => {
-            println!("Complete: {} steps.", checkpoint.runs.len());
+            println!("Complete: {}.", crate::count(checkpoint.runs.len(), "step", "steps"));
             ExitCode::SUCCESS
         }
         Outcome::Failed { step, expected, actual } => {

@@ -695,9 +695,7 @@ pub fn perform(driver: &Driver<'_>, script: StagedScript, config: PerformanceCon
 /// Why a snapshot may not be executed at all.
 pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
     let Some(state) = &snapshot.plan().keyjutsu else {
-        return Err(
-            "the snapshot was not validated before it was sealed; no unvalidated step may run (§12)".into()
-        );
+        return Err("the snapshot was not validated before it was sealed; no unvalidated step may run".into());
     };
     let not_ready: Vec<&str> = snapshot
         .graph()
