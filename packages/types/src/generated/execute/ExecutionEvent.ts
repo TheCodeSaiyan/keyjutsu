@@ -2,4 +2,4 @@
 import type { Outcome } from "./Outcome";
 import type { StepRun } from "./StepRun";
 
-export type ExecutionEvent = { "kind": "step_starting", step: string, title: string, } | { "kind": "credential_required", step: string, prompt: string, } | { "kind": "step_carried", step: string, } | { "kind": "waiting", step: string, check: string, } | { "kind": "step_finished", step: string, run: StepRun, } | { "kind": "finished", outcome: Outcome, };
+export type ExecutionEvent = { "kind": "step_starting", step: string, title: string, } | { "kind": "credential_required", step: string, prompt: string, } | { "kind": "step_carried", step: string, } | { "kind": "elevated_output", step: string, text: string, } | { "kind": "waiting", step: string, check: string, } | { "kind": "step_finished", step: string, run: StepRun, } | { "kind": "finished", outcome: Outcome, };

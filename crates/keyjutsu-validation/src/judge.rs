@@ -390,7 +390,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
             v.fail(
                 "privilege",
                 Readiness::Blocked,
-                "needs Administrator; the elevation broker arrives with Milestone 10, so for now only an elevated KeyJutsu can run it",
+                "needs Administrator, and keyjutsu-broker.exe is not installed next to KeyJutsu to run it elevated",
             );
         }
     }

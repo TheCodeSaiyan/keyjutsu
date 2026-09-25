@@ -84,7 +84,10 @@ pub fn validate(file: &Path, dry_run: bool, json: bool) -> ExitCode {
         Ok(p) => p,
         Err(c) => return c,
     };
-    let report = validation::validate(&plan, Options { dry_run, ..Options::default() });
+    let report = validation::validate(
+        &plan,
+        Options { dry_run, broker_available: keyjutsu_broker::broker_path().is_some() },
+    );
     if json {
         println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
     } else {
@@ -127,7 +130,10 @@ pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool, d
     };
     // Validate first: nothing is approved that this machine cannot run, and
     // KeyJutsu's own risk assessment decides which steps are critical.
-    let report = validation::validate(&draft, Options { dry_run, ..Options::default() });
+    let report = validation::validate(
+        &draft,
+        Options { dry_run, broker_available: keyjutsu_broker::broker_path().is_some() },
+    );
     let not_ready = report.not_ready(&draft);
     if !not_ready.is_empty() || !report.problems.is_empty() {
         eprintln!("Not sealed: validation found steps that are not ready.");

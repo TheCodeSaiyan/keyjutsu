@@ -9,6 +9,7 @@ pub mod artifacts;
 pub mod boundary;
 pub mod demo;
 pub mod dpapi;
+pub mod elevation;
 pub mod execute;
 pub mod fingerprint;
 pub mod git;

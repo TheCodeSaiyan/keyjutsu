@@ -195,6 +195,12 @@ pub enum ExecutionEvent {
     StepCarried {
         step: String,
     },
+    /// An Administrator step ran in the elevation broker's own shell; this
+    /// is what it printed (§26, ADR 0011).
+    ElevatedOutput {
+        step: String,
+        text: String,
+    },
     Waiting {
         step: String,
         check: String,
@@ -268,6 +274,8 @@ pub struct ExecuteOptions {
     pub resume_gate: Option<crate::boundary::ResumeGate>,
     /// This machine's environment now; collected for real if `None`.
     pub fingerprint_now: Option<crate::boundary::FingerprintNow>,
+    /// Runs Administrator steps when KeyJutsu itself is not elevated.
+    pub elevated_runner: Option<std::sync::Arc<dyn crate::elevation::ElevatedRunner>>,
 }
 
 impl Default for ExecuteOptions {
@@ -283,6 +291,7 @@ impl Default for ExecuteOptions {
             boundary_probe: None,
             resume_gate: None,
             fingerprint_now: None,
+            elevated_runner: None,
         }
     }
 }
@@ -294,6 +303,7 @@ impl std::fmt::Debug for ExecuteOptions {
             .field("checkpoint", &self.checkpoint)
             .field("settled", &self.settled)
             .field("critical_gate", &self.critical_gate.is_some())
+            .field("elevated_runner", &self.elevated_runner.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -1075,7 +1085,55 @@ pub fn execute(
             }
         }
         let config = PerformanceConfig { mode: default_mode, ..options.base.clone() };
-        let outcomes = match perform(driver, script, config) {
+        // An Administrator step, with KeyJutsu itself unelevated, goes to the
+        // elevation broker, which checks it against its own copy of the
+        // approved snapshot. It is never typed into the unelevated shell.
+        let needs_broker = step.privilege == Some(keyjutsu_plan::model::Privilege::Administrator)
+            && !crate::elevation::is_elevated();
+        let performed = if needs_broker {
+            let Some(runner) = &options.elevated_runner else {
+                checkpoint.in_progress = None;
+                save(&checkpoint);
+                return finish(
+                    Outcome::Blocked {
+                        reason: format!(
+                            "step `{id}` needs Administrator, and no elevation broker is running for this plan"
+                        ),
+                    },
+                    checkpoint,
+                );
+            };
+            if !step.artifacts.is_empty() {
+                checkpoint.in_progress = None;
+                save(&checkpoint);
+                return finish(
+                    Outcome::Blocked {
+                        reason: format!(
+                            "step `{id}` needs Administrator and artifacts; the broker cannot hand over artifacts yet"
+                        ),
+                    },
+                    checkpoint,
+                );
+            }
+            match runner.run_step(snapshot.snapshot_hash(), &id, &step_hash) {
+                Ok(run) => {
+                    observe(ExecutionEvent::ElevatedOutput { step: id.clone(), text: run.output });
+                    Performed::Finished(run.outcomes)
+                }
+                // The broker may have started the step before failing: its
+                // effect is unknown, so the step stays in doubt.
+                Err(reason) => {
+                    save(&checkpoint);
+                    return finish(
+                        Outcome::Blocked { reason: format!("the elevation broker: {reason}") },
+                        checkpoint,
+                    );
+                }
+            }
+        } else {
+            perform(driver, script, config)
+        };
+        let outcomes = match performed {
             Performed::Finished(outcomes) => outcomes,
             Performed::Refused(reason) => {
                 checkpoint.in_progress = None;

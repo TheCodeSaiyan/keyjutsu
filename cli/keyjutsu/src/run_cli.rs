@@ -265,11 +265,38 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
 
     let result: Arc<Mutex<Option<(Outcome, Checkpoint)>>> = Arc::new(Mutex::new(None));
     let (snap, out, mode) = (snapshot.clone(), result.clone(), args.mode);
+    // Administrator steps (§26): one UAC prompt, now, before the performance,
+    // for a broker pinned to this snapshot. Never in the middle of a run.
+    let needs_admin = snapshot
+        .plan()
+        .steps
+        .iter()
+        .any(|s| s.privilege == Some(keyjutsu_core::plan::model::Privilege::Administrator));
+    let mut elevated_runner: Option<Arc<dyn keyjutsu_core::elevation::ElevatedRunner>> = None;
+    if needs_admin && !keyjutsu_core::elevation::is_elevated() {
+        let Some(exe) = keyjutsu_broker::broker_path() else {
+            eprintln!(
+                "keyjutsu: this plan has Administrator steps, and keyjutsu-broker.exe is not installed next to KeyJutsu"
+            );
+            return ExitCode::FAILURE;
+        };
+        println!(
+            "This plan has Administrator steps. Windows will ask once, now, to start KeyJutsu's broker."
+        );
+        match keyjutsu_broker::launch(&exe, args.snapshot, snapshot.snapshot_hash()) {
+            Ok(client) => elevated_runner = Some(Arc::new(client)),
+            Err(e) => {
+                eprintln!("keyjutsu: the elevation broker did not start: {e}. Nothing ran.");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     let exec_options = ExecuteOptions {
         mode,
         checkpoint: Some(cp_path.clone()),
         settled,
         resume_gate,
+        elevated_runner,
         ..ExecuteOptions::default()
     };
     let (plan_for_git, git_dir_c, baseline_c, start_c) =
@@ -318,6 +345,13 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             // for real, in the shell's own masked prompt.
             ExecutionEvent::CredentialRequired { prompt, .. } => {
                 title(&format!("Credential required: {prompt}. Stop typing, then press Enter."));
+            }
+            // What the broker's elevated shell printed, shown in the terminal.
+            ExecutionEvent::ElevatedOutput { text, .. } => {
+                use std::io::Write;
+                let mut out = std::io::stdout();
+                let _ = out.write_all(text.replace('\n', "\r\n").as_bytes());
+                let _ = out.flush();
             }
             _ => {}
         };

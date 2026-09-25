@@ -345,7 +345,9 @@ async fn workspace_validate(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceVie
     let plans = plans.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         with_workspace(&plans, |w| {
-            w.validate(Options::default(), &fingerprint::now_rfc3339()).map_err(|e| e.to_string())
+            let options =
+                Options { broker_available: keyjutsu_broker::broker_path().is_some(), ..Options::default() };
+            w.validate(options, &fingerprint::now_rfc3339()).map_err(|e| e.to_string())
         })
     })
     .await
@@ -481,7 +483,19 @@ fn plan_run(
             slot = ready.wait(slot).unwrap_or_else(|e| e.into_inner());
         }
     });
+    let needs_admin = snapshot
+        .plan()
+        .steps
+        .iter()
+        .any(|s| s.privilege == Some(keyjutsu_core::plan::model::Privilege::Administrator));
+    let mut elevated_runner: Option<Arc<dyn keyjutsu_core::elevation::ElevatedRunner>> = None;
+    if needs_admin && !keyjutsu_core::elevation::is_elevated() {
+        let exe =
+            keyjutsu_broker::broker_path().ok_or("keyjutsu-broker.exe is not installed next to KeyJutsu")?;
+        elevated_runner = Some(Arc::new(keyjutsu_broker::launch(&exe, &path, snapshot.snapshot_hash())?));
+    }
     let options = ExecuteOptions {
+        elevated_runner,
         mode: Some(config.mode),
         base: config,
         checkpoint: Some(checkpoint.clone()),

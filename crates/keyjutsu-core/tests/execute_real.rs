@@ -727,3 +727,67 @@ fn a_step_runs_in_its_working_directory() {
     assert!(inner.join("made-here.txt").exists(), "the file belongs in the step's folder");
     assert!(!std::env::current_dir().unwrap().join("made-here.txt").exists());
 }
+
+/// Stands in for the elevation broker: records what it was asked to run.
+struct RecordingBroker(Mutex<Vec<(String, String, String)>>);
+
+impl keyjutsu_core::elevation::ElevatedRunner for RecordingBroker {
+    fn run_step(
+        &self,
+        snapshot_hash: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<keyjutsu_core::elevation::ElevatedRun, String> {
+        self.0.lock().unwrap().push((snapshot_hash.into(), step.into(), step_hash.into()));
+        Ok(keyjutsu_core::elevation::ElevatedRun {
+            outcomes: vec![keyjutsu_core::execution::StepOutcome::Succeeded { exit_code: 0 }],
+            output: "done elevated\n".into(),
+        })
+    }
+}
+
+#[test]
+fn an_administrator_step_goes_to_the_broker_not_the_unelevated_shell() {
+    if keyjutsu_core::elevation::is_elevated() {
+        eprintln!("skipped: this test process is elevated, so no broker is needed");
+        return;
+    }
+    let dir = scratch("admin-step");
+    let marker = fwd(&dir.join("typed-here.txt"));
+    let mut s = step("admin", &format!("Set-Content -LiteralPath {marker} -Value wrong-shell"));
+    s["privilege"] = json!("administrator");
+    let v = plan(json!([s]), json!([]));
+    let draft = parse_plan(&v.to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    book.approve_all_except_critical(&validated, AT);
+    let snap = seal(&validated, &book, None, AT).unwrap();
+
+    // Without a broker it is refused, and nothing runs.
+    let t = terminal();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    assert!(
+        matches!(&outcome, Outcome::Blocked { reason } if reason.contains("needs Administrator")),
+        "{outcome:?}"
+    );
+
+    // With one, the broker is asked for exactly this step of this snapshot.
+    let broker = Arc::new(RecordingBroker(Mutex::default()));
+    let options = ExecuteOptions { elevated_runner: Some(broker.clone()), ..mode(ExecutionMode::Direct) };
+    let (outcome, _, events) = run(&t, &snap, &options, None);
+    t.session.close();
+    assert_eq!(outcome, Outcome::Complete, "{events:?}");
+    assert_eq!(
+        broker.0.lock().unwrap().as_slice(),
+        [(snap.snapshot_hash().to_owned(), "admin".to_owned(), snap.step_hashes()["admin"].clone())]
+    );
+    assert!(
+        events.iter().any(
+            |e| matches!(e, ExecutionEvent::ElevatedOutput { text, .. } if text.contains("done elevated"))
+        )
+    );
+    assert!(!dir.join("typed-here.txt").exists(), "it was never typed into the unelevated shell");
+}

@@ -7,6 +7,7 @@ members = [
     "crates/keyjutsu-validation",
     "crates/keyjutsu-agent",
     "crates/keyjutsu-core",
+    "crates/keyjutsu-broker",
     "cli/keyjutsu",
     "apps/desktop/src-tauri",
 ]
@@ -20,6 +21,7 @@ default-members = [
     "crates/keyjutsu-validation",
     "crates/keyjutsu-agent",
     "crates/keyjutsu-core",
+    "crates/keyjutsu-broker",
     "cli/keyjutsu",
 ]
 
@@ -37,6 +39,7 @@ keyjutsu-core = { path = "crates/keyjutsu-core" }
 keyjutsu-plan = { path = "crates/keyjutsu-plan" }
 keyjutsu-validation = { path = "crates/keyjutsu-validation" }
 keyjutsu-agent = { path = "crates/keyjutsu-agent" }
+keyjutsu-broker = { path = "crates/keyjutsu-broker" }
 
 # The history store's record encryption (AES-256-GCM); its key is protected
 # with Windows DPAPI (ADR 0016).

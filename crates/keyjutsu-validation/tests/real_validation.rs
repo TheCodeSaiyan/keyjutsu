@@ -246,7 +246,7 @@ fn a_missing_working_directory_or_administrator_right_blocks_the_step() {
         admin.evidence.iter().any(|e| e.check == "privilege" && e.result == EvidenceResult::Passed);
     if !elevated {
         assert_eq!(admin.readiness, Readiness::Blocked);
-        assert!(failed(admin, "privilege")[0].contains("Milestone 10"));
+        assert!(failed(admin, "privilege")[0].contains("keyjutsu-broker.exe is not installed"));
     }
 }
 

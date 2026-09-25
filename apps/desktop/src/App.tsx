@@ -319,6 +319,10 @@ export function App() {
         setRunDone(m);
         break;
       case "execution":
+        // An Administrator step ran in the elevation broker's shell: show
+        // what it printed in the terminal.
+        if (m.event.kind === "elevated_output")
+          term.current?.write(m.event.text.replace(/\r?\n/g, "\r\n"));
         if (m.event.kind === "credential_required")
           setNotice(`Credential required: ${m.event.prompt}. Stop typing, then press Enter.`);
         break;

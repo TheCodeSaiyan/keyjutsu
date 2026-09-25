@@ -270,3 +270,15 @@ confirmation, a RunOnce entry that opens the resume prompt rather than
 resuming) is straightforward, and there is now a machine to try it on: the
 Windows Sandbox restart trial (`tests/e2e/restart-trial`) already restarts a
 disposable Windows and resumes a plan across it.
+
+## D28. Administrator steps run in the broker's shell
+
+§15 wants what the audience sees to be the real execution, typed into the
+real shell. An Administrator step cannot be typed into the operator's
+unelevated shell and run elevated; UAC does not allow a process to raise
+another's privileges. So an Administrator step runs in the elevation
+broker's own elevated shell, directly, and its output is shown in the
+terminal ([ADR 0011](adr/0011-elevation-broker.md)). It is honest about what
+ran and where, but it is not a keystroke performance. Mirroring the broker's
+shell as a second, visible terminal that the operator performs into is the
+likely way to close the gap.

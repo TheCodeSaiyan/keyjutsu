@@ -2144,11 +2144,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyjutsu-broker"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "keyjutsu-core",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "keyjutsu-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
  "crossterm",
+ "keyjutsu-broker",
  "keyjutsu-core",
  "portable-pty",
  "serde_json",
@@ -2177,6 +2189,7 @@ dependencies = [
 name = "keyjutsu-desktop"
 version = "0.1.0"
 dependencies = [
+ "keyjutsu-broker",
  "keyjutsu-core",
  "tauri",
  "tauri-build",

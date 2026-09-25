@@ -55,6 +55,8 @@ flowchart TD
   recovery as they really work.
 - **M8 (execution) is done** ([milestone-8.md](milestone-8.md)).
 - **M9 (credential gates) is done** ([milestone-9.md](milestone-9.md)).
+- **M10 (the elevation broker) is done** ([milestone-10.md](milestone-10.md)),
+  after M11 to M15, once Windows Sandbox gave it a machine to be elevated on.
 - **M15 (session boundaries) is done** ([milestone-15.md](milestone-15.md)).
 - **M14 (persistence and Techniques) is done** ([milestone-14.md](milestone-14.md)).
 - **M12 (network and artifacts) is done** ([milestone-12.md](milestone-12.md)).
