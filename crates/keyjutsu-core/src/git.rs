@@ -288,8 +288,15 @@ pub fn repositories(start: &Path, plan: &keyjutsu_plan::model::Plan) -> Vec<Path
 }
 
 /// Whether two paths name the same folder, ignoring case and slash style.
+/// The same folder, however it is written: case, slashes, or an 8.3 short
+/// name (`RUNNER~1`) for a long one, which Windows gives out in places such
+/// as `%TEMP%` while a shell reports the long form.
 pub fn same_path(a: &Path, b: &Path) -> bool {
     same(a, b)
+        || matches!(
+            (std::fs::canonicalize(a), std::fs::canonicalize(b)),
+            (Ok(x), Ok(y)) if same(&x, &y)
+        )
 }
 
 fn same(a: &Path, b: &Path) -> bool {
@@ -344,6 +351,29 @@ pub fn steps_inside(root: &Path, plan: &keyjutsu_plan::model::Plan) -> Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// On a CI runner %TEMP% is a short name (`C:\Users\RUNNER~1\...`) while
+    /// a shell reports the long one; the text differs, the folder doesn't.
+    #[cfg(windows)]
+    #[test]
+    fn a_short_name_and_a_long_name_are_the_same_folder() {
+        let long = std::env::temp_dir().join(format!("keyjutsu long folder name {}", std::process::id()));
+        std::fs::create_dir_all(&long).expect("scratch folder");
+        use std::os::windows::process::CommandExt;
+        // raw_arg: cmd reads its own quotes, which Rust's escaping would break.
+        let out = std::process::Command::new("cmd")
+            .raw_arg(format!("/c for %I in (\"{}\") do @echo %~sI", long.display()))
+            .output()
+            .expect("cmd");
+        let short = std::path::PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
+        let differs = !same(&short, &long);
+        assert!(same_path(&short, &long), "{} and {}", short.display(), long.display());
+        assert!(!same_path(&long, &std::env::temp_dir()), "a different folder is not the same");
+        let _ = std::fs::remove_dir(&long);
+        if !differs {
+            eprintln!("8.3 names are off on this volume; only the long form was compared");
+        }
+    }
 
     #[test]
     fn reads_porcelain_status_including_renames() {
