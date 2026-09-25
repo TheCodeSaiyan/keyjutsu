@@ -200,6 +200,24 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
         v.record("syntax", EvidenceResult::NotApplicable, "cmd.exe has no parser KeyJutsu can ask");
         v.uncertainty.push("cmd.exe syntax is not checked before the step runs".into());
     }
+    // Credentials (§25): asked for only through a prompt that masks them.
+    if step.kind == StepKind::Credential {
+        match &step.credential {
+            None => v.fail("credential", Readiness::Invalid, "the step does not say what it asks for"),
+            Some(_) if is_cmd => v.fail(
+                "credential",
+                Readiness::Invalid,
+                "cmd.exe has no masked prompt, so the secret would be shown as it is typed; use PowerShell",
+            ),
+            Some(r) => v.pass(
+                "credential",
+                format!(
+                    "asked for by PowerShell's own masked prompt, held in ${} for this run only",
+                    r.variable
+                ),
+            ),
+        }
+    }
     if !is_cmd && !operator_step && !g.lines.is_empty() {
         v.uncertainty.push(
             "Checked without your PowerShell profile: aliases and functions it defines were not considered"
@@ -403,6 +421,23 @@ mod tests {
         let s = judge(&step("command"), &g);
         assert_eq!(s.readiness, Readiness::Invalid);
         assert_eq!(s.proof_level, ProofLevel::Low);
+    }
+
+    fn credential_step(shell: &str) -> Step {
+        serde_json::from_value(json!({"id": "s", "title": "T", "objective": "O", "kind": "credential",
+            "shell": {"kind": shell},
+            "credential": {"variable": "TOKEN", "prompt": "Token", "kind": "secret"}}))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_credential_is_only_asked_for_where_it_is_masked() {
+        let g = Gathered { shell_version: Some("7".into()), ..Gathered::default() };
+        assert_eq!(judge(&credential_step("pwsh"), &g).readiness, Readiness::Ready);
+        assert_eq!(judge(&credential_step("cmd"), &g).readiness, Readiness::Invalid);
+        let mut unsaid = credential_step("pwsh");
+        unsaid.credential = None;
+        assert_eq!(judge(&unsaid, &g).readiness, Readiness::Invalid);
     }
 
     #[test]

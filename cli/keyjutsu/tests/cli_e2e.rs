@@ -259,3 +259,121 @@ fn run_resumes_from_the_checkpoint_it_is_given() {
     assert!(!out.status.success());
     assert!(err.contains("cannot resume from") && err.contains("v1.checkpoint.json"), "{err}");
 }
+
+/// `keyjutsu` in a pseudo-console of its own, answering ConPTY's cursor
+/// query as a terminal would. Returns the child, what it drew, and a writer.
+#[allow(clippy::type_complexity)]
+fn launch(
+    args: &[&str],
+) -> (Box<dyn portable_pty::Child + Send + Sync>, Arc<Screen>, Arc<Mutex<Box<dyn Write + Send>>>) {
+    let pair = native_pty_system()
+        .openpty(PtySize { rows: 30, cols: 120, pixel_width: 0, pixel_height: 0 })
+        .unwrap();
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_keyjutsu"));
+    cmd.args(args);
+    let child = pair.slave.spawn_command(cmd).unwrap();
+    drop(pair.slave);
+    let mut reader = pair.master.try_clone_reader().unwrap();
+    let writer = Arc::new(Mutex::new(pair.master.take_writer().unwrap()));
+    let screen = Arc::new(Screen { text: Mutex::new(String::new()), changed: Condvar::new() });
+    {
+        let (screen, writer) = (screen.clone(), writer.clone());
+        std::thread::spawn(move || {
+            let _master = pair.master;
+            let mut buf = [0u8; 8192];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                let chunk = String::from_utf8_lossy(&buf[..n]).into_owned();
+                if chunk.contains("\x1b[6n") {
+                    let _ = writer.lock().unwrap().write_all(b"\x1b[1;1R");
+                }
+                screen.text.lock().unwrap().push_str(&chunk);
+                screen.changed.notify_all();
+            }
+        });
+    }
+    (child, screen, writer)
+}
+
+#[test]
+fn run_asks_for_a_credential_in_the_shells_masked_prompt() {
+    const SECRET: &str = "cli-S3cret-99";
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-credential");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let plan = serde_json::json!({
+        "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+        "target": {"id": "local", "kind": "local_windows"},
+        "agent": {"name": "codex", "version": "1"},
+        "steps": [
+            {"id": "ask", "title": "Token", "objective": "Get a token.", "kind": "credential",
+             "shell": {"kind": "pwsh"}, "execution_mode": "user_input",
+             "credential": {"variable": "KJ_CLI_TOKEN", "prompt": "Token for the CLI test", "kind": "secret"}},
+            {"id": "use", "title": "Use it", "objective": "Use the token.", "kind": "command",
+             "shell": {"kind": "pwsh"}, "depends_on": ["ask"],
+             "commands": [{"text": "'length ' + [System.Net.NetworkCredential]::new('', $KJ_CLI_TOKEN).Password.Length"}]}
+        ]
+    });
+    let plan_path = dir.join("plan.json");
+    std::fs::write(&plan_path, plan.to_string()).unwrap();
+    let snap = dir.join("snap.json");
+    let approved = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+        .args(["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(approved.status.success(), "{}", String::from_utf8_lossy(&approved.stderr));
+
+    let (mut child, screen, writer) =
+        launch(&["run", snap.to_str().unwrap(), "--mode", "performance", "--clean"]);
+    let send = |bytes: &[u8]| {
+        let mut w = writer.lock().unwrap();
+        w.write_all(bytes).unwrap();
+        w.flush().unwrap();
+    };
+    let raw = || screen.text.lock().unwrap().clone();
+
+    // The operator mashes until KeyJutsu says a credential is needed; the
+    // mashing starts nothing.
+    let deadline = Instant::now() + TIMEOUT;
+    while !raw().contains("Credential required: Token for the CLI test") {
+        assert!(Instant::now() < deadline, "no credential notice:\n{:?}", raw());
+        send(b"q");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!screen.plain().contains("Token for the CLI test:"), "mashing opened the prompt");
+
+    // Enter opens the shell's masked prompt; the secret goes in for real.
+    send(b"\r");
+    assert!(screen.wait_for("Token for the CLI test: "), "no prompt:\n{}", screen.plain());
+    send(SECRET.as_bytes());
+    send(b"\r");
+
+    // Back to mashing for the step that uses it.
+    let deadline = Instant::now() + TIMEOUT;
+    while !screen.plain().contains(&format!("length {}", SECRET.len())) {
+        assert!(Instant::now() < deadline, "the token was not used:\n{}", screen.plain());
+        send(b"q");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    send(&win32_key(0x4B, 0x25, 0x0B, 0x1A));
+    send(b"exit\r");
+    let deadline = Instant::now() + TIMEOUT;
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "keyjutsu run did not exit:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    assert!(screen.wait_for("Complete: 2 steps."), "no outcome:\n{}", screen.plain());
+    assert!(status.success(), "{status:?}");
+
+    // The secret never reached the console, the checkpoint or the snapshot.
+    assert!(!raw().contains(SECRET), "the secret was drawn");
+    assert!(!std::fs::read_to_string(dir.join("snap.checkpoint.json")).unwrap().contains(SECRET));
+    assert!(!std::fs::read_to_string(&snap).unwrap().contains(SECRET));
+}

@@ -129,6 +129,7 @@ fn performance_arm(
                     command,
                     mode: None,
                     submit: None,
+                    answers: None,
                 })
                 .collect(),
         },

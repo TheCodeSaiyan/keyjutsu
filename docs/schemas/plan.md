@@ -47,6 +47,16 @@ A step has a `kind`: `command`, `validation`, `manual`, `user_input` or
 `credential`. Command and validation steps must bind a shell and list
 commands; a command is never shell-agnostic (§14). A credential step can have
 no commands and is always `user_input`, so no secret can ever be staged typing.
+It says what it asks for instead, and only a credential step may:
+
+```json
+"credential": {"variable": "REGISTRY_TOKEN", "prompt": "Token for ghcr.io", "kind": "secret"}
+```
+
+`kind` is `secret` or `username_and_password` (with an optional suggested
+`username`). The operator answers in PowerShell's own masked prompt and later
+steps use `$REGISTRY_TOKEN`; the value never appears in a plan. See
+[ADR 0015](../architecture/adr/0015-credentials-through-the-shells-masked-prompt.md).
 
 Command text is a single line with no control characters. A newline in a
 staged command would submit part of it, which is exactly the accidental
@@ -183,10 +193,13 @@ will use to decide which approvals a change withdraws.
 | --- | --- |
 | `valid/docker-backend-branch.json` | passes: a branching plan that joins again |
 | `valid/restart-boundary.json` | passes: two phases across a Windows restart |
+| `valid/credential-login.json` | passes: a token asked for, then used on standard input |
 | `invalid/agent-claims-readiness.json` | schema: a proposal carries the KeyJutsu-owned section |
 | `invalid/free-form-condition.json` | schema: a condition is an expression string |
 | `invalid/embedded-newline.json` | schema: a command contains a carriage return |
 | `invalid/staged-credential.json` | schema: a credential step has a command to type |
+| `invalid/credential-without-request.json` | schema: a credential step does not say what it asks for |
+| `invalid/credential-on-a-command-step.json` | schema: a command step asks for a credential |
 | `invalid/future-major-version.json` | version: 2.0 |
 | `invalid/two-keys-in-one-condition.json` | schema: a condition object has two keys |
 | `structure-invalid/cycle.json` | structure: a cycle |

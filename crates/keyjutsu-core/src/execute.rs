@@ -29,7 +29,8 @@ use keyjutsu_execution::{
 use keyjutsu_plan::approval::ApprovedSnapshot;
 use keyjutsu_plan::condition::{KnownFacts, StepResult};
 use keyjutsu_plan::model::{
-    Check, ExecutionMode, Readiness, ServiceState, Step, StepKind, ValidationDisplay,
+    Check, CredentialKind, CredentialRequest, ExecutionMode, Readiness, ServiceState, ShellName, Step,
+    StepKind, ValidationDisplay,
 };
 use keyjutsu_plan::walk::frontier;
 use serde::{Deserialize, Serialize};
@@ -165,11 +166,30 @@ pub enum Outcome {
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export, export_to = "execute/")]
 pub enum ExecutionEvent {
-    StepStarting { step: String, title: String },
-    StepCarried { step: String },
-    Waiting { step: String, check: String },
-    StepFinished { step: String, run: StepRun },
-    Finished { outcome: Outcome },
+    StepStarting {
+        step: String,
+        title: String,
+    },
+    /// The next step asks the operator for a credential. Staged typing is off
+    /// until it is answered; the step starts when the operator presses Enter.
+    CredentialRequired {
+        step: String,
+        prompt: String,
+    },
+    StepCarried {
+        step: String,
+    },
+    Waiting {
+        step: String,
+        check: String,
+    },
+    StepFinished {
+        step: String,
+        run: StepRun,
+    },
+    Finished {
+        outcome: Outcome,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -210,6 +230,18 @@ fn engine_mode(m: ExecutionMode) -> EngineMode {
 /// validation unless the plan hides it. Operator steps become one user-input
 /// line: the operator does what the step says and presses Enter.
 pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
+    if let (StepKind::Credential, Some(request)) = (step.kind, &step.credential) {
+        return StagedScript {
+            steps: vec![StagedStep {
+                id: format!("{}#credential", step.id),
+                title: step.title.clone(),
+                command: credential_command(request),
+                mode: Some(EngineMode::UserInput),
+                submit: None,
+                answers: Some(credential_answers(request)),
+            }],
+        };
+    }
     let operator = matches!(step.kind, StepKind::Manual | StepKind::UserInput | StepKind::Credential);
     if operator || step.commands.is_empty() {
         return StagedScript {
@@ -219,6 +251,7 @@ pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
                 command: String::new(),
                 mode: Some(EngineMode::UserInput),
                 submit: None,
+                answers: None,
             }],
         };
     }
@@ -233,6 +266,7 @@ pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
             command: c.text.clone(),
             mode,
             submit: None,
+            answers: None,
         })
         .collect();
     if show_validation {
@@ -242,9 +276,56 @@ pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
             command: c.text.clone(),
             mode,
             submit: None,
+            answers: None,
         }));
     }
     StagedScript { steps: lines }
+}
+
+/// A PowerShell single-quoted string. PowerShell also ends such a string at
+/// the typographic single quotes, so those are doubled as well.
+fn ps_quote(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('\'');
+    for c in text.chars() {
+        if matches!(c, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            out.push(c);
+        }
+        out.push(c);
+    }
+    out.push('\'');
+    out
+}
+
+/// The command that asks for a credential (§25). The shell's own prompt
+/// masks what the operator types, keeps it out of history, and holds it as a
+/// SecureString or PSCredential; KeyJutsu passes the keys through and never
+/// holds the secret. The variable name is checked by the schema.
+pub fn credential_command(request: &CredentialRequest) -> String {
+    let prompt = ps_quote(&request.prompt);
+    match request.kind {
+        CredentialKind::Secret => {
+            format!("${} = Read-Host -AsSecureString -Prompt {prompt}", request.variable)
+        }
+        CredentialKind::UsernameAndPassword => {
+            let user = request.username.as_deref().map(|u| format!(" -UserName {}", ps_quote(u)));
+            format!("${} = Get-Credential -Message {prompt}{}", request.variable, user.unwrap_or_default())
+        }
+    }
+}
+
+/// How many Enters answer the prompt: one for a secret, or for a password
+/// when the user name is given; two when the user name is asked for too.
+pub fn credential_answers(request: &CredentialRequest) -> u32 {
+    match (request.kind, &request.username) {
+        (CredentialKind::UsernameAndPassword, None) => 2,
+        _ => 1,
+    }
+}
+
+/// Removes the credentials a run asked for from the shell (§25: ephemeral).
+pub fn forget_command(variables: &[String]) -> String {
+    format!("Remove-Variable -Name {} -Scope Global -ErrorAction Ignore", variables.join(","))
 }
 
 /// Run one internal check now.
@@ -408,6 +489,17 @@ pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
             "the plan uses more than one shell; a performance runs in one terminal (deviation D19)".into()
         );
     }
+    for step in snapshot.plan().steps.iter().filter(|s| s.kind == StepKind::Credential) {
+        if step.credential.is_none() {
+            return Err(format!("credential step `{}` does not say what it asks for", step.id));
+        }
+        if shells.contains(&ShellName::Cmd) {
+            return Err(format!(
+                "credential step `{}` needs PowerShell: cmd has no masked prompt, so the secret would be shown",
+                step.id
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -477,7 +569,10 @@ pub fn execute(
                 Some(_) => {}
             }
         }
-        for run in previous.runs.into_iter().filter(|r| r.succeeded) {
+        // A credential lives only in the shell that asked for it, so a
+        // resumed run asks again.
+        let asks = |id: &str| plan.step(id).is_some_and(|s| s.kind == StepKind::Credential);
+        for run in previous.runs.into_iter().filter(|r| r.succeeded && !asks(&r.step)) {
             if hashes.get(&run.step) == Some(&run.step_hash) {
                 checkpoint.runs.push(run);
             }
@@ -489,10 +584,36 @@ pub fn execute(
     }
     save(&checkpoint);
 
+    // Credentials asked for in this run, removed from the shell at the end.
+    let mut asked: Vec<String> = Vec::new();
+    let forget = |asked: &[String]| {
+        if !asked.is_empty() && driver.session.wait_for_prompt(options.prompt_timeout) {
+            let script = StagedScript {
+                steps: vec![StagedStep {
+                    id: "forget-credentials".into(),
+                    title: "Forget credentials".into(),
+                    command: forget_command(asked),
+                    mode: Some(EngineMode::Direct),
+                    submit: None,
+                    answers: None,
+                }],
+            };
+            while driver.events.try_recv().is_ok() {}
+            if driver
+                .session
+                .arm(script, PerformanceConfig { mode: EngineMode::Direct, ..options.base.clone() })
+                .is_ok()
+            {
+                let _ = driver.session.wait_for_prompt(options.prompt_timeout);
+            }
+        }
+    };
+
     loop {
         let f = frontier(plan, snapshot.graph(), &facts);
         if f.complete {
             save(&checkpoint);
+            forget(&asked);
             return finish(Outcome::Complete, checkpoint);
         }
         let Some(id) = f.next().map(str::to_owned) else {
@@ -526,6 +647,12 @@ pub fn execute(
         });
         save(&checkpoint);
         observe(ExecutionEvent::StepStarting { step: id.clone(), title: step.title.clone() });
+        if let (StepKind::Credential, Some(request)) = (step.kind, &step.credential) {
+            observe(ExecutionEvent::CredentialRequired { step: id.clone(), prompt: request.prompt.clone() });
+            if !asked.contains(&request.variable) {
+                asked.push(request.variable.clone());
+            }
+        }
 
         let script = staged_for(step, show_validation);
         let lines = script.steps.len();
@@ -625,6 +752,7 @@ pub fn execute(
                 (None, Some(c)) => (c.check.clone(), c.detail.clone()),
                 (None, None) => (String::new(), String::new()),
             };
+            forget(&asked);
             return finish(Outcome::Failed { step: id, expected, actual }, checkpoint);
         }
         facts.steps.insert(id, StepResult::Succeeded { exit_code: last_exit });

@@ -310,6 +310,35 @@ pub struct Step {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub execution_mode: Option<ExecutionMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub credential: Option<CredentialRequest>,
+}
+
+/// What a credential step asks for. The secret itself never appears in a
+/// plan: the operator types it into the shell's own masked prompt, and later
+/// steps refer to it by `variable`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "plan/")]
+pub struct CredentialRequest {
+    pub variable: String,
+    pub prompt: String,
+    pub kind: CredentialKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub target_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "plan/")]
+pub enum CredentialKind {
+    Secret,
+    UsernameAndPassword,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]

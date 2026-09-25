@@ -57,7 +57,7 @@ it is; **planned** names the milestone.
 | 4 | Plan mutation invalidates affected approval. | Held | Approvals bind to step hashes that chain through predecessors ([ADR 0010](docs/architecture/adr/0010-plan-hashing.md)); `changing_a_step_invalidates_it_and_everything_after_it`; property test `hashes_and_diff_agree_on_what_a_change_affects`. |
 | 5 | The elevated broker accepts only authorised structured operations. | Planned, M10 | Nothing runs elevated today; there is no elevated code path at all. |
 | 6 | Critical actions need dedicated semantic confirmation. | Partial: approval held, execution-time gate not yet built | Whole-plan approval never covers a critical step; each needs its typed phrase, also checked on load. "Critical" is KeyJutsu's own assessment (validation, M5), which the agent's label can raise but not lower: `recursive_removal_is_critical_whatever_the_agent_says`, `keyjutsus_own_critical_rating_needs_the_typed_phrase_even_if_the_agent_said_low`. `keyjutsu run` does not ask again just before a critical step runs; that gate needs somewhere to ask and arrives with the plan workspace (M7). |
-| 7 | Credential entry cannot be staged typing. | Partial | The plan schema forbids commands on a credential step and forces user-input mode (fixture `staged-credential`). The engine has a user-input mode that forwards real keys. Secure credential handling is M9. |
+| 7 | Credential entry cannot be staged typing. | Held | A credential step can have no commands and says only what it asks for (fixtures `staged-credential`, `credential-without-request`). The operator types the secret into PowerShell's own masked prompt; KeyJutsu writes the prompt command directly and never performs it, starts it only on the operator's Enter, and swallows keys after the last answer ([ADR 0015](docs/architecture/adr/0015-credentials-through-the-shells-masked-prompt.md)). `a_credential_is_entered_and_used_without_being_seen_or_kept`, `run_asks_for_a_credential_in_the_shells_masked_prompt`. |
 | 8 | Telemetry cannot contain task or terminal contents. | Held, trivially | KeyJutsu has no telemetry, crash reporting or network code of any kind. |
 | 9 | Only staged text reaches the shell while a performance owns the keyboard. | Held | `PerformanceEngine`; `mashing_arbitrary_keys_delivers_exactly_the_staged_command`, `keys_mashed_while_a_command_runs_do_not_reach_it`; end to end in `mashed_keys_type_and_run_exactly_the_staged_command` and the CLI test. |
 | 10 | An incomplete staged command is never submitted. | Held | `submit()` is the only source of a staged Enter; `no_sequence_of_keys_can_submit_an_incomplete_command`; a deliberate mutation letting Enter submit early broke two tests. Staged commands containing any control character are refused (`rejects_scripts_that_could_submit_part_of_a_command`). |
@@ -102,12 +102,16 @@ it is; **planned** names the milestone.
 | After a crash, a step whose effect is unknown is assumed to have worked, or run twice. | It is recorded as in doubt; a resumed run refuses to start until the operator settles it. | Held (`a_step_left_in_doubt_blocks_until_the_operator_settles_it`). |
 | A resumed run skips a step that changed since it last succeeded. | Earlier results count only where the step's hash in the new snapshot is the same. | Held (`a_changed_step_runs_again_even_though_it_succeeded_before`). |
 | A checkpoint is edited to mark steps as done so they are skipped. | Results are matched to step hashes, so an edit cannot make a changed or new step count. | **Partial**: an unchanged step can be marked done by anyone who can write the file (D20). |
+| Mashed keys land in a credential prompt. | A credential step starts only on Enter; `Start` from any front end is ignored for it. | Held (`a_line_that_asks_the_operator_waits_for_enter_and_is_never_performed`, `a_line_that_asks_the_operator_is_not_started_for_them`). |
+| Keys typed after the answer land on the next prompt line. | After the last Enter the answer needs, keys are swallowed until the command finishes. | Held (`keys_after_the_last_answer_do_not_reach_the_next_prompt`; found by the real-shell test). |
+| A secret is shown on screen, kept in history, or written to a checkpoint. | PowerShell's masked prompt; the value never passes through KeyJutsu's own state; cmd credential steps are refused. | Held for what KeyJutsu writes, checked on the raw terminal output, `Get-History`, the checkpoint and every event. **Limit:** a plan can print it by using the variable carelessly; validation does not flag that yet. |
+| A credential outlives the run. | `Remove-Variable` when the plan completes or fails. | **Partial:** after a disarm KeyJutsu types nothing, so the variable lasts until that shell exits. |
 | Keys pressed between steps are typed into the shell for real. | While a plan runs, the CLI holds keys that arrive with nothing armed. | Held (CLI `run_executes_an_approved_snapshot_in_performance_mode`, which fails without the hold). |
 
 ## Not covered yet
 
-Everything that depends on plans, approval, agents, validation, credentials,
-elevation, storage, recovery, networking and Techniques. Those arrive with
+Elevation, storage, recovery, networking and Techniques, and the desktop
+plan workspace. Those arrive with
 their milestones, and each milestone updates this document before it is
 considered done. The release gates in the specification (§57) cannot pass
 until they do.

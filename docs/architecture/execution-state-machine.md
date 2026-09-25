@@ -23,7 +23,7 @@ when the next step may start.
 | `EXECUTING` | Submitted; waiting for the shell to say the command finished. | KeyJutsu (keys swallowed, Ctrl+C and Esc passed on) |
 | `WAITING` | Waiting on an outside condition after a command. Defined, not entered yet: Milestone 8 waits for checks after the performance completes ([limits](milestone-8.md#limits)). | KeyJutsu |
 | `VALIDATING` | Checking the finished command against its contract. | KeyJutsu |
-| `AWAITING_USER_INPUT` | A user-input step: keys go to the shell for real. | The operator, through KeyJutsu |
+| `AWAITING_USER_INPUT` | A user-input step: keys go to the shell for real. For a credential, KeyJutsu's command asks and the operator answers; after the last answer the step moves to `EXECUTING`. | The operator, through KeyJutsu |
 | `PAUSED` | Nothing advances until Resume. | KeyJutsu |
 | `FAILED` | Reality differed from the plan. | The operator |
 | `REVALIDATION_REQUIRED` | Something the approval relied on changed. | The operator |
@@ -46,6 +46,7 @@ stateDiagram-v2
     EXECUTING --> WAITING: runtime wait (Milestone 8)
     WAITING --> VALIDATING
     AWAITING_USER_INPUT --> VALIDATING: shell reports D mark
+    AWAITING_USER_INPUT --> EXECUTING: last answer given (credential)
     VALIDATING --> TYPING: passed, next step typed
     VALIDATING --> EXECUTING: passed, next step Direct
     VALIDATING --> AWAITING_USER_INPUT: passed, next step user input

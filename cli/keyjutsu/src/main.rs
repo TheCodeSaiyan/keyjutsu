@@ -334,6 +334,7 @@ fn main() -> ExitCode {
                         command: command.clone(),
                         mode: None,
                         submit: None,
+                        answers: None,
                     })
                     .collect(),
             };

@@ -308,9 +308,25 @@
         },
         "execution_mode": {
           "$ref": "#/$defs/execution_mode"
+        },
+        "credential": {
+          "$ref": "#/$defs/credential_request"
         }
       },
       "allOf": [
+        {
+          "if": {
+            "required": ["credential"]
+          },
+          "then": {
+            "description": "Only a credential step asks for a credential.",
+            "properties": {
+              "kind": {
+                "const": "credential"
+              }
+            }
+          }
+        },
         {
           "if": {
             "properties": {
@@ -338,7 +354,8 @@
             }
           },
           "then": {
-            "description": "A credential step cannot be staged: no commands are typed on the operator's behalf, and its mode is always user input.",
+            "description": "A credential step cannot be staged: no commands are typed on the operator's behalf, and its mode is always user input. It says what it asks for; KeyJutsu asks for it through the shell's own masked prompt.",
+            "required": ["credential"],
             "properties": {
               "commands": {
                 "type": "array",
@@ -351,6 +368,40 @@
           }
         }
       ]
+    },
+    "credential_request": {
+      "description": "What a credential step asks the operator for. The plan names the variable the later steps use; the secret itself never appears in a plan.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variable", "prompt", "kind"],
+      "properties": {
+        "variable": {
+          "description": "The PowerShell variable the credential is held in for the rest of the run, as a SecureString or a PSCredential. Removed when the plan ends.",
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        },
+        "prompt": {
+          "description": "What the operator is asked, shown by the shell's own prompt.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "kind": {
+          "description": "`secret` is one masked value (a token, a password); `username_and_password` asks for both.",
+          "enum": ["secret", "username_and_password"]
+        },
+        "username": {
+          "description": "For `username_and_password`: the user name to suggest.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "target_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
     },
     "risk_level": {
       "enum": ["low", "normal", "high", "critical"]

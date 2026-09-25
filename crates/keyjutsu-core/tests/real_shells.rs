@@ -45,6 +45,7 @@ fn script(steps: &[(&str, Option<ExecutionMode>)]) -> StagedScript {
                 command: (*command).into(),
                 mode: *mode,
                 submit: None,
+                answers: None,
             })
             .collect(),
     }

@@ -179,6 +179,7 @@ pub fn probe_shell(kind: ShellKind, profile: ProfileMode, timeout: Duration) -> 
             command: command.into(),
             mode: None,
             submit: None,
+            answers: None,
         }],
     };
     let config = PerformanceConfig {

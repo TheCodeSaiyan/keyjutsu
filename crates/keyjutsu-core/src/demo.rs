@@ -10,7 +10,14 @@ use keyjutsu_execution::{StagedScript, StagedStep};
 use keyjutsu_terminal::ShellKind;
 
 fn step(id: &str, title: &str, command: &str) -> StagedStep {
-    StagedStep { id: id.into(), title: title.into(), command: command.into(), mode: None, submit: None }
+    StagedStep {
+        id: id.into(),
+        title: title.into(),
+        command: command.into(),
+        mode: None,
+        submit: None,
+        answers: None,
+    }
 }
 
 pub fn safe_demo(shell: ShellKind) -> StagedScript {

@@ -15,10 +15,10 @@ use std::time::Duration;
 use keyjutsu_core::execute::{
     Checkpoint, Driver, ExecuteOptions, ExecutionEvent, ForwardingSink, InProgress, Outcome, execute,
 };
-use keyjutsu_core::execution::{Cadence, ExecutionMode, PerformanceConfig};
-use keyjutsu_core::headless::Collector;
+use keyjutsu_core::execution::{Cadence, ExecutionMode, ExecutionState, PerformanceConfig};
+use keyjutsu_core::headless::{Collector, strip_ansi};
 use keyjutsu_core::plan::{ApprovalBook, ApprovedSnapshot, parse_plan, seal};
-use keyjutsu_core::terminal::{KeyChord, ProfileMode, ShellKind};
+use keyjutsu_core::terminal::{KeyChord, KeyName, ProfileMode, ShellKind};
 use keyjutsu_core::validation::{Options, validate};
 use keyjutsu_core::{Session, SessionOptions};
 use serde_json::{Value, json};
@@ -436,5 +436,221 @@ fn a_check_is_waited_for_up_to_its_timeout() {
     writer.join().unwrap();
     assert_eq!(outcome, Outcome::Complete, "{events:?}");
     assert!(events.iter().any(|e| matches!(e, ExecutionEvent::Waiting { .. })), "it had to wait: {events:?}");
+    t.session.close();
+}
+
+const SECRET: &str = "kj-S3cret-7x";
+
+/// A plan that asks for a token, then uses it without printing it.
+fn credential_plan() -> Value {
+    let ask = json!({"id": "ask", "title": "Registry token", "objective": "Get the token.", "kind": "credential",
+        "shell": {"kind": "pwsh"}, "execution_mode": "user_input",
+        "credential": {"variable": "KJ_TOKEN", "prompt": "Token for the test", "kind": "secret"}});
+    let mut used =
+        step("use", "'length ' + [System.Net.NetworkCredential]::new('', $KJ_TOKEN).Password.Length");
+    used["internal_validation"] = json!([{"exit_code": {"equals": 0}}]);
+    plan(json!([ask, used]), json!([]))
+}
+
+/// The operator: waits for the credential step, presses Enter to start it,
+/// then types the secret into the shell's prompt once it is showing.
+/// Then it goes back to mashing for the steps after, until `done`.
+fn operator(t: &Terminal, secret: &'static str, done: Arc<AtomicBool>) -> std::thread::JoinHandle<()> {
+    let (session, out) = (t.session.clone(), t.out.clone());
+    std::thread::spawn(move || {
+        // Giving up closes the session, so the run ends instead of waiting.
+        let give_up = |why: &str| -> ! {
+            session.close();
+            panic!("{why}:\n{}", out.plain_output());
+        };
+        let asking =
+            || session.snapshot().is_some_and(|s| s.asks_operator && s.state == ExecutionState::Armed);
+        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        while !asking() {
+            if std::time::Instant::now() > deadline {
+                give_up("the credential step never came");
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        // Keys still being mashed start nothing; only Enter does.
+        for c in "zzzz".chars() {
+            session.key(&KeyChord::char(c)).unwrap();
+        }
+        if strip_ansi(&out.snapshot().output).contains("Token for the test") {
+            give_up("mashed keys started the credential prompt");
+        }
+        session.key(&KeyChord::plain(KeyName::Enter)).unwrap();
+        if !out
+            .wait_until(Duration::from_secs(30), |c| strip_ansi(&c.output).contains("Token for the test: "))
+        {
+            give_up("the prompt never showed");
+        }
+        for c in secret.chars() {
+            session.key(&KeyChord::char(c)).unwrap();
+        }
+        session.key(&KeyChord::plain(KeyName::Enter)).unwrap();
+        while !done.load(Ordering::SeqCst) {
+            if session.snapshot().is_some_and(|s| s.owns_input) {
+                let _ = session.key(&KeyChord::char('q'));
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    })
+}
+
+#[test]
+fn a_credential_is_entered_and_used_without_being_seen_or_kept() {
+    let dir = scratch("credential");
+    let path = dir.join("run.checkpoint.json");
+    let plan_json = credential_plan();
+    let snap = approve(&plan_json);
+    let t = terminal();
+    let done = Arc::new(AtomicBool::new(false));
+    let answer = operator(&t, SECRET, done.clone());
+    let options = ExecuteOptions { checkpoint: Some(path.clone()), ..mode(ExecutionMode::Performance) };
+    let (outcome, checkpoint, events) = run(&t, &snap, &options, None);
+    done.store(true, Ordering::SeqCst);
+    answer.join().unwrap();
+    assert_eq!(outcome, Outcome::Complete, "{events:?}\n{}", t.out.plain_output());
+    assert!(events.iter().any(|e| matches!(e, ExecutionEvent::CredentialRequired { .. })));
+
+    // It was used: the next step saw a value of the right length.
+    let screen = t.out.plain_output();
+    assert!(screen.contains(&format!("length {}", SECRET.len())), "{screen}");
+
+    // And it was forgotten when the plan ended.
+    t.session.disarm();
+    t.session.write_input(b"'still set: ' + (Test-Path variable:KJ_TOKEN)\r").unwrap();
+    assert!(
+        t.out.wait_until(Duration::from_secs(20), |c| strip_ansi(&c.output).contains("still set: False"))
+    );
+    t.session.write_input(b"'history: ' + ((Get-History | Out-String) -replace '\\s+', ' ')\r").unwrap();
+    assert!(t.out.wait_until(Duration::from_secs(20), |c| strip_ansi(&c.output).contains("history: ")));
+    std::thread::sleep(Duration::from_millis(500));
+
+    // Nowhere does the secret appear: not on screen (or anywhere in the raw
+    // terminal output), history, the checkpoint, the events or the plan.
+    let raw = t.out.snapshot().output;
+    assert!(!raw.contains(SECRET), "the secret reached the terminal output");
+    assert!(!std::fs::read_to_string(&path).unwrap().contains(SECRET));
+    assert!(!serde_json::to_string(&checkpoint).unwrap().contains(SECRET));
+    assert!(!format!("{events:?}").contains(SECRET));
+    assert!(!snap.to_json().contains(SECRET) && !plan_json.to_string().contains(SECRET));
+    t.session.close();
+}
+
+#[test]
+fn a_resumed_run_asks_for_the_credential_again() {
+    let snap = approve(&credential_plan());
+    let t = terminal();
+    let answer = operator(&t, SECRET, Arc::new(AtomicBool::new(true)));
+    let (outcome, checkpoint, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    answer.join().unwrap();
+    assert_eq!(outcome, Outcome::Complete);
+    t.session.close();
+
+    // A new shell: the old one's variable is gone, so the step must run again.
+    let t = terminal();
+    let answer = operator(&t, SECRET, Arc::new(AtomicBool::new(true)));
+    let (outcome, _, events) = run(&t, &snap, &mode(ExecutionMode::Direct), Some(checkpoint));
+    answer.join().unwrap();
+    assert_eq!(outcome, Outcome::Complete, "{events:?}");
+    assert!(
+        events.iter().any(|e| matches!(e, ExecutionEvent::CredentialRequired { .. })),
+        "the credential was carried over: {events:?}"
+    );
+    t.session.close();
+}
+
+#[test]
+fn a_credential_step_is_refused_in_cmd() {
+    let mut v = credential_plan();
+    v["steps"][0]["shell"]["kind"] = json!("cmd");
+    v["steps"][1] = json!({"id": "use", "title": "use", "objective": "Test.", "kind": "command",
+        "shell": {"kind": "cmd"}, "commands": [{"text": "echo hi"}]});
+    let draft = parse_plan(&v.to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, ..Options::default() });
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    book.approve_all_except_critical(&validated, AT);
+    let refused = match seal(&validated, &book, None, AT) {
+        Err(_) => true,
+        Ok(snap) => keyjutsu_core::execute::preflight(&snap).is_err_and(|e| e.contains("needs PowerShell")),
+    };
+    assert!(refused, "a cmd credential step must not run");
+}
+
+#[test]
+fn the_credential_command_is_exactly_the_shells_own_masked_prompt() {
+    use keyjutsu_core::execute::{credential_command, forget_command};
+    use keyjutsu_core::plan::model::{CredentialKind, CredentialRequest};
+    let mut r = CredentialRequest {
+        variable: "TOKEN".into(),
+        prompt: "Bob's \u{2019}token\u{2019}".into(),
+        kind: CredentialKind::Secret,
+        username: None,
+        target_id: None,
+    };
+    // Every kind of single quote is doubled, so the prompt cannot end the string.
+    assert_eq!(
+        credential_command(&r),
+        "$TOKEN = Read-Host -AsSecureString -Prompt 'Bob''s \u{2019}\u{2019}token\u{2019}\u{2019}'"
+    );
+    r.kind = CredentialKind::UsernameAndPassword;
+    r.prompt = "Registry".into();
+    r.username = Some("ci'bot".into());
+    assert_eq!(credential_command(&r), "$TOKEN = Get-Credential -Message 'Registry' -UserName 'ci''bot'");
+    assert_eq!(
+        forget_command(&["A".into(), "B".into()]),
+        "Remove-Variable -Name A,B -Scope Global -ErrorAction Ignore"
+    );
+}
+
+#[test]
+fn a_user_name_and_password_are_asked_for_in_turn() {
+    let ask = json!({"id": "ask", "title": "Sign in", "objective": "Get a credential.", "kind": "credential",
+        "shell": {"kind": "pwsh"}, "execution_mode": "user_input",
+        "credential": {"variable": "KJ_CRED", "prompt": "Account for the test", "kind": "username_and_password"}});
+    let used = step(
+        "use",
+        "'user ' + $KJ_CRED.UserName + ' length ' + $KJ_CRED.GetNetworkCredential().Password.Length",
+    );
+    let snap = approve(&plan(json!([ask, used]), json!([])));
+    let t = terminal();
+    let (session, out) = (t.session.clone(), t.out.clone());
+    let answer = std::thread::spawn(move || {
+        let seen = |text: &'static str| {
+            if !out.wait_until(Duration::from_secs(30), |c| strip_ansi(&c.output).contains(text)) {
+                session.close();
+                panic!("never saw {text:?}:\n{}", out.plain_output());
+            }
+        };
+        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        while !session.snapshot().is_some_and(|s| s.asks_operator) {
+            if std::time::Instant::now() > deadline {
+                session.close();
+                panic!("the credential step never came:\n{}", out.plain_output());
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        session.key(&KeyChord::plain(KeyName::Enter)).unwrap();
+        seen("User:");
+        for c in "bob".chars() {
+            session.key(&KeyChord::char(c)).unwrap();
+        }
+        session.key(&KeyChord::plain(KeyName::Enter)).unwrap();
+        seen("Password for user bob:");
+        for c in "pa55word".chars() {
+            session.key(&KeyChord::char(c)).unwrap();
+        }
+        session.key(&KeyChord::plain(KeyName::Enter)).unwrap();
+    });
+    let (outcome, _, events) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    answer.join().unwrap();
+    assert_eq!(outcome, Outcome::Complete, "{events:?}\n{}", t.out.plain_output());
+    let screen = t.out.plain_output();
+    assert!(screen.contains("user bob length 8"), "{screen}");
+    assert!(!t.out.snapshot().output.contains("pa55word"));
     t.session.close();
 }

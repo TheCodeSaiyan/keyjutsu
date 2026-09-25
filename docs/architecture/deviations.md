@@ -189,3 +189,21 @@ add a step. Protecting it belongs with the other local state in Milestone 14
 A checkpoint that cannot be written does not stop the run; the run carries on,
 and a later `--resume` will know less than it should. That should become a
 warning on screen once there is somewhere to show it.
+
+## D21. No Windows-native authentication integration yet
+
+- **Requirement:** §25 prefers Windows-native authentication (SSPI/Kerberos,
+  Windows Hello), then interactive browser or device flows, then a secure
+  user-entered credential.
+- **Limitation:** Milestone 9 builds the third: a secret or a user name and
+  password typed into PowerShell's own masked prompt. Native mechanisms need
+  a per-tool integration (which tool accepts a Kerberos ticket, which one
+  opens Windows Hello), and none was needed by the plans built so far.
+- **Evidence:** tools with their own browser or device sign-in (`az login`,
+  `gh auth login`) already work as ordinary command steps, because the tool
+  talks to the browser and KeyJutsu never sees the credential.
+- **Options:** (a) a `windows_integrated` credential kind that asserts the
+  current logon is used and checks it (for example with `klist`); (b) per-tool
+  device-flow helpers; (c) leave both to command steps.
+- **Resolution taken:** (c) for now. (a) is the natural next step when a plan
+  needs it.

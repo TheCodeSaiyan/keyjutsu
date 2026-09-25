@@ -51,6 +51,7 @@ flowchart TD
 - **M5 (validation) is done** ([milestone-5.md](milestone-5.md)).
 - **M6 (agent integration) is done** ([milestone-6.md](milestone-6.md)).
 - **M8 (execution) is done** ([milestone-8.md](milestone-8.md)).
+- **M9 (credential gates) is done** ([milestone-9.md](milestone-9.md)).
 - **M8 (execution) came before M7 (the plan workspace).** M8 needs only M2,
   M4 and M5, and could be proven headless against real shells; M7 is desktop
   UI that could not be checked on screen while it was being built.

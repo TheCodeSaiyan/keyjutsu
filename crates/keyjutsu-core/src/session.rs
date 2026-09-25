@@ -295,7 +295,8 @@ impl Session {
         let mut engine =
             PerformanceEngine::new(script, config).map_err(|e| CoreError::Refused(e.to_string()))?;
         let mut actions = engine.handle(Input::Arm);
-        // Direct and user-input steps have no first keystroke to wait for.
+        // Direct and user-input steps have no first keystroke to wait for,
+        // except one that asks the operator: the engine waits for Enter.
         if matches!(engine.snapshot().step_mode, ExecutionMode::Direct | ExecutionMode::UserInput) {
             actions.extend(engine.handle(Input::Start));
         }

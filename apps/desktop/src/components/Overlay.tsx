@@ -39,7 +39,16 @@ export function Overlay({ snapshot, paused, onResume, onDisarm }: Props) {
             </dd>
             <dt>State</dt>
             <dd className="state">{paused ? "Paused" : stateLabel(snapshot.state)}</dd>
-            {snapshot.total_chars > 0 && (
+            {snapshot.asks_operator && (
+              <>
+                <dt>Your turn</dt>
+                <dd>
+                  Staged typing is off. Stop typing, press Enter, then answer the shell&apos;s
+                  prompt yourself.
+                </dd>
+              </>
+            )}
+            {snapshot.total_chars > 0 && !snapshot.asks_operator && (
               <>
                 <dt>Typed</dt>
                 <dd>

@@ -123,10 +123,14 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         let title = |t: &str| {
             let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::SetTitle(t));
         };
-        let observe = |e: ExecutionEvent| {
-            if let ExecutionEvent::StepStarting { title: t, .. } = &e {
-                title(t);
+        let observe = |e: ExecutionEvent| match &e {
+            ExecutionEvent::StepStarting { title: t, .. } => title(t),
+            // Staged typing is off: the operator must stop mashing and answer
+            // for real, in the shell's own masked prompt.
+            ExecutionEvent::CredentialRequired { prompt, .. } => {
+                title(&format!("Credential required: {prompt}. Stop typing, then press Enter."));
             }
+            _ => {}
         };
         let done = execute(
             &Driver { session: &session, events: &events },

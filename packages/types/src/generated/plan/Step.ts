@@ -3,6 +3,7 @@ import type { Artifact } from "./Artifact";
 import type { Check } from "./Check";
 import type { Command } from "./Command";
 import type { Condition } from "./Condition";
+import type { CredentialRequest } from "./CredentialRequest";
 import type { Effect } from "./Effect";
 import type { ExecutionMode } from "./ExecutionMode";
 import type { NetworkContract } from "./NetworkContract";
@@ -14,4 +15,4 @@ import type { ShellBinding } from "./ShellBinding";
 import type { StepKind } from "./StepKind";
 import type { ToolRequirement } from "./ToolRequirement";
 
-export type Step = { id: string, title: string, objective: string, reason?: string, kind: StepKind, target_id?: string, shell?: ShellBinding, working_directory?: string, commands: Array<Command>, tool_requirements: Array<ToolRequirement>, depends_on: Array<string>, preconditions: Array<Condition>, privilege?: Privilege, proposed_risk?: ProposedRisk, reversibility?: Reversibility, expected_effects: Array<Effect>, visible_validation: Array<Command>, internal_validation: Array<Check>, recovery?: Recovery, network?: NetworkContract, artifacts: Array<Artifact>, execution_mode?: ExecutionMode, };
+export type Step = { id: string, title: string, objective: string, reason?: string, kind: StepKind, target_id?: string, shell?: ShellBinding, working_directory?: string, commands: Array<Command>, tool_requirements: Array<ToolRequirement>, depends_on: Array<string>, preconditions: Array<Condition>, privilege?: Privilege, proposed_risk?: ProposedRisk, reversibility?: Reversibility, expected_effects: Array<Effect>, visible_validation: Array<Command>, internal_validation: Array<Check>, recovery?: Recovery, network?: NetworkContract, artifacts: Array<Artifact>, execution_mode?: ExecutionMode, credential?: CredentialRequest, };

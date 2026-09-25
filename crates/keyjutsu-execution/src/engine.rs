@@ -127,6 +127,9 @@ pub struct PerformanceSnapshot {
     pub typed_chars: usize,
     pub total_chars: usize,
     pub owns_input: bool,
+    /// This step asks the operator for something (a credential): staged
+    /// typing is off, and it starts on Enter.
+    pub asks_operator: bool,
     pub outcomes: Vec<StepOutcome>,
 }
 
@@ -138,6 +141,8 @@ pub struct PerformanceEngine {
     step: usize,
     chars: Vec<char>,
     typed: usize,
+    /// Enter presses the operator has given the current line.
+    answered: u32,
     paused_from: Option<ExecutionState>,
     pause_after_step: bool,
     released: bool,
@@ -158,6 +163,7 @@ impl PerformanceEngine {
             step: 0,
             chars,
             typed: 0,
+            answered: 0,
             paused_from: None,
             pause_after_step: false,
             released: false,
@@ -191,6 +197,7 @@ impl PerformanceEngine {
             step_mode: self.mode(),
             typed_chars: self.typed,
             total_chars: self.chars.len(),
+            asks_operator: self.asks_operator(),
             owns_input: self.owns_input(),
             outcomes: self.outcomes.clone(),
         }
@@ -211,7 +218,8 @@ impl PerformanceEngine {
         let mut out = Vec::new();
         match input {
             Input::Arm => self.arm(&mut out),
-            Input::Start if self.state == Armed => self.enter_step(&mut out),
+            // A line that asks the operator starts only on their Enter.
+            Input::Start if self.state == Armed && !self.asks_operator() => self.enter_step(&mut out),
             Input::Start => {}
             Input::Key(key) => self.key(key, &mut out),
             Input::Tick => self.tick(&mut out),
@@ -265,8 +273,19 @@ impl PerformanceEngine {
         match (key.class, self.state) {
             (KeyClass::Overlay, _) => out.push(Action::OverlayRequested),
 
-            // A user-input step is the operator typing for real.
-            (_, AwaitingUserInput) => forward(out),
+            // A user-input step is the operator typing for real. Once they
+            // have given every answer the line asks for, the command runs
+            // and later keys are swallowed like any other running command.
+            (class, AwaitingUserInput) => {
+                forward(out);
+                if class == KeyClass::Enter && self.asks_operator() {
+                    self.answered += 1;
+                    let answers = self.script.steps[self.step].answers;
+                    if answers.is_some_and(|n| self.answered >= n) {
+                        self.set(Executing, out);
+                    }
+                }
+            }
 
             // Ctrl+C is always a real interrupt. If it lands while a staged
             // line is being typed, the shell abandons that line, so the step
@@ -285,6 +304,9 @@ impl PerformanceEngine {
             (KeyClass::Escape, Executing | Waiting) => forward(out),
             (KeyClass::Escape, _) => {}
 
+            // A line that asks the operator for something starts only on
+            // Enter: keys still being mashed must not land in the prompt.
+            (KeyClass::Advance, Armed) if self.asks_operator() => {}
             (KeyClass::Advance | KeyClass::Enter, Armed) => {
                 self.enter_step(out);
                 if matches!(self.mode(), ExecutionMode::Performance | ExecutionMode::Assisted) {
@@ -415,6 +437,7 @@ impl PerformanceEngine {
     fn enter_step(&mut self, out: &mut Vec<Action>) {
         out.push(Action::StepStarted { index: self.step });
         self.typed = 0;
+        self.answered = 0;
         match self.mode() {
             ExecutionMode::Performance | ExecutionMode::Assisted => self.set(Typing, out),
             ExecutionMode::AutoPerformance => {
@@ -428,8 +451,26 @@ impl PerformanceEngine {
                 out.push(Action::Write(bytes));
                 self.set(Executing, out);
             }
-            ExecutionMode::UserInput => self.set(AwaitingUserInput, out),
+            // A user-input line with a command is KeyJutsu's command and the
+            // operator's answer: the command is written directly (never
+            // performed, §25), then the keys are the operator's until the
+            // shell reports it finished. How a credential is asked for.
+            ExecutionMode::UserInput => {
+                if !self.chars.is_empty() {
+                    let mut bytes = self.script.steps[self.step].command.clone().into_bytes();
+                    bytes.push(b'\r');
+                    self.typed = self.chars.len();
+                    out.push(Action::Write(bytes));
+                }
+                self.set(AwaitingUserInput, out);
+            }
         }
+    }
+
+    /// A user-input line with a command: KeyJutsu runs the command and the
+    /// operator answers it, as a credential step does.
+    pub fn asks_operator(&self) -> bool {
+        self.mode() == ExecutionMode::UserInput && !self.chars.is_empty()
     }
 
     fn advance_by_key(&mut self, out: &mut Vec<Action>) {

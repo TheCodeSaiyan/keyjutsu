@@ -14,6 +14,8 @@ export type { CaptureKind } from "./generated/plan/CaptureKind";
 export type { Check } from "./generated/plan/Check";
 export type { Command } from "./generated/plan/Command";
 export type { Condition } from "./generated/plan/Condition";
+export type { CredentialKind } from "./generated/plan/CredentialKind";
+export type { CredentialRequest } from "./generated/plan/CredentialRequest";
 export type { Destination } from "./generated/plan/Destination";
 export type { Drift } from "./generated/plan/Drift";
 export type { Edge } from "./generated/plan/Edge";
