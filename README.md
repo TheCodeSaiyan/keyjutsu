@@ -51,6 +51,8 @@ keyjutsu demo --clean
 On a clean Windows 11 in Windows Sandbox, the demo's three commands took 595
 mashed keys, and not one of those keys reached the shell as itself.
 
+![A performance, paused. The terminal shows Get-ComputerInfo -Property OsNa, typed so far by 31 keys. In the corner, the operator controls: step 01, Describe this computer, paused, 31 of 89 characters typed, next Show the PowerShell version, 0 of 3 done, with Resume and Disarm.](docs/images/performance.png)
+
 [Your first performance, step by step](docs/guides/first-performance.md)
 
 ### Plans from the agent you already use, kept read-only

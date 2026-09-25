@@ -24,8 +24,11 @@ is typed yet. `--clean` skips your PowerShell profile and history, so an
 oh-my-posh prompt or PSReadLine's grey predictions can't get in the way the
 first time; drop it once you've seen how it behaves.
 
-In the desktop app, the first screen has **Try the safe demo**, which opens
-the same three commands in its terminal; press **Arm KeyJutsu** to begin.
+In the desktop app, the first screen has **Try the safe demo**. It stages
+the same three commands; open **Terminal**, choose the **Clean** profile, and
+press **Arm KeyJutsu** to begin:
+
+![The Terminal screen with the safe demo ready. On the left, the mode (Performance selected), Turbo, what submits a command, the demo's read-only commands and the red Arm KeyJutsu button. On the right, PowerShell 7 with the Clean profile, waiting at its prompt.](../images/terminal.png)
 
 ### 2. Mash the keyboard
 
@@ -82,6 +85,11 @@ guessing.
 | Esc | goes to a running command; ignored while KeyJutsu is typing |
 | Ctrl+Shift+K | pause and resume (CLI); private operator controls (desktop) |
 | Ctrl+Alt+Shift+K | disarm at once, erasing anything half-typed |
+
+In the desktop app, Ctrl+Shift+K pauses the performance and opens the
+operator controls, small and in a corner, for you rather than anyone watching:
+
+![A performance, paused. The terminal shows Get-ComputerInfo -Property OsNa, typed so far by 31 keys. In the corner, the operator controls: step 01, Describe this computer, paused, 31 of 89 characters typed, next Show the PowerShell version, 0 of 3 done, with Resume and Disarm.](../images/performance.png)
 
 The disarm chord works in every state, and it's handled before anything else
 looks at the key, so nothing can hold on to it. Esc isn't the disarm, because

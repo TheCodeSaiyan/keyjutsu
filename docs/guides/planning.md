@@ -30,8 +30,11 @@ decline.
 ### 1. Describe the task
 
 In the desktop app, **New task** asks "What do you want KeyJutsu to do?".
-Write it, choose the **Primary agent**, and add any context with
-**+ Add context**: an error message, a log excerpt. Then **Plan task →**.
+Write it, choose the agent, and add any context with **+ Add context**: an
+error message, a log excerpt. Then **Plan task →**. **Open plan file…** opens
+a plan you already have.
+
+![The New task screen. "What do you want KeyJutsu to do?", a box for the task, + Add context, Open plan file…, the agent to ask (Codex CLI 0.154.0) and Plan task. Below, what this machine has: the agents, the terminal, how Administrator steps are handled, and no telemetry.](../images/new-task.png)
 
 From the CLI:
 
@@ -193,6 +196,8 @@ Not sealed: these critical steps need their own typed confirmation.
 In the app the same appears as a dialog, with **Approve critical step**
 enabled only once the phrase is typed. The phrase is words, not a key, so no
 amount of mashing can produce it.
+
+![The critical action dialog for a step that deletes C:/Users/Public/BuildCache. It shows the target, the exact command, the impact, that recovery is none, and the validation evidence including the -WhatIf result. At the foot: to approve this step, type DELETE THE OLD BUILD CACHE, with Approve critical step disabled until it's typed.](../images/critical-step.png)
 
 ### 6. Check the snapshot, whenever you like
 

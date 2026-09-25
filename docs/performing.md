@@ -51,6 +51,8 @@ for you rather than anyone watching: the current step, its state, how much is
 typed, the next step, progress, and **Resume** and **Disarm**. Opening them
 pauses the performance.
 
+![A performance, paused. The terminal shows Get-ComputerInfo -Property OsNa, typed so far by 31 keys. In the corner, the operator controls: step 01, Describe this computer, paused, 31 of 89 characters typed, next Show the PowerShell version, 0 of 3 done, with Resume and Disarm.](images/performance.png)
+
 **The disarm chord** works in every state. It's recognised before anything
 else looks at the key, and it erases whatever was half-typed, so the line you
 get back is empty. Neither the CLI nor the app offers a setting to change it

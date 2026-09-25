@@ -70,6 +70,10 @@ KeyJutsu 0.1.0
   [ok  ] Encrypted storage                history is encrypted with a key only this Windows account can unlock (DPAPI)
 ```
 
+The desktop app runs the same checks the first time it opens:
+
+![KeyJutsu's first screen: the readiness checks, each ticked. Windows 11 Pro, x64, ConPTY, staged input for PowerShell 7, Windows PowerShell 5.1 and Command Prompt, telemetry off, four AI agents found, the elevation broker installed and encrypted storage. Below them, Start using KeyJutsu and Try the safe demo.](../images/first-run.png)
+
 Every line is checked for real rather than assumed. "Staged input" means a
 shell was started in a pseudo-console and KeyJutsu typed into it, so an `ok`
 there means performances will work in that shell. With PowerShell 7 installed
