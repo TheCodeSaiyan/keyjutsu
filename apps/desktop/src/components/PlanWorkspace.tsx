@@ -138,6 +138,15 @@ export function PlanWorkspace(props: Props) {
             </span>
           </div>
           <div className="row">
+            {view.plan.steps.some((s) => s.artifacts.length > 0) && (
+              <button
+                disabled={busy !== null}
+                title="Download each artifact now, check it against its pinned hash and keep it for the run"
+                onClick={() => act("Downloading and checking artifacts…", () => ipc.stage())}
+              >
+                Stage downloads
+              </button>
+            )}
             <button
               disabled={busy !== null}
               onClick={() => act("Validating…", () => ipc.validate())}

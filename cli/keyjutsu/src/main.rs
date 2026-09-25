@@ -231,6 +231,15 @@ enum PlanCommand {
         #[arg(long)]
         no_dry_run: bool,
     },
+    /// Download every artifact the plan needs, check it against its pinned
+    /// hash, and keep it for the run. Nothing is downloaded while a plan runs.
+    Stage {
+        file: std::path::PathBuf,
+        /// Write a copy of the plan with the hash of each unpinned artifact
+        /// filled in, for you to review before approving.
+        #[arg(long, value_name = "FILE")]
+        pin: Option<std::path::PathBuf>,
+    },
     /// Check a sealed snapshot has not been altered.
     Verify {
         snapshot: std::path::PathBuf,
@@ -373,6 +382,7 @@ fn main() -> ExitCode {
         Command::Plan(PlanCommand::Approve { file, out, confirmations, force, no_dry_run }) => {
             plans::approve(&file, &out, &confirmations, force, !no_dry_run)
         }
+        Command::Plan(PlanCommand::Stage { file, pin }) => plans::stage(&file, pin.as_deref()),
         Command::Plan(PlanCommand::Verify { snapshot, environment }) => plans::verify(&snapshot, environment),
         Command::Plan(PlanCommand::Diff { old, new }) => plans::diff(&old, &new),
         Command::Perform { commands, shell, performance } => {

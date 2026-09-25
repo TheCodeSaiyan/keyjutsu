@@ -194,12 +194,14 @@ will use to decide which approvals a change withdraws.
 | `valid/docker-backend-branch.json` | passes: a branching plan that joins again |
 | `valid/restart-boundary.json` | passes: two phases across a Windows restart |
 | `valid/credential-login.json` | passes: a token asked for, then used on standard input |
+| `valid/staged-download.json` | passes: an artifact staged and used as `$KJ_ARTIFACTS['jq.exe']` (its hash is a placeholder) |
 | `invalid/agent-claims-readiness.json` | schema: a proposal carries the KeyJutsu-owned section |
 | `invalid/free-form-condition.json` | schema: a condition is an expression string |
 | `invalid/embedded-newline.json` | schema: a command contains a carriage return |
 | `invalid/staged-credential.json` | schema: a credential step has a command to type |
 | `invalid/credential-without-request.json` | schema: a credential step does not say what it asks for |
 | `invalid/credential-on-a-command-step.json` | schema: a command step asks for a credential |
+| `invalid/artifact-over-plain-http.json` | schema: an artifact from a remote host over plain HTTP |
 | `invalid/future-major-version.json` | version: 2.0 |
 | `invalid/two-keys-in-one-condition.json` | schema: a condition object has two keys |
 | `structure-invalid/cycle.json` | structure: a cycle |

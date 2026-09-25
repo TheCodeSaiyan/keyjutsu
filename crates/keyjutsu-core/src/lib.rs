@@ -5,6 +5,7 @@
 //! or below it, never in a front end. The desktop's React code in particular
 //! can only ask; this crate answers.
 
+pub mod artifacts;
 pub mod demo;
 pub mod execute;
 pub mod fingerprint;

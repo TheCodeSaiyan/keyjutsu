@@ -352,6 +352,22 @@ async fn workspace_validate(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceVie
     .map_err(|e| e.to_string())?
 }
 
+/// Download and pin every artifact the draft needs (§30). The source is
+/// contacted now, before approval, so that nothing is downloaded at run time.
+#[tauri::command]
+async fn workspace_stage(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
+    let plans = plans.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        with_workspace(&plans, |w| {
+            w.stage(&keyjutsu_core::artifacts::default_store(), &fingerprint::now_rfc3339())
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Run an agent request against the current draft, off the UI thread.
 async fn agent_request(
     plans: &Arc<Plans>,
@@ -598,6 +614,7 @@ fn main() {
             workspace_move_step,
             workspace_note,
             workspace_validate,
+            workspace_stage,
             workspace_retry_step,
             workspace_revise,
             workspace_review,

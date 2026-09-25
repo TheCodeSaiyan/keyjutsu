@@ -17,6 +17,7 @@
 //! [`powershell::what_if_blocker`]).
 
 pub mod judge;
+pub mod network;
 pub mod powershell;
 pub mod probe;
 pub mod process;

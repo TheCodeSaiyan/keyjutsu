@@ -306,3 +306,51 @@ pub fn diff(old: &Path, new: &Path) -> ExitCode {
     }
     ExitCode::SUCCESS
 }
+
+/// `keyjutsu plan stage`: download, verify and keep each artifact (§30).
+pub fn stage(file: &Path, pin_to: Option<&Path>) -> ExitCode {
+    let plan = match load_plan(file) {
+        Ok(p) => p,
+        Err(c) => return c,
+    };
+    let store = keyjutsu_core::artifacts::default_store();
+    let wanted = keyjutsu_core::artifacts::artifacts(plan.plan());
+    if wanted.is_empty() {
+        println!("This plan downloads nothing.");
+        return ExitCode::SUCCESS;
+    }
+    let at = fingerprint::now_rfc3339();
+    let mut staged = Vec::new();
+    let mut failed = false;
+    for a in wanted {
+        match keyjutsu_core::artifacts::stage(&store, a, &at) {
+            Ok(s) => {
+                println!("  staged  {}  sha256 {}  {} bytes", s.name, s.sha256, s.size);
+                println!("          from {}", s.source);
+                if !s.was_pinned {
+                    println!("          not pinned by the plan: review this hash before approving");
+                }
+                staged.push(s);
+            }
+            Err(e) => {
+                println!("  FAILED  {}: {e}", a.name);
+                failed = true;
+            }
+        }
+    }
+    println!("Kept in {}", store.display());
+    if let Some(out) = pin_to {
+        let pinned = keyjutsu_core::artifacts::pin(plan.plan(), &staged);
+        match serde_json::to_string_pretty(&pinned)
+            .map_err(|e| e.to_string())
+            .and_then(|t| std::fs::write(out, t).map_err(|e| e.to_string()))
+        {
+            Ok(()) => println!("Wrote the pinned plan to {}. Validate and approve that one.", out.display()),
+            Err(e) => {
+                eprintln!("keyjutsu: cannot write {}: {e}", out.display());
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+}

@@ -743,8 +743,9 @@
           "maxLength": 256
         },
         "source": {
+          "description": "Where it is downloaded from when staged: HTTPS, or plain HTTP only from this machine (a local mirror). The pinned sha256, not the transport, is what makes the copy trustworthy.",
           "type": "string",
-          "pattern": "^https://",
+          "pattern": "^(https://|http://(127\\.0\\.0\\.1|localhost|\\[::1\\])(:[0-9]{1,5})?/)",
           "maxLength": 2048
         },
         "version": {

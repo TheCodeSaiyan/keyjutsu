@@ -26,12 +26,19 @@ Rules you must follow:
 5. Never include a \"keyjutsu\" property: readiness, proof, hashes and approval
    are recorded by KeyJutsu alone.
 6. Never put a secret, password or token in a command. Where one is needed,
-   use a step of kind \"credential\" with execution_mode \"user_input\" and no
-   commands; the operator types it at run time.
+   use a step of kind \"credential\" with execution_mode \"user_input\", no
+   commands, and \"credential\": {\"variable\": \"NAME\", \"prompt\": \"...\",
+   \"kind\": \"secret\"}; the operator types it at run time and later steps
+   use $NAME.
 7. Prefer commands that can be checked: built-in cmdlets over external
-   programs, -LiteralPath over wildcards, staged downloads over piping a
-   download into an interpreter.
-8. Say what you are unsure of in the step's reason rather than guessing.";
+   programs, -LiteralPath over wildcards.
+8. Never download in a command. List what a step needs as \"artifacts\"
+   ({\"name\": \"tool.zip\", \"source\": \"https://...\", \"sha256\": \"...\" if
+   known}); KeyJutsu downloads and checks it before the plan runs, and the
+   step uses $KJ_ARTIFACTS['tool.zip']. Declare every host a step contacts in
+   \"network\": {\"destinations\": [{\"host\", \"protocol\", \"purpose\",
+   \"at_runtime\"}]}.
+9. Say what you are unsure of in the step's reason rather than guessing.";
 
 const COMPACT_FORMAT: &str = r#"The JSON document is a plan:
 {

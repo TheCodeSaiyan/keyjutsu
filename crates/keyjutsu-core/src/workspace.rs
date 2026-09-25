@@ -342,6 +342,33 @@ impl Workspace {
         self.adopt(next, Some((operator(), ProvenanceAction::Edited, Some("moved".into()))), at)
     }
 
+    /// Stage every artifact the draft needs (§30) and pin the hash of any
+    /// the plan left unpinned. Pinning is an edit: the step goes back to
+    /// validation, and the operator reviews the hash like any other change.
+    pub fn stage(
+        &mut self,
+        store: &std::path::Path,
+        at: &str,
+    ) -> Result<Vec<crate::artifacts::StagedArtifact>, WorkspaceError> {
+        let mut staged = Vec::new();
+        for a in crate::artifacts::artifacts(self.draft.plan()) {
+            staged.push(crate::artifacts::stage(store, a, at).map_err(WorkspaceError::Plan)?);
+        }
+        let pinned = crate::artifacts::pin(self.draft.plan(), &staged);
+        if &pinned != self.draft.plan() {
+            self.adopt(
+                pinned,
+                Some((
+                    operator(),
+                    ProvenanceAction::Edited,
+                    Some("artifact hashes pinned by staging".into()),
+                )),
+                at,
+            )?;
+        }
+        Ok(staged)
+    }
+
     /// Validate the whole draft now and record the result.
     pub fn validate(&mut self, options: Options, at: &str) -> Result<(), WorkspaceError> {
         let report = validate(&self.draft, options);

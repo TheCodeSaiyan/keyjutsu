@@ -56,6 +56,8 @@ export const ipc = {
   note: (text: string, step: string | null) =>
     invoke<workspace.WorkspaceView>("workspace_note", { text, step }),
   validate: () => invoke<workspace.WorkspaceView>("workspace_validate"),
+  /** Download and pin the plan's artifacts now, so nothing is fetched while it runs. */
+  stage: () => invoke<workspace.WorkspaceView>("workspace_stage"),
   retryStep: (agent: agent.AgentKind, step: string, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_retry_step", { agent, step, guidance }),
   revise: (agent: agent.AgentKind, guidance: string) =>

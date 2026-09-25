@@ -250,6 +250,51 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
         }
     }
 
+    // Network (§30): every host a line names must be declared, and declared
+    // for use while the step runs, not only for staging.
+    let declared = step.network.as_ref().map(|n| n.destinations.as_slice()).unwrap_or_default();
+    for (text, _) in g.lines.iter().chain(g.support_lines.iter()) {
+        for c in crate::network::contacts(text) {
+            match declared.iter().find(|d| d.host.eq_ignore_ascii_case(&c.host)) {
+                None => v.fail(
+                    "network",
+                    Readiness::NeedsReview,
+                    format!("contacts {} ({}), which the step does not declare", c.host, c.protocol),
+                ),
+                Some(d) if !d.at_runtime => v.fail(
+                    "network",
+                    Readiness::NeedsReview,
+                    format!("contacts {} while it runs, but declares it only for staging", c.host),
+                ),
+                Some(d) => v.pass("network", format!("contacts {}, declared: {}", c.host, d.purpose)),
+            }
+        }
+    }
+
+    // Artifacts (§30): pinned by hash, so what is approved is what runs.
+    for a in &step.artifacts {
+        if is_cmd {
+            v.fail(
+                "artifact",
+                Readiness::Invalid,
+                format!("{}: artifacts are handed to PowerShell steps only", a.name),
+            );
+        }
+        match &a.sha256 {
+            Some(sha) => {
+                v.pass("artifact", format!("{} pinned to sha256 {}…", a.name, &sha[..sha.len().min(12)]))
+            }
+            None => v.fail(
+                "artifact",
+                Readiness::NeedsReview,
+                format!(
+                    "{} is not pinned: stage it with `keyjutsu plan stage --pin` and review the hash",
+                    a.name
+                ),
+            ),
+        }
+    }
+
     // Credentials (§25): asked for only through a prompt that masks them.
     if step.kind == StepKind::Credential {
         match &step.credential {
@@ -516,6 +561,52 @@ mod tests {
             ),
             Readiness::Ready
         );
+    }
+
+    fn with(extra: serde_json::Value, command: &str) -> Step {
+        let mut v = json!({"id": "s", "title": "T", "objective": "O", "kind": "command",
+            "shell": {"kind": "pwsh"}, "commands": [{"text": command}]});
+        for (k, val) in extra.as_object().unwrap() {
+            v[k] = val.clone();
+        }
+        serde_json::from_value(v).unwrap()
+    }
+
+    fn judged(step: &Step) -> StepState {
+        let text = step.commands[0].text.as_str();
+        let g =
+            Gathered { shell_version: Some("7".into()), lines: vec![(text, None)], ..Gathered::default() };
+        judge(step, &g)
+    }
+
+    #[test]
+    fn an_undeclared_destination_needs_review() {
+        let get = "Invoke-WebRequest -Uri https://downloads.example.com/tool.zip -OutFile tool.zip";
+        let s = judged(&with(json!({}), get));
+        assert_eq!(s.readiness, Readiness::NeedsReview);
+        assert!(
+            s.evidence
+                .iter()
+                .any(|e| e.detail.as_deref().is_some_and(|d| d.contains("downloads.example.com")))
+        );
+
+        let declared = json!({"network": {"destinations": [
+            {"host": "downloads.example.com", "protocol": "https", "purpose": "the installer", "at_runtime": true}]}});
+        assert_eq!(judged(&with(declared, get)).readiness, Readiness::Ready);
+
+        let staging_only = json!({"network": {"destinations": [
+            {"host": "downloads.example.com", "protocol": "https", "purpose": "the installer", "at_runtime": false}]}});
+        assert_eq!(judged(&with(staging_only, get)).readiness, Readiness::NeedsReview);
+    }
+
+    #[test]
+    fn an_artifact_must_be_pinned() {
+        let use_it = "Copy-Item -LiteralPath $KJ_ARTIFACTS['tool.zip'] -Destination .";
+        let unpinned = json!({"artifacts": [{"name": "tool.zip", "source": "https://example.com/tool.zip"}]});
+        assert_eq!(judged(&with(unpinned, use_it)).readiness, Readiness::NeedsReview);
+        let pinned = json!({"artifacts": [{"name": "tool.zip", "source": "https://example.com/tool.zip",
+            "sha256": "a".repeat(64)}]});
+        assert_eq!(judged(&with(pinned, use_it)).readiness, Readiness::Ready);
     }
 
     #[test]

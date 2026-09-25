@@ -227,3 +227,14 @@ because the order is the graph's, and a drawn graph (kit §16) is still owed.
 Disabling a step is not built because the plan schema has no field for it;
 removing the step does the same, and is refused while other steps depend on
 it, so the operator decides how to re-link them.
+
+## D24. Artifacts from a local mirror over plain HTTP
+
+The schema required every artifact source to be `https://`. It now also
+accepts `http://127.0.0.1`, `http://localhost` and `http://[::1]`, with any
+port. Such traffic never leaves the machine, a local mirror or proxy cache is
+a real way to stage software, and it is what lets the staging tests run
+against a local server instead of the internet. Integrity does not rest on
+the transport either way: a staged copy is used only if its SHA-256 matches
+the approved pin. Plain HTTP to any other host is still refused
+(`invalid/artifact-over-plain-http.json`).

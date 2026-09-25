@@ -234,6 +234,8 @@ pub struct ExecuteOptions {
     /// Asked just before each critical step (§28). Without one, the typed
     /// confirmation given at approval is all there is.
     pub critical_gate: Option<CriticalGate>,
+    /// Where staged artifacts are kept (§30).
+    pub artifact_store: PathBuf,
 }
 
 impl Default for ExecuteOptions {
@@ -245,6 +247,7 @@ impl Default for ExecuteOptions {
             settled: BTreeMap::new(),
             prompt_timeout: Duration::from_secs(120),
             critical_gate: None,
+            artifact_store: crate::artifacts::default_store(),
         }
     }
 }
@@ -382,7 +385,7 @@ pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
 
 /// A PowerShell single-quoted string. PowerShell also ends such a string at
 /// the typographic single quotes, so those are doubled as well.
-fn ps_quote(text: &str) -> String {
+pub(crate) fn ps_quote(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 2);
     out.push('\'');
     for c in text.chars() {
@@ -692,6 +695,13 @@ pub fn execute(
     if let Err(reason) = preflight(snapshot) {
         return finish(Outcome::Blocked { reason }, checkpoint);
     }
+    // Everything the plan downloads must be staged and verified before it
+    // arms (§30): nothing is fetched while it runs.
+    for a in crate::artifacts::artifacts(snapshot.plan()) {
+        if let Err(reason) = crate::artifacts::verify(&options.artifact_store, a) {
+            return finish(Outcome::Blocked { reason }, checkpoint);
+        }
+    }
     let plan = snapshot.plan();
     let hashes = snapshot.step_hashes();
     let show_validation =
@@ -869,7 +879,28 @@ pub fn execute(
             }
         }
 
-        let script = staged_for(step, show_validation);
+        let mut script = staged_for(step, show_validation);
+        // Hand the step its staged artifacts, checked again just before it
+        // runs; a copy that changed since staging stops the plan here.
+        match crate::artifacts::assignment(&options.artifact_store, step) {
+            Ok(Some(line)) => script.steps.insert(
+                0,
+                StagedStep {
+                    id: format!("{id}#artifacts"),
+                    title: step.title.clone(),
+                    command: line,
+                    mode: Some(EngineMode::Direct),
+                    submit: None,
+                    answers: None,
+                },
+            ),
+            Ok(None) => {}
+            Err(reason) => {
+                checkpoint.in_progress = None;
+                save(&checkpoint);
+                return finish(Outcome::Blocked { reason }, checkpoint);
+            }
+        }
         let config = PerformanceConfig { mode: default_mode, ..options.base.clone() };
         let outcomes = match perform(driver, script, config) {
             Performed::Finished(outcomes) => outcomes,
