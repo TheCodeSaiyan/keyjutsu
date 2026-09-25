@@ -151,6 +151,28 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         None => None,
     };
 
+    // Resuming past a session boundary needs the operator's word, typed
+    // here on the plain console before anything starts (§32).
+    let mut resume_gate = None;
+    if let Some(wait) = resume.as_ref().and_then(|c| c.boundary.as_ref()) {
+        let what = keyjutsu_core::boundary::describe(wait.kind);
+        println!("This plan stopped after phase `{}` for a {what}.", wait.after_phase);
+        println!(
+            "Before continuing, KeyJutsu checks that the {what} happened, compares this machine with the"
+        );
+        println!("one the plan was approved on, and checks again what the earlier phases achieved.");
+        print!("Type RESUME to check and continue: ");
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        if line.trim() != "RESUME" {
+            println!("Not resumed. Nothing ran.");
+            return ExitCode::FAILURE;
+        }
+        let gate: keyjutsu_core::boundary::ResumeGate = Arc::new(|_| true);
+        resume_gate = Some(gate);
+    }
+
     let shell = match snapshot.plan().steps.iter().find_map(|s| s.shell.as_ref().map(|sh| sh.kind)) {
         Some(ShellName::WindowsPowershell) => ShellKind::WindowsPowershell,
         Some(ShellName::Cmd) => ShellKind::Cmd,
@@ -223,8 +245,13 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
 
     let result: Arc<Mutex<Option<(Outcome, Checkpoint)>>> = Arc::new(Mutex::new(None));
     let (snap, out, mode) = (snapshot.clone(), result.clone(), args.mode);
-    let exec_options =
-        ExecuteOptions { mode, checkpoint: Some(cp_path.clone()), settled, ..ExecuteOptions::default() };
+    let exec_options = ExecuteOptions {
+        mode,
+        checkpoint: Some(cp_path.clone()),
+        settled,
+        resume_gate,
+        ..ExecuteOptions::default()
+    };
     let controller: console::Controller = Box::new(move |session, events| {
         let title = |t: &str| {
             let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::SetTitle(t));
@@ -297,6 +324,27 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         }
     }
     match outcome {
+        Outcome::Boundary { phase, boundary } => {
+            let what = keyjutsu_core::boundary::describe(boundary);
+            println!();
+            println!("Phase `{phase}` is done. The plan now waits for a {what}.");
+            println!(
+                "  {}",
+                match boundary {
+                    keyjutsu_core::plan::model::Boundary::WindowsRestart =>
+                        "Restart Windows when you are ready; KeyJutsu does not restart it for you.",
+                    keyjutsu_core::plan::model::Boundary::SignOut => "Sign out of Windows and back in.",
+                    keyjutsu_core::plan::model::Boundary::ShellRestart =>
+                        "The shell has ended; resume in a new terminal.",
+                    keyjutsu_core::plan::model::Boundary::WslRestart =>
+                        "Restart WSL (for example `wsl --shutdown`).",
+                    keyjutsu_core::plan::model::Boundary::DockerRestart =>
+                        "Restart Docker Desktop. KeyJutsu cannot see this one happen, so it takes your word.",
+                }
+            );
+            println!("Then: keyjutsu run {} --resume", args.snapshot.display());
+            ExitCode::SUCCESS
+        }
         Outcome::Complete => {
             println!("Complete: {} steps.", checkpoint.runs.len());
             ExitCode::SUCCESS

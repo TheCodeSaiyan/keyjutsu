@@ -170,6 +170,8 @@ export function outcomeLine(o: { kind: string } & Record<string, unknown>): stri
         : "Disarmed. Nothing further ran.";
     case "blocked":
       return `Stopped: ${String(o.reason)}.`;
+    case "boundary":
+      return `Phase ${String(o.phase)} is done. The plan waits for a ${String(o.boundary).replace(/_/g, " ")}; resume it afterwards with keyjutsu run --resume.`;
     default:
       return "Finished.";
   }

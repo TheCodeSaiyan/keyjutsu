@@ -6,6 +6,7 @@
 //! can only ask; this crate answers.
 
 pub mod artifacts;
+pub mod boundary;
 pub mod demo;
 pub mod dpapi;
 pub mod execute;

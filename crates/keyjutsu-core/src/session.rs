@@ -192,6 +192,12 @@ impl Session {
         self.inner.pty.kind()
     }
 
+    /// The shell's process id, which tells one shell from the next across a
+    /// shell restart.
+    pub fn shell_pid(&self) -> Option<u32> {
+        self.inner.pty.process_id()
+    }
+
     /// Block until the shell's first prompt, or until `timeout`. Returns
     /// whether the shell became ready. A shell whose profile replaces the
     /// prompt after KeyJutsu's wrapper is installed never becomes ready, and

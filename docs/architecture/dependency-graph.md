@@ -55,6 +55,7 @@ flowchart TD
   recovery as they really work.
 - **M8 (execution) is done** ([milestone-8.md](milestone-8.md)).
 - **M9 (credential gates) is done** ([milestone-9.md](milestone-9.md)).
+- **M15 (session boundaries) is done** ([milestone-15.md](milestone-15.md)).
 - **M14 (persistence and Techniques) is done** ([milestone-14.md](milestone-14.md)).
 - **M12 (network and artifacts) is done** ([milestone-12.md](milestone-12.md)).
 - **M13 (Git safety) is done** ([milestone-13.md](milestone-13.md)).

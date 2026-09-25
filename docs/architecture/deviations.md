@@ -253,3 +253,17 @@ would be needed.
 Milestone 14 is built in the core and the CLI. The desktop has no screens
 for the history or Techniques, and its runs are not yet recorded; the CLI's
 are.
+
+## D27. The operator crosses the boundary; KeyJutsu checks it
+
+§32 asks KeyJutsu to "prepare a resume mechanism" and offer automatic resume
+after sign-in, and §60 says "controlled restart". KeyJutsu stops at the
+boundary, records what should change, tells the operator what to do, and
+checks everything on resume; it does not restart Windows or register itself
+to start at sign-in. Restarting someone's machine is the most disruptive
+thing a tool can do, it cannot be exercised by a test without restarting the
+machine the tests run on, and a mistaken auto-resume would run the next phase
+before anyone looked. Adding both (a `shutdown /r` after a typed
+confirmation, a RunOnce entry that opens the resume prompt rather than
+resuming) is straightforward once it can be tried on a machine that may be
+restarted.

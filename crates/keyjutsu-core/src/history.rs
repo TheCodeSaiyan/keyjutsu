@@ -72,6 +72,9 @@ pub fn list(store: &Store) -> Result<Vec<SessionSummary>, String> {
             Outcome::Failed { step, .. } => format!("failed at {step}"),
             Outcome::Aborted { .. } => "disarmed".to_owned(),
             Outcome::Blocked { .. } => "blocked".to_owned(),
+            Outcome::Boundary { boundary, .. } => {
+                format!("waiting: {}", crate::boundary::describe(*boundary))
+            }
         };
         out.push(SessionSummary { id: r.id, finished_at: r.finished_at, task: r.task, outcome });
     }

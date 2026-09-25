@@ -111,6 +111,10 @@ pub struct Checkpoint {
     /// (§29). Latest last.
     #[serde(default)]
     pub captures: Vec<crate::recovery::StepCapture>,
+    /// The plan stopped at this boundary and has not yet crossed it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub boundary: Option<crate::boundary::BoundaryWait>,
 }
 
 const CHECKPOINT_KIND: &str = "keyjutsu.checkpoint/1";
@@ -123,6 +127,7 @@ impl Checkpoint {
             runs: Vec::new(),
             in_progress: None,
             captures: Vec::new(),
+            boundary: None,
         }
     }
 
@@ -164,6 +169,12 @@ pub enum Outcome {
     /// Execution could not start or continue.
     Blocked {
         reason: String,
+    },
+    /// Phase `phase` is done and the plan waits for a session boundary
+    /// (§32). Resuming checks that it happened.
+    Boundary {
+        phase: String,
+        boundary: keyjutsu_plan::model::Boundary,
     },
 }
 
@@ -236,6 +247,13 @@ pub struct ExecuteOptions {
     pub critical_gate: Option<CriticalGate>,
     /// Where staged artifacts are kept (§30).
     pub artifact_store: PathBuf,
+    /// What identifies the far side of a boundary; the real checks if `None`.
+    pub boundary_probe: Option<crate::boundary::BoundaryProbe>,
+    /// Asked before resuming after a boundary. Without one, a plan never
+    /// resumes past a boundary (§32: resume only after confirmation).
+    pub resume_gate: Option<crate::boundary::ResumeGate>,
+    /// This machine's environment now; collected for real if `None`.
+    pub fingerprint_now: Option<crate::boundary::FingerprintNow>,
 }
 
 impl Default for ExecuteOptions {
@@ -248,6 +266,9 @@ impl Default for ExecuteOptions {
             prompt_timeout: Duration::from_secs(120),
             critical_gate: None,
             artifact_store: crate::artifacts::default_store(),
+            boundary_probe: None,
+            resume_gate: None,
+            fingerprint_now: None,
         }
     }
 }
@@ -718,6 +739,7 @@ pub fn execute(
 
     // Results from an earlier run count only where the step is unchanged.
     let mut facts = KnownFacts::default();
+    let pending = resume.as_ref().and_then(|r| r.boundary.clone());
     if let Some(previous) = resume {
         if let Some(doubt) = &previous.in_progress {
             match options.settled.get(&doubt.step) {
@@ -767,6 +789,121 @@ pub fn execute(
     }
     save(&checkpoint);
 
+    // Boundaries (§32). One is behind the plan once any step after it ran.
+    let probe = options.boundary_probe.clone().unwrap_or_else(crate::boundary::real_probe);
+    let phase_of = |id: &str| plan.phases.iter().position(|p| p.steps.iter().any(|s| s == id));
+    let mut crossed: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+    for run in &checkpoint.runs {
+        if let Some(p) = phase_of(&run.step) {
+            crossed.extend(0..p);
+        }
+    }
+    if let Some(wait) = pending {
+        checkpoint.boundary = Some(wait.clone());
+        let what = crate::boundary::describe(wait.kind);
+        let block = |reason: String, checkpoint: Checkpoint| {
+            save(&checkpoint);
+            finish(Outcome::Blocked { reason }, checkpoint)
+        };
+        let Some(k) = plan.phases.iter().position(|p| p.id == wait.after_phase) else {
+            return block(
+                format!(
+                    "the checkpoint waits after phase `{}`, which this plan does not have",
+                    wait.after_phase
+                ),
+                checkpoint,
+            );
+        };
+        // It must really have happened.
+        let now_id = probe(wait.kind, driver.session);
+        let verified = match (&wait.identity, &now_id) {
+            (Some(before), Some(now)) if before == now => {
+                return block(format!("the {what} has not happened yet; resume after it"), checkpoint);
+            }
+            (Some(_), Some(_)) => true,
+            _ => false,
+        };
+        // The machine is compared with the approved one again.
+        let now_fp = match &options.fingerprint_now {
+            Some(f) => f(plan),
+            None => crate::fingerprint::collect(Some(plan)),
+        };
+        let drifts = snapshot.fingerprint().map(|then| then.drift(&now_fp)).unwrap_or_default();
+        let done: std::collections::BTreeSet<&str> =
+            checkpoint.runs.iter().map(|r| r.step.as_str()).collect();
+        let affected: Vec<String> = keyjutsu_plan::hash::affected_by_drift(plan, snapshot.graph(), &drifts)
+            .into_iter()
+            .filter(|s| !done.contains(s.as_str()))
+            .collect();
+        if !affected.is_empty() {
+            let changed: Vec<String> = drifts
+                .iter()
+                .map(|d| {
+                    format!(
+                        "{} {} -> {}",
+                        d.what,
+                        d.before.as_deref().unwrap_or("absent"),
+                        d.after.as_deref().unwrap_or("absent")
+                    )
+                })
+                .collect();
+            return block(
+                format!(
+                    "after the {what}, this machine differs from the one the plan was approved on ({}); steps {} require revalidation",
+                    changed.join("; "),
+                    affected.join(", ")
+                ),
+                checkpoint,
+            );
+        }
+        // What the earlier phases achieved is checked again, not assumed.
+        let mut rechecked = Vec::new();
+        for run in &checkpoint.runs {
+            let Some(step) = plan.step(&run.step) else { continue };
+            for c in step
+                .internal_validation
+                .iter()
+                .filter(|c| !matches!(c, Check::ExitCode { .. } | Check::TimeoutSeconds(_)))
+            {
+                let mut r = run_check(c, None);
+                r.check = format!("{}: {}", run.step, r.check);
+                rechecked.push(r);
+            }
+        }
+        if let Some(bad) = rechecked.iter().find(|r| r.passed == Some(false)) {
+            return block(
+                format!(
+                    "after the {what}, what an earlier step achieved no longer holds: {}: {}",
+                    bad.check, bad.detail
+                ),
+                checkpoint,
+            );
+        }
+        let notice = crate::boundary::BoundaryNotice {
+            kind: wait.kind,
+            after_phase: wait.after_phase.clone(),
+            next_phase: plan.phases.get(k + 1).map(|p| p.id.clone()),
+            verified,
+            rechecked,
+            drifts,
+        };
+        match &options.resume_gate {
+            None => {
+                return block(
+                    format!("resuming after a {what} needs the operator's confirmation"),
+                    checkpoint,
+                );
+            }
+            Some(gate) if !gate(&notice) => {
+                return block(format!("the operator did not confirm resuming after the {what}"), checkpoint);
+            }
+            Some(_) => {}
+        }
+        crossed.insert(k);
+        checkpoint.boundary = None;
+        save(&checkpoint);
+    }
+
     // Credentials asked for in this run, removed from the shell at the end.
     let mut asked: Vec<String> = Vec::new();
     let forget = |asked: &[String]| {
@@ -815,6 +952,28 @@ pub fn execute(
             return finish(Outcome::Blocked { reason: format!("step `{id}` vanished") }, checkpoint);
         };
         let step_hash = hashes.get(&id).cloned().unwrap_or_default();
+
+        // A step after an uncrossed boundary waits for it: stop here, and
+        // record what should be different on the other side.
+        if let Some(p) = phase_of(&id) {
+            let waiting = (0..p).find(|k| plan.phases[*k].boundary_after.is_some() && !crossed.contains(k));
+            if let Some(k) = waiting
+                && let Some(kind) = plan.phases[k].boundary_after
+            {
+                checkpoint.boundary = Some(crate::boundary::BoundaryWait {
+                    after_phase: plan.phases[k].id.clone(),
+                    kind,
+                    identity: probe(kind, driver.session),
+                    recorded_at: now(),
+                });
+                save(&checkpoint);
+                forget(&asked);
+                return finish(
+                    Outcome::Boundary { phase: plan.phases[k].id.clone(), boundary: kind },
+                    checkpoint,
+                );
+            }
+        }
 
         if !driver.session.wait_for_prompt(options.prompt_timeout) {
             return finish(
