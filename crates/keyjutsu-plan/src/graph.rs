@@ -70,6 +70,27 @@ pub enum Problem {
     StateForUnknownStep {
         step: String,
     },
+    /// A command contains a character that is invisible or reorders the text
+    /// around it, so what the operator reads is not what runs.
+    HiddenCharacter {
+        step: String,
+        code_point: String,
+    },
+}
+
+/// Characters that change how a command reads without being seen: controls,
+/// bidirectional overrides and isolates, zero-width characters, the soft
+/// hyphen and the byte-order mark. A command containing one could be approved
+/// as one thing and run as another ("Trojan Source", CVE-2021-42574).
+pub fn is_hidden(c: char) -> bool {
+    c.is_control()
+        || matches!(c,
+            '\u{00AD}' | '\u{061C}' | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}')
 }
 
 impl fmt::Display for Problem {
@@ -100,6 +121,10 @@ impl fmt::Display for Problem {
             Problem::StateForUnknownStep { step } => {
                 write!(f, "KeyJutsu state is recorded for step `{step}`, which does not exist")
             }
+            Problem::HiddenCharacter { step, code_point } => write!(
+                f,
+                "step `{step}` has a command containing {code_point}, which is invisible or reorders the text, so the command would not read as it runs"
+            ),
         }
     }
 }
@@ -309,6 +334,7 @@ pub fn analyse(plan: &Plan) -> Result<PlanGraph, Vec<Problem>> {
     }
 
     check_versions(plan, &mut problems);
+    check_hidden_characters(plan, &mut problems);
 
     if let Some(state) = &plan.keyjutsu {
         for step in state.steps.keys() {
@@ -372,6 +398,19 @@ fn check_phases(plan: &Plan, graph: &PlanGraph, problems: &mut Vec<Problem>) {
             {
                 problems.push(Problem::PhaseOrder { earlier: b.clone(), later: a.clone() });
             }
+        }
+    }
+}
+
+fn check_hidden_characters(plan: &Plan, problems: &mut Vec<Problem>) {
+    for step in &plan.steps {
+        let recovery = step.recovery.iter().flat_map(|r| &r.commands);
+        let texts = step.commands.iter().chain(&step.visible_validation).chain(recovery);
+        if let Some(c) = texts.flat_map(|c| c.text.chars()).find(|c| is_hidden(*c)) {
+            problems.push(Problem::HiddenCharacter {
+                step: step.id.clone(),
+                code_point: format!("U+{:04X}", u32::from(c)),
+            });
         }
     }
 }

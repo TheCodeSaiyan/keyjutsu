@@ -144,7 +144,7 @@ impl MarkScanner {
             }
             if rest.starts_with(OSC_133) {
                 match find_terminator(&rest[OSC_133.len()..]) {
-                    Some((body_len, term_len)) => {
+                    Body::Terminated { body_len, term_len } => {
                         let body = &rest[OSC_133.len()..OSC_133.len() + body_len];
                         let total = OSC_133.len() + body_len + term_len;
                         match parse_mark(body, &self.nonce) {
@@ -158,11 +158,20 @@ impl MarkScanner {
                         i += total;
                         continue;
                     }
-                    None if rest.len() <= MAX_SEQUENCE => {
+                    // Another sequence began before this one ended, so this
+                    // one was never a mark: show it, and scan on from there.
+                    // Otherwise an unfinished `ESC ] 133 ;` printed by any
+                    // command would swallow the prompt's real mark after it.
+                    Body::Aborted { at } => {
+                        out.extend_from_slice(&rest[..OSC_133.len() + at]);
+                        i += OSC_133.len() + at;
+                        continue;
+                    }
+                    Body::Incomplete => {
                         self.pending = rest.to_vec();
                         break;
                     }
-                    None => {}
+                    Body::TooLong => {}
                 }
             }
 
@@ -186,16 +195,31 @@ fn flush(out: &mut Vec<u8>, items: &mut Vec<ScanItem>) {
     }
 }
 
-/// Length of the body and of its terminator (BEL, or ESC `\`).
-fn find_terminator(s: &[u8]) -> Option<(usize, usize)> {
-    for (idx, &b) in s.iter().enumerate() {
-        match b {
-            0x07 => return Some((idx, 1)),
-            0x1b if s.get(idx + 1) == Some(&b'\\') => return Some((idx, 2)),
+enum Body {
+    /// The body and its terminator (BEL, or ESC `\`).
+    Terminated { body_len: usize, term_len: usize },
+    /// An ESC that is not a terminator, `at` bytes into the body.
+    Aborted { at: usize },
+    /// No end yet, and still short enough to be ours.
+    Incomplete,
+    /// Longer than any mark of ours without ending.
+    TooLong,
+}
+
+/// Where the body of a sequence ends, looking no further than a mark of ours
+/// could run, so the answer is the same however the output was split.
+fn find_terminator(s: &[u8]) -> Body {
+    let limit = MAX_SEQUENCE - OSC_133.len();
+    for (idx, &b) in s.iter().enumerate().take(limit) {
+        match (b, s.get(idx + 1)) {
+            (0x07, _) => return Body::Terminated { body_len: idx, term_len: 1 },
+            (0x1b, Some(b'\\')) => return Body::Terminated { body_len: idx, term_len: 2 },
+            (0x1b, Some(_)) => return Body::Aborted { at: idx },
+            (0x1b, None) => return Body::Incomplete,
             _ => {}
         }
     }
-    None
+    if s.len() < limit { Body::Incomplete } else { Body::TooLong }
 }
 
 fn parse_mark(body: &[u8], nonce: &Nonce) -> Option<ScanItem> {
@@ -380,5 +404,117 @@ mod tests {
         assert_eq!(output_of(&items), b"xy");
         let spoof = scanner().feed(b"\x1b]133;P;kj=guess;cwd=C:\\Evil\x07");
         assert!(!spoof.iter().any(|i| matches!(i, ScanItem::Location(_))), "a wrong nonce is only output");
+    }
+
+    /// Found by fuzzing (Milestone 17): an unfinished `ESC ] 133 ;` printed
+    /// by a command, then enough output, made the prompt's real mark part of
+    /// one long "sequence" and it was lost, so the step would never finish.
+    #[test]
+    fn an_unfinished_sequence_cannot_swallow_the_prompts_mark() {
+        let mut data = b"\x1b]133;\x1b".to_vec();
+        data.extend(vec![b'x'; 5000]);
+        data.extend(b"\x1b]133;D;0;kj=n0nce\x07");
+        let items = scanner().feed(&data);
+        assert_eq!(marks_of(&items), [ShellMark::CommandFinished { exit_code: Some(0) }]);
+        let short = scanner().feed(b"\x1b]133;D;\x1b]133;D;1;kj=n0nce\x07");
+        assert_eq!(marks_of(&short), [ShellMark::CommandFinished { exit_code: Some(1) }]);
+        assert_eq!(output_of(&short), b"\x1b]133;D;");
+    }
+
+    /// Milestone 17 fuzzing. Output is built from pieces an attacker in the
+    /// session would reach for, near-misses of real marks included, so that
+    /// random bytes are not all the scanner ever sees.
+    mod fuzz {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn piece(with_nonce: bool) -> impl Strategy<Value = Vec<u8>> {
+            let mut pieces: Vec<&'static [u8]> = vec![
+                b"\x1b",
+                b"\x1b]",
+                b"\x1b]133;",
+                b"\x1b]133;A",
+                b"\x1b]133;D;0",
+                b"\x1b]133;P;cwd=C:\\x",
+                b";kj=guess",
+                b";kj=n0nc",
+                b";kj=",
+                b"\x07",
+                b"\x1b\\",
+                b"\x1b[6n",
+                b"\x1b[",
+                b"P;kj=n0nc",
+                b";cwd=",
+                b"text ",
+                "\u{e9}\u{2603}".as_bytes(),
+            ];
+            if with_nonce {
+                pieces.extend([
+                    &b";kj=n0nce"[..],
+                    b"\x1b]133;D;1;kj=n0nce\x07",
+                    b"\x1b]133;P;kj=n0nce;cwd=C:\\d\x07",
+                ]);
+            }
+            prop_oneof![
+                prop::sample::select(pieces).prop_map(<[u8]>::to_vec),
+                prop::collection::vec(any::<u8>(), 0..8),
+                // Long runs, to cross the buffering limit.
+                (0usize..5000).prop_map(|n| vec![b'x'; n]),
+            ]
+        }
+
+        fn stream(with_nonce: bool) -> impl Strategy<Value = Vec<u8>> {
+            prop::collection::vec(piece(with_nonce), 0..40).prop_map(|p| p.concat())
+        }
+
+        /// Feed `data` in reads that end at `cuts`, then finish.
+        fn scan(data: &[u8], cuts: &[prop::sample::Index], intercept: bool) -> Vec<ScanItem> {
+            let mut s = scanner().intercept_cursor_queries(intercept);
+            let mut at: Vec<usize> = cuts.iter().map(|c| c.index(data.len() + 1)).collect();
+            at.push(0);
+            at.push(data.len());
+            at.sort_unstable();
+            let mut items = Vec::new();
+            for w in at.windows(2) {
+                items.extend(s.feed(&data[w[0]..w[1]]));
+                assert!(s.pending.len() <= MAX_SEQUENCE + OSC_133.len(), "held back {}", s.pending.len());
+            }
+            items.extend(s.finish());
+            items
+        }
+
+        fn trusted(items: &[ScanItem]) -> Vec<ScanItem> {
+            items.iter().filter(|i| !matches!(i, ScanItem::Output(_))).cloned().collect()
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig { cases: 4000, ..ProptestConfig::default() })]
+
+            /// Without the nonce nothing is trusted, and every byte is shown
+            /// exactly as it arrived, however the reads fall.
+            #[test]
+            fn output_without_the_nonce_is_never_a_mark_and_never_lost(
+                data in stream(false),
+                cuts in prop::collection::vec(any::<prop::sample::Index>(), 0..6),
+            ) {
+                let items = scan(&data, &cuts, false);
+                prop_assert!(trusted(&items).is_empty(), "{:?}", trusted(&items));
+                prop_assert_eq!(output_of(&items), data);
+            }
+
+            /// Where reads fall changes nothing: the same marks and the same
+            /// output as reading it all at once.
+            #[test]
+            fn how_output_is_split_into_reads_does_not_matter(
+                data in stream(true),
+                cuts in prop::collection::vec(any::<prop::sample::Index>(), 1..6),
+                intercept in any::<bool>(),
+            ) {
+                let whole = scan(&data, &[], intercept);
+                let split = scan(&data, &cuts, intercept);
+                prop_assert_eq!(trusted(&split), trusted(&whole));
+                prop_assert_eq!(output_of(&split), output_of(&whole));
+            }
+        }
     }
 }

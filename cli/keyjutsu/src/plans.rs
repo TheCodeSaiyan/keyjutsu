@@ -217,6 +217,13 @@ pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool, d
             return ExitCode::FAILURE;
         }
     };
+    // The record is what `keyjutsu run` trusts, not the file's own hashes.
+    if let Err(e) = keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root())
+        .and_then(|s| keyjutsu_core::approvals::record_approval(&s, &snapshot))
+    {
+        eprintln!("keyjutsu: the approval could not be recorded in the encrypted store: {e}");
+        return ExitCode::FAILURE;
+    }
     if let Err(e) = std::fs::write(out, snapshot.to_json()) {
         eprintln!("keyjutsu: cannot write {}: {e}", out.display());
         return ExitCode::FAILURE;

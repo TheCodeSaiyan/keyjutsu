@@ -37,6 +37,14 @@ impl Screen {
     }
 }
 
+/// The CLI with the tests' own encrypted store, where the plans they approve
+/// are recorded and their runs checked against, apart from the operator's.
+fn test_command() -> std::process::Command {
+    let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"));
+    c.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
+    c
+}
+
 fn strip(text: &str) -> String {
     let mut out = String::new();
     let mut chars = text.chars().peekable();
@@ -165,7 +173,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     let plan_path = dir.join("plan.json");
     std::fs::write(&plan_path, plan.to_string()).unwrap();
     let snap = dir.join("snap.json");
-    let approved = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+    let approved = test_command()
         .args(["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()])
         .output()
         .unwrap();
@@ -230,7 +238,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     assert!(status.success(), "{status:?}");
     assert!(dir.join("snap.checkpoint.json").exists(), "a checkpoint was written");
     assert!(screen.plain().contains("Recorded as session"), "{}", screen.plain());
-    let listed = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+    let listed = test_command()
         .args(["history", "list"])
         .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
         .output()
@@ -257,9 +265,7 @@ fn run_resumes_from_the_checkpoint_it_is_given() {
     let plan_path = dir.join("plan.json");
     std::fs::write(&plan_path, plan.to_string()).unwrap();
     let snap = dir.join("v2.json");
-    let keyjutsu = |args: &[&str]| {
-        std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu")).args(args).output().unwrap()
-    };
+    let keyjutsu = |args: &[&str]| test_command().args(args).output().unwrap();
     let approved =
         keyjutsu(&["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()]);
     assert!(approved.status.success(), "{}", String::from_utf8_lossy(&approved.stderr));
@@ -344,7 +350,7 @@ fn run_asks_for_a_credential_in_the_shells_masked_prompt() {
     let plan_path = dir.join("plan.json");
     std::fs::write(&plan_path, plan.to_string()).unwrap();
     let snap = dir.join("snap.json");
-    let approved = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+    let approved = test_command()
         .args(["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()])
         .output()
         .unwrap();
@@ -428,9 +434,7 @@ fn a_failed_run_is_recovered_only_when_the_operator_confirms() {
     let plan_path = dir.join("plan.json");
     std::fs::write(&plan_path, plan.to_string()).unwrap();
     let snap = dir.join("snap.json");
-    let keyjutsu = |args: &[&str]| {
-        std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu")).args(args).output().unwrap()
-    };
+    let keyjutsu = |args: &[&str]| test_command().args(args).output().unwrap();
     let approved =
         keyjutsu(&["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()]);
     assert!(approved.status.success(), "{}", String::from_utf8_lossy(&approved.stderr));
@@ -500,13 +504,7 @@ fn run_tells_its_git_changes_from_yours_and_shows_its_diff() {
     let plan_path = dir.join("plan.json");
     std::fs::write(&plan_path, plan.to_string()).unwrap();
     let snap = dir.join("snap.json");
-    let keyjutsu = |args: &[&str]| {
-        std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
-            .args(args)
-            .current_dir(&repo)
-            .output()
-            .unwrap()
-    };
+    let keyjutsu = |args: &[&str]| test_command().args(args).current_dir(&repo).output().unwrap();
     let approved =
         keyjutsu(&["plan", "approve", plan_path.to_str().unwrap(), "--out", snap.to_str().unwrap()]);
     assert!(approved.status.success(), "{}", String::from_utf8_lossy(&approved.stderr));
@@ -558,6 +556,12 @@ fn critical_snapshot(dir: &std::path::Path, victim: &std::path::Path, at: &str) 
     assert_eq!(book.approve_all_except_critical(&v, at), ["wipe"]);
     book.approve(&v, "wipe", at, Some("REMOVE THE VICTIM")).unwrap();
     let snap = seal(&v, &book, None, at).unwrap();
+    // Recorded as `keyjutsu plan approve` records it, in the tests' store.
+    let store = keyjutsu_core::store::Store::open(
+        &std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"),
+    )
+    .unwrap();
+    keyjutsu_core::approvals::record_approval(&store, &snap).unwrap();
     let path = dir.join(format!("snap-{}.json", at.replace(':', "")));
     std::fs::write(&path, snap.to_json()).unwrap();
     path

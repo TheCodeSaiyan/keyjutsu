@@ -162,10 +162,24 @@ fn event(
 }
 
 /// The plan without KeyJutsu's section, as an agent is shown it.
+/// The plan as an agent may see it: without KeyJutsu's own state, and with
+/// anything secret-looking redacted from every string, since a step the
+/// operator edited may hold a value they typed.
 fn public_json(plan: &Plan) -> String {
     let mut p = plan.clone();
     p.keyjutsu = None;
-    serde_json::to_string_pretty(&p).unwrap_or_default()
+    let mut v = serde_json::to_value(&p).unwrap_or(Value::Null);
+    redact_strings(&mut v);
+    serde_json::to_string_pretty(&v).unwrap_or_default()
+}
+
+fn redact_strings(v: &mut Value) {
+    match v {
+        Value::String(s) => *s = crate::context::redact(s).0,
+        Value::Array(items) => items.iter_mut().for_each(redact_strings),
+        Value::Object(map) => map.values_mut().for_each(redact_strings),
+        _ => {}
+    }
 }
 
 /// Keep provenance, drop validation results: a revised plan must be

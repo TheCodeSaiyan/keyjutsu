@@ -158,6 +158,43 @@ fn a_secret_in_pasted_context_never_reaches_the_agent() {
     assert!(!prompt.contains("ghp_0123456789"), "the token was sent");
 }
 
+/// Milestone 17, secret leakage: not only pasted context. The task, the
+/// guidance for a revision, what validation found, and a value the operator
+/// typed into a step are all redacted before any agent sees them.
+#[test]
+fn no_secret_reaches_an_agent_by_any_route() {
+    const TOKEN: &str = "ghp_0123456789abcdefghijABCDEFGHIJ012345";
+    let task = format!("Fix the build; it fails with token={TOKEN}");
+    let runner = Replay::new(vec![claude_says(&plan_doc())]);
+    let first = agents(&runner).propose(&handle(AgentKind::ClaudeCode), &task, &empty_context(), AT).unwrap();
+    let proposal = runner.seen.borrow()[0].stdin.clone();
+
+    let mut edited = first.plan.plan().clone();
+    edited.steps[0].commands[0].text = format!("gh auth login --with-token {TOKEN}");
+    let guidance = format!("Use my token {TOKEN} for it");
+    let findings = vec![format!("dry run printed: Authorization: Bearer {}", &TOKEN[4..])];
+    let request = StepRevision { step: "fix", guidance: &guidance, findings: &findings };
+    let step = json!({"id": "fix", "title": "Fix", "objective": "Repair.", "kind": "command",
+        "shell": {"kind": "pwsh"}, "commands": [{"text": "Start-Service -Name docker"}]});
+    let runner = Replay::new(vec![
+        claude_says(&step),
+        claude_says(&plan_doc()),
+        claude_says(&json!({"summary": "fine", "findings": []})),
+    ]);
+    let a = agents(&runner);
+    a.revise_step(&handle(AgentKind::ClaudeCode), &task, &edited, &request, AT).unwrap();
+    a.revise_plan(&handle(AgentKind::ClaudeCode), &task, &edited, &guidance, AT).unwrap();
+    a.review(&handle(AgentKind::ClaudeCode), &task, &edited).unwrap();
+
+    let mut prompts = vec![proposal];
+    prompts.extend(runner.seen.borrow().iter().map(|c| c.stdin.clone()));
+    assert_eq!(prompts.len(), 4, "a revision, a whole-plan revision and a review, and the proposal");
+    for prompt in &prompts {
+        assert!(!prompt.contains(&TOKEN[4..20]), "the token was sent:\n{prompt}");
+        assert!(prompt.contains("[REDACTED"), "{prompt}");
+    }
+}
+
 #[test]
 fn a_step_revision_changes_that_step_only_and_discards_validation() {
     let runner = Replay::new(vec![claude_says(&plan_doc())]);

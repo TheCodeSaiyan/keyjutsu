@@ -101,6 +101,19 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let store = match keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root()) {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!(
+                "keyjutsu: will not run: the encrypted store, which holds this account's approvals, cannot be opened: {e}"
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(reason) = keyjutsu_core::approvals::check_approval(&store, &snapshot) {
+        eprintln!("keyjutsu: will not run: {reason}");
+        return ExitCode::FAILURE;
+    }
     if let Err(reason) = preflight(&snapshot) {
         eprintln!("keyjutsu: will not run: {reason}");
         return ExitCode::FAILURE;
@@ -141,7 +154,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     }
     let cp_path = checkpoint_path(args.snapshot);
     let resume = match &args.resume {
-        Some(from) => match Checkpoint::load(from) {
+        Some(from) => match keyjutsu_core::approvals::load_checkpoint(&store, from) {
             Ok(c) => Some(c),
             Err(e) => {
                 eprintln!("keyjutsu: cannot resume from {}: {e}", from.display());
@@ -297,6 +310,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         settled,
         resume_gate,
         elevated_runner,
+        checkpoint_store: Some(store.clone()),
         ..ExecuteOptions::default()
     };
     let (plan_for_git, git_dir_c, baseline_c, start_c) =

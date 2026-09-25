@@ -326,6 +326,82 @@ fn checkpoints_are_written_as_the_plan_runs() {
     t.session.close();
 }
 
+/// Failure injection: the checkpoint cannot be written. The step would leave
+/// no record of having started, so a crash during it would look like it
+/// never ran; it is not started.
+#[test]
+fn a_step_that_cannot_be_recorded_as_starting_does_not_run() {
+    let dir = scratch("unrecordable");
+    let marker = dir.join("ran.txt");
+    let snap = approve(&plan(
+        json!([step("make", &format!("New-Item -ItemType File -Path {} | Out-Null", fwd(&marker)))]),
+        json!([]),
+    ));
+    let t = terminal();
+    let options = ExecuteOptions {
+        checkpoint: Some(dir.join("no-such-folder").join("run.checkpoint.json")),
+        ..mode(ExecutionMode::Direct)
+    };
+    let (outcome, _, events) = run(&t, &snap, &options, None);
+    match outcome {
+        Outcome::Blocked { reason } => assert!(reason.contains("has not run"), "{reason}"),
+        other => panic!("expected Blocked, got {other:?}"),
+    }
+    assert!(!events.iter().any(|e| matches!(e, ExecutionEvent::StepStarting { .. })));
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!marker.exists(), "the step ran");
+    t.session.close();
+}
+
+/// Failure injection: the elevation broker's pipe breaks during an
+/// Administrator step. The broker may have started it, so the step is left
+/// in doubt, never counted as done, and the plan stops.
+#[test]
+fn a_broker_that_dies_mid_step_leaves_the_step_in_doubt() {
+    struct Broken;
+    impl keyjutsu_core::elevation::ElevatedRunner for Broken {
+        fn run_step(
+            &self,
+            _: &str,
+            _: &str,
+            _: &str,
+        ) -> Result<keyjutsu_core::elevation::ElevatedRun, String> {
+            Err("the pipe was closed before the step finished (os error 109)".into())
+        }
+    }
+    if keyjutsu_core::elevation::is_elevated() {
+        eprintln!("skipped: run elevated, Administrator steps need no broker");
+        return;
+    }
+    let dir = scratch("broker-dies");
+    let path = dir.join("run.checkpoint.json");
+    let mut admin = step("admin", "Get-Service -Name Winmgmt");
+    admin["privilege"] = json!("administrator");
+    let draft = parse_plan(&plan(json!([admin, step("after", "Get-Date")]), json!([])).to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    assert!(book.approve_all_except_critical(&validated, AT).is_empty());
+    let snap = seal(&validated, &book, None, AT).unwrap();
+
+    let t = terminal();
+    let options = ExecuteOptions {
+        checkpoint: Some(path.clone()),
+        elevated_runner: Some(Arc::new(Broken)),
+        ..mode(ExecutionMode::Direct)
+    };
+    let (outcome, checkpoint, _) = run(&t, &snap, &options, None);
+    match outcome {
+        Outcome::Blocked { reason } => assert!(reason.contains("pipe was closed"), "{reason}"),
+        other => panic!("expected Blocked, got {other:?}"),
+    }
+    assert!(checkpoint.runs.is_empty(), "nothing is counted as done");
+    assert_eq!(checkpoint.in_progress.as_ref().map(|p| p.step.as_str()), Some("admin"));
+    assert_eq!(Checkpoint::load(&path).unwrap().in_progress.map(|p| p.step), Some("admin".into()));
+    t.session.close();
+}
+
 #[test]
 fn a_changed_step_runs_again_even_though_it_succeeded_before() {
     let dir = scratch("changed");

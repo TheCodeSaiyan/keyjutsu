@@ -131,21 +131,33 @@ impl Checkpoint {
         }
     }
 
+    /// Read a checkpoint without asking whether KeyJutsu wrote it. Anything
+    /// that acts on one uses `approvals::load_checkpoint` instead.
     pub fn load(path: &Path) -> Result<Self, String> {
-        let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-        let c: Checkpoint = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        Self::parse(&std::fs::read_to_string(path).map_err(|e| e.to_string())?)
+    }
+
+    pub fn parse(text: &str) -> Result<Self, String> {
+        let c: Checkpoint = serde_json::from_str(text).map_err(|e| e.to_string())?;
         if c.kind != CHECKPOINT_KIND {
             return Err(format!("checkpoint format `{}` is not supported", c.kind));
         }
         Ok(c)
     }
 
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_default()
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        Self::write(path, &self.to_json())
+    }
+
     /// Write via a temporary file and a rename, so a crash mid-write leaves
     /// the previous checkpoint rather than half of a new one.
-    pub fn save(&self, path: &Path) -> Result<(), String> {
+    pub(crate) fn write(path: &Path, text: &str) -> Result<(), String> {
         let tmp = path.with_extension("tmp");
-        std::fs::write(&tmp, serde_json::to_string_pretty(self).unwrap_or_default())
-            .map_err(|e| e.to_string())?;
+        std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, path).map_err(|e| e.to_string())
     }
 }
@@ -276,6 +288,9 @@ pub struct ExecuteOptions {
     pub fingerprint_now: Option<crate::boundary::FingerprintNow>,
     /// Runs Administrator steps when KeyJutsu itself is not elevated.
     pub elevated_runner: Option<std::sync::Arc<dyn crate::elevation::ElevatedRunner>>,
+    /// Records each checkpoint written, so a resume can refuse an edited one
+    /// (`approvals`). Without it the checkpoint is written unrecorded.
+    pub checkpoint_store: Option<std::sync::Arc<crate::store::Store>>,
 }
 
 impl Default for ExecuteOptions {
@@ -292,6 +307,7 @@ impl Default for ExecuteOptions {
             resume_gate: None,
             fingerprint_now: None,
             elevated_runner: None,
+            checkpoint_store: None,
         }
     }
 }
@@ -755,10 +771,17 @@ pub fn execute(
         .mode
         .or_else(|| plan.execution_preferences.as_ref().and_then(|p| p.default_mode).map(engine_mode))
         .unwrap_or(options.base.mode);
-    let save = |c: &Checkpoint| {
-        if let Some(path) = &options.checkpoint {
-            let _ = c.save(path);
+    let try_save = |c: &Checkpoint| -> Result<(), String> {
+        match (&options.checkpoint, &options.checkpoint_store) {
+            (Some(path), Some(store)) => crate::approvals::save_checkpoint(store, c, path),
+            (Some(path), None) => c.save(path),
+            (None, _) => Ok(()),
         }
+    };
+    // Most saves are a best effort: the run is better finished than stopped
+    // for a record. The one before a step starts is not (below).
+    let save = |c: &Checkpoint| {
+        let _ = try_save(c);
     };
 
     // Results from an earlier run count only where the step is unchanged.
@@ -1053,7 +1076,18 @@ pub fn execute(
             step_hash: step_hash.clone(),
             started_at: started_at.clone(),
         });
-        save(&checkpoint);
+        // A step does not start unless the record that it started is safely
+        // written: after a crash, that record is what says its effect is in
+        // doubt rather than that it never ran.
+        if let Err(e) = try_save(&checkpoint) {
+            checkpoint.in_progress = None;
+            return finish(
+                Outcome::Blocked {
+                    reason: format!("could not record that step `{id}` is starting, so it has not run: {e}"),
+                },
+                checkpoint,
+            );
+        }
         observe(ExecutionEvent::StepStarting { step: id.clone(), title: step.title.clone() });
         if let (StepKind::Credential, Some(request)) = (step.kind, &step.credential) {
             observe(ExecutionEvent::CredentialRequired { step: id.clone(), prompt: request.prompt.clone() });

@@ -127,6 +127,13 @@ fn check_value(p: &Parameter, value: &str) -> Result<(), String> {
     if let Some(c) = value.chars().find(|c| NEVER_IN_A_VALUE.contains(c)) {
         return Err(format!("{}: `{c}` is never allowed in a parameter value", p.name));
     }
+    if let Some(c) = value.chars().find(|c| keyjutsu_plan::graph::is_hidden(*c)) {
+        return Err(format!(
+            "{}: U+{:04X} is never allowed in a parameter value: it is invisible or reorders the text",
+            p.name,
+            u32::from(c)
+        ));
+    }
     let re = regex::Regex::new(&format!("^(?:{})$", p.pattern.trim_start_matches('^').trim_end_matches('$')))
         .map_err(|e| format!("{}: its pattern is not valid: {e}", p.name))?;
     if !re.is_match(value) {
@@ -359,7 +366,13 @@ pub fn import(text: &str) -> Result<Technique, String> {
         }
     }
     t.template.keyjutsu = None;
-    ValidPlan::revalidate(t.template.clone(), true).map_err(|e| format!("its plan is not valid: {e}"))?;
+    ValidPlan::revalidate(t.template.clone(), true).map_err(|e| match e {
+        keyjutsu_plan::PlanError::Invalid { problems } => format!(
+            "its plan is not valid: {}",
+            problems.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ")
+        ),
+        e => format!("its plan is not valid: {e}"),
+    })?;
     t.provenance.imported = true;
     t.provenance.known_good.clear();
     t.provenance.last_validated_at = None;

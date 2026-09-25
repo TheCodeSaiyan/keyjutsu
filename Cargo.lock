@@ -2149,6 +2149,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
  "keyjutsu-core",
+ "proptest",
  "serde",
  "serde_json",
  "windows-sys 0.61.2",
@@ -2225,6 +2226,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.4.3",
  "portable-pty",
+ "proptest",
  "serde",
  "serde_json",
  "thiserror 2.0.21",

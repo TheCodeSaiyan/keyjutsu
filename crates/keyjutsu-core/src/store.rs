@@ -58,13 +58,7 @@ impl Store {
         let key_file = root.join("key.dpapi");
         let key = match std::fs::read(&key_file) {
             Ok(sealed) => crate::dpapi::unprotect(&sealed)?,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                let mut key = vec![0u8; 32];
-                getrandom::fill(&mut key).map_err(|e| e.to_string())?;
-                let sealed = crate::dpapi::protect(&key)?;
-                write_atomic(&key_file, &sealed)?;
-                key
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => create_key(&key_file)?,
             Err(e) => return Err(e.to_string()),
         };
         if key.len() != 32 {
@@ -157,10 +151,43 @@ impl Store {
     }
 }
 
+/// Make the store's key, unless another process makes it first. The whole
+/// key is written under a name of its own, then linked into place, which
+/// fails if a key is already there; the loser uses the winner's key. Two
+/// keys, the last one written winning, would leave records made under the
+/// other unreadable.
+fn create_key(key_file: &Path) -> Result<Vec<u8>, String> {
+    let mut key = vec![0u8; 32];
+    getrandom::fill(&mut key).map_err(|e| e.to_string())?;
+    let sealed = crate::dpapi::protect(&key)?;
+    let tmp = unique_tmp(key_file)?;
+    std::fs::write(&tmp, &sealed).map_err(|e| e.to_string())?;
+    let linked = std::fs::hard_link(&tmp, key_file);
+    let _ = std::fs::remove_file(&tmp);
+    match linked {
+        Ok(()) => Ok(key),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            crate::dpapi::unprotect(&std::fs::read(key_file).map_err(|e| e.to_string())?)
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// `path` with a random suffix, so writers never share a temporary file.
+fn unique_tmp(path: &Path) -> Result<PathBuf, String> {
+    let mut r = [0u8; 8];
+    getrandom::fill(&mut r).map_err(|e| e.to_string())?;
+    let suffix: String = r.iter().map(|b| format!("{b:02x}")).collect();
+    Ok(path.with_extension(format!("{suffix}.tmp")))
+}
+
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
+    let tmp = unique_tmp(path)?;
     std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        e.to_string()
+    })
 }
 
 /// A short, sortable, unique id: `20260925-080000-a1b2`.

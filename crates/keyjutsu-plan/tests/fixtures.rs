@@ -95,6 +95,10 @@ fn structure_invalid_fixtures_report_the_right_problem() {
         ),
         ("duplicate-step-id.json", |p| matches!(p, Problem::DuplicateStepId { step } if step == "wsl-path")),
         ("edge-to-missing-step.json", |p| matches!(p, Problem::UnknownStep { step, .. } if step == "verfy")),
+        (
+            "hidden-bidi-override.json",
+            |p| matches!(p, Problem::HiddenCharacter { step, code_point } if step == "list-logs" && code_point == "U+202E"),
+        ),
         ("phases-out-of-order.json", |p| matches!(p, Problem::PhaseOrder { .. })),
     ];
     let files = fixtures("structure-invalid");

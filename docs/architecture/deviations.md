@@ -129,6 +129,13 @@ needs a keyed MAC under a DPAPI-protected key (Milestone 14) checked by the
 elevated broker (Milestone 10). Until then, a snapshot is only as trustworthy
 as the folder it is stored in. See [ADR 0010](adr/0010-plan-hashing.md).
 
+**Closed at Milestone 17**, differently from the plan above: instead of a MAC
+inside the file, sealing records the snapshot hash in the DPAPI-keyed
+encrypted store, and `run` and `recover` refuse a snapshot with no record
+(`keyjutsu-core::approvals`). A record cannot be made by another account or
+on another machine. The broker does not check the store; it is launched
+pinned to the hash KeyJutsu has already checked.
+
 ## D15. No file-copy staging
 
 §13 lists "disposable copy testing": transform a copy of a configuration file,
@@ -191,6 +198,13 @@ add a step. Protecting it belongs with the other local state in Milestone 14
 A checkpoint that cannot be written does not stop the run; the run carries on,
 and a later `--resume` will know less than it should. That should become a
 warning on screen once there is somewhere to show it.
+
+**Closed at Milestone 17.** Every save records the checkpoint's SHA-256 in the
+encrypted store, and resuming or recovering refuses a checkpoint that differs
+from what KeyJutsu wrote. The save that marks a step as started is no longer
+a best effort: if it fails, the step does not run. Other saves still are,
+because stopping a run halfway for a record would be worse than the record
+being behind.
 
 ## D21. No Windows-native authentication integration yet
 
@@ -297,3 +311,15 @@ elevation broker is started elevated, so it has to live where only
 Administrators can replace it. A per-user install would put it in a folder
 the user (and anything running as the user) can write, which would hand
 Administrator to whoever swaps the file.
+
+## D30. Fuzzing is property-based, not coverage-guided
+
+§60 asks for fuzzing in the hardening pass. The untrusted inputs (plans,
+sealed snapshots, broker requests and frames, terminal output, imported
+Techniques) are fuzzed with `proptest`: generated and mutated inputs, built
+from the real formats and near-misses of them, tens of thousands of cases per
+run, in the normal test suite. That found one real bug (the mark scanner, see
+the threat model). It is not coverage-guided: `cargo fuzz` needs a nightly
+toolchain and libFuzzer, and was not installed on the development machine;
+adding targets for the same inputs is the next step, and long runs of them
+belong outside the normal suite.

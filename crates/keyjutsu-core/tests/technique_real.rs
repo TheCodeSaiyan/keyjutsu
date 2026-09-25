@@ -228,6 +228,55 @@ fn a_shared_technique_arrives_as_an_untrusted_draft() {
     assert!(technique::import("{}").is_err());
 }
 
+/// Milestone 17, imported Technique attacks: a crafted export claims trust
+/// it was never given, hides characters in its commands, and uses a loose
+/// pattern to smuggle flags in through a value.
+#[test]
+fn an_imported_technique_cannot_claim_trust_or_hide_what_it_runs() {
+    let dir = scratch("attacks");
+    let store = Store::open(&dir.join("store")).unwrap();
+    let t =
+        promote(&successful_session(&store), "Check a Windows service", "", &[param("Winmgmt")], AT).unwrap();
+    let shared: serde_json::Value = serde_json::from_str(&technique::export(&t)).unwrap();
+
+    // Claims of trust: known-good environments, a validation date, "not
+    // imported", and KeyJutsu's own state saying every step is ready.
+    let mut claims = shared.clone();
+    claims["technique"]["provenance"]["known_good"] = json!([fingerprint::collect(None)]);
+    claims["technique"]["provenance"]["last_validated_at"] = json!(AT);
+    claims["technique"]["provenance"]["imported"] = json!(false);
+    let imported = technique::import(&claims.to_string()).unwrap();
+    assert!(imported.provenance.imported);
+    assert!(imported.provenance.known_good.is_empty() && imported.provenance.last_validated_at.is_none());
+    let draft = instantiate(&imported, &BTreeMap::new()).unwrap();
+    assert!(draft.plan().keyjutsu.is_none(), "no validation or approval arrives with it");
+    assert!(fit(&imported, &draft, &fingerprint::collect(None)).no_known_good);
+
+    // A command that reads differently from how it runs.
+    let mut hidden = shared.clone();
+    hidden["technique"]["template"]["steps"][1]["commands"][0]["text"] =
+        json!("Write-Output 'checked' # \u{202E}; Remove-Item C:/x");
+    let err = technique::import(&hidden.to_string()).unwrap_err();
+    assert!(err.contains("U+202E"), "{err}");
+    let mut hidden_default = shared.clone();
+    hidden_default["technique"]["parameters"][0]["default"] = json!("Win\u{200B}mgmt");
+    assert!(technique::import(&hidden_default.to_string()).unwrap_err().contains("U+200B"));
+    assert!(instantiate(&t, &values(&[("service_name", "Winmgmt\u{2066}")])).unwrap_err().contains("U+2066"));
+
+    // A loose pattern lets a value add flags. Nothing stops that at the
+    // value; what stops it is that the plan is judged by the command it
+    // makes, so recursive deletion needs its own typed confirmation.
+    let mut loose = shared;
+    loose["technique"]["template"]["steps"][1]["commands"][0]["text"] =
+        json!("Remove-Item -LiteralPath C:/Users/Public/kj-attack-{{kj:service_name}}");
+    loose["technique"]["parameters"][0]["pattern"] = json!(".*");
+    let imported = technique::import(&loose.to_string()).unwrap();
+    let draft = instantiate(&imported, &values(&[("service_name", "none -Recurse -Force")])).unwrap();
+    let (validated, _) = validated(&draft);
+    let mut book = ApprovalBook::new();
+    assert_eq!(book.approve_all_except_critical(&validated, AT), ["say"], "held for its typed confirmation");
+}
+
 #[test]
 fn the_store_is_encrypted_and_records_cannot_be_swapped() {
     let dir = scratch("store");

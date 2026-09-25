@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
 use keyjutsu_core::SessionOptions;
-use keyjutsu_core::execute::{Checkpoint, Driver};
+use keyjutsu_core::execute::Driver;
 use keyjutsu_core::execution::PerformanceConfig;
 use keyjutsu_core::plan::ApprovedSnapshot;
 use keyjutsu_core::recovery::{RecoveryItem, RecoveryResult, plan_recovery, recover, recovery_dir};
@@ -77,8 +77,21 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let store = match keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root()) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!(
+                "keyjutsu: the encrypted store, which holds this account's approvals, cannot be opened: {e}"
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(reason) = keyjutsu_core::approvals::check_approval(&store, &snapshot) {
+        eprintln!("keyjutsu: {reason}");
+        return ExitCode::FAILURE;
+    }
     let cp_path = args.from.unwrap_or_else(|| run_cli::checkpoint_path(args.snapshot));
-    let checkpoint = match Checkpoint::load(&cp_path) {
+    let checkpoint = match keyjutsu_core::approvals::load_checkpoint(&store, &cp_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("keyjutsu: cannot read the checkpoint {}: {e}", cp_path.display());

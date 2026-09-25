@@ -442,6 +442,7 @@ async fn workspace_approve(
         let folder = run_folder(&snapshot);
         std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
         let path = folder.join("snapshot.json");
+        keyjutsu_core::approvals::record_approval(&open_store()?, &snapshot)?;
         std::fs::write(&path, snapshot.to_json()).map_err(|e| e.to_string())?;
         let sealed = Sealed {
             snapshot_hash: snapshot.snapshot_hash().to_owned(),
@@ -496,6 +497,7 @@ fn plan_run(
     }
     let options = ExecuteOptions {
         elevated_runner,
+        checkpoint_store: Some(Arc::new(open_store()?)),
         mode: Some(config.mode),
         base: config,
         checkpoint: Some(checkpoint.clone()),
@@ -558,8 +560,13 @@ fn plan_confirm(typed: Option<String>, plans: State<'_, Arc<Plans>>) {
 fn last_run(plans: &Plans) -> Result<(ApprovedSnapshot, Checkpoint, PathBuf), String> {
     let (snapshot, _) = locked(&plans.sealed).clone().ok_or("no plan has run")?;
     let path = locked(&plans.checkpoint).clone().ok_or("no plan has run")?;
-    let checkpoint = Checkpoint::load(&path)?;
+    let checkpoint = keyjutsu_core::approvals::load_checkpoint(&open_store()?, &path)?;
     Ok((snapshot, checkpoint, path))
+}
+
+/// The encrypted store, where approvals and checkpoints are recorded.
+fn open_store() -> Result<keyjutsu_core::store::Store, String> {
+    keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root())
 }
 
 #[tauri::command]

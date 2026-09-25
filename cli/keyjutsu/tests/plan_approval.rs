@@ -20,7 +20,11 @@ fn scratch(test: &str) -> PathBuf {
 }
 
 fn keyjutsu(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_keyjutsu")).args(args).output().unwrap()
+    Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+        .args(args)
+        .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .output()
+        .unwrap()
 }
 
 fn text(out: &Output) -> String {
@@ -127,6 +131,27 @@ fn an_edited_snapshot_fails_verification() {
     let verify = keyjutsu(&["plan", "verify", out]);
     assert_eq!(verify.status.code(), Some(1));
     assert!(text(&verify).contains("altered"), "{}", text(&verify));
+}
+
+/// Milestone 17: a snapshot with consistent hashes is still refused unless
+/// this account approved it here. Another store stands in for another
+/// account or machine: it has its own key and none of these approvals.
+#[test]
+fn run_refuses_a_snapshot_this_account_did_not_approve() {
+    let dir = scratch("elsewhere");
+    let file = write(&dir, "plan.json", &read_only_plan());
+    let snap = dir.join("snap.json");
+    let approved = keyjutsu(&["plan", "approve", &file, "--out", snap.to_str().unwrap()]);
+    assert!(approved.status.success(), "{}", text(&approved));
+    for command in [&["run", snap.to_str().unwrap()][..], &["recover", snap.to_str().unwrap()][..]] {
+        let refused = Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+            .args(command)
+            .env("KEYJUTSU_STORE", dir.join("another-account"))
+            .output()
+            .unwrap();
+        assert_eq!(refused.status.code(), Some(1), "{command:?}: {}", text(&refused));
+        assert!(text(&refused).contains("not approved by this Windows account"), "{}", text(&refused));
+    }
 }
 
 #[test]

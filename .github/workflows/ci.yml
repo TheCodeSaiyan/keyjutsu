@@ -29,6 +29,9 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      # §57: a release does not ship unless every gate's named tests pass.
+      # A renamed or deleted test fails its gate rather than dropping out.
+      - run: node scripts/release-gates.mjs
       # ts-rs rewrites the TypeScript bindings during `cargo test`. A diff here
       # means a Rust IPC type changed without its TypeScript counterpart.
       - name: Generated TypeScript is current

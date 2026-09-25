@@ -1,7 +1,7 @@
 //! What KeyJutsu asks agents. Every prompt restates the ground rules, because
 //! each request is a fresh, stateless run of the agent's CLI.
 
-use crate::context::PreparedContext;
+use crate::context::{PreparedContext, redact};
 
 const PLAN_SCHEMA: &str = include_str!("../../../schemas/plan/v1/plan.schema.json");
 
@@ -85,7 +85,15 @@ fn context_section(context: &PreparedContext) -> String {
     s
 }
 
+/// Everything the operator types that is sent to an agent passes through the
+/// same redaction as pasted context: the task, the guidance, and what
+/// validation found (§2.5: secrets never enter agent context).
+fn clean(text: &str) -> String {
+    redact(text).0
+}
+
 pub fn propose(task: &str, context: &PreparedContext, full_schema: bool) -> String {
+    let task = clean(task);
     format!(
         "{RULES}\n\nThe operator's task:\n{task}\n\n{}Propose a plan for the task.\n\n{}",
         context_section(context),
@@ -94,10 +102,11 @@ pub fn propose(task: &str, context: &PreparedContext, full_schema: bool) -> Stri
 }
 
 pub fn revise_step(task: &str, plan_json: &str, step: &str, guidance: &str, findings: &[String]) -> String {
+    let (task, guidance) = (clean(task), clean(guidance));
     let findings = if findings.is_empty() {
         String::from("(none)")
     } else {
-        findings.iter().map(|f| format!("- {f}")).collect::<Vec<_>>().join("\n")
+        findings.iter().map(|f| format!("- {}", clean(f))).collect::<Vec<_>>().join("\n")
     };
     format!(
         "{RULES}\n\nThe operator's task:\n{task}\n\nThe current plan:\n```json\n{plan_json}\n```\n\n\
@@ -108,6 +117,7 @@ pub fn revise_step(task: &str, plan_json: &str, step: &str, guidance: &str, find
 }
 
 pub fn revise_plan(task: &str, plan_json: &str, guidance: &str, full_schema: bool) -> String {
+    let (task, guidance) = (clean(task), clean(guidance));
     format!(
         "{RULES}\n\nThe operator's task:\n{task}\n\nThe current plan:\n```json\n{plan_json}\n```\n\n\
          Reconsider the whole plan. Keep the ids of steps you keep unchanged.\n\n\
@@ -117,6 +127,7 @@ pub fn revise_plan(task: &str, plan_json: &str, guidance: &str, full_schema: boo
 }
 
 pub fn review(task: &str, plan_json: &str) -> String {
+    let task = clean(task);
     format!(
         "{RULES}\n\nYou are reviewing another agent's plan, not writing one. You cannot change it; \
          your findings go to the operator and the plan's author.\n\n\

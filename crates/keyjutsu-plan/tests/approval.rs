@@ -363,3 +363,32 @@ fn keyjutsus_own_critical_rating_needs_the_typed_phrase_even_if_the_agent_said_l
         Some(keyjutsu_plan::model::RiskLevel::Critical)
     );
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 3000, ..ProptestConfig::default() })]
+
+    /// Milestone 17, plan tampering: random edits to the stored text of a
+    /// snapshot, a character replaced, removed or inserted anywhere. Loading
+    /// never panics, and whatever it accepts is exactly what was approved
+    /// (whitespace, say); anything else is refused.
+    #[test]
+    fn no_edit_to_a_snapshot_is_accepted_as_something_else(
+        edits in prop::collection::vec((any::<prop::sample::Index>(), any::<char>(), 0u8..3), 1..4)
+    ) {
+        let p = plan(&chain());
+        let snap = seal(&p, &approved(&p), Some(fingerprint()), AT).unwrap();
+        let mut text: Vec<char> = snap.to_json().chars().collect();
+        for (at, c, how) in edits {
+            let i = at.index(text.len());
+            match how {
+                0 => text[i] = c,
+                1 => { text.remove(i); }
+                _ => text.insert(i, c),
+            }
+        }
+        let text: String = text.into_iter().collect();
+        if let Ok(loaded) = ApprovedSnapshot::from_json(&text) {
+            prop_assert_eq!(loaded, snap);
+        }
+    }
+}
