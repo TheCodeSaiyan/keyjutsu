@@ -145,7 +145,7 @@ impl Checkpoint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export, export_to = "execute/")]
 pub enum Outcome {

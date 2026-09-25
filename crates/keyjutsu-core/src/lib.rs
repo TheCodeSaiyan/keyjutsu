@@ -7,14 +7,18 @@
 
 pub mod artifacts;
 pub mod demo;
+pub mod dpapi;
 pub mod execute;
 pub mod fingerprint;
 pub mod git;
 pub mod headless;
+pub mod history;
 pub mod ipc;
 pub mod readiness;
 pub mod recovery;
 pub mod session;
+pub mod store;
+pub mod technique;
 pub mod workspace;
 
 pub use keyjutsu_agent as agent;

@@ -21,3 +21,4 @@ the code looks the way it does stays readable.
 | [0013](0013-design-kit-is-canonical.md) | The design kit is canonical; the app's tokens are generated from it | Accepted |
 | [0014](0014-validation-runs-nothing-it-validates.md) | Validation runs nothing a plan names, with one guarded exception | Accepted |
 | [0015](0015-credentials-through-the-shells-masked-prompt.md) | Credentials are typed into the shell's own masked prompt | Accepted (M9) |
+| [0016](0016-encrypted-file-store.md) | History is an encrypted file store under a DPAPI-protected key | Accepted (M14) |

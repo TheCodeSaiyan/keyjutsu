@@ -45,6 +45,8 @@ pub struct RunArgs<'a> {
     pub resume: Option<PathBuf>,
     pub settle: &'a [String],
     pub isolate: Option<Isolation>,
+    /// Keep no record of the session (§35).
+    pub ephemeral: bool,
 }
 
 /// Where a run keeps its Git record: next to the snapshot.
@@ -154,6 +156,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         Some(ShellName::Cmd) => ShellKind::Cmd,
         _ => ShellKind::Pwsh,
     };
+    let started = fingerprint::now_rfc3339();
     let mut options = SessionOptions::new(shell);
     if args.clean {
         options.profile = ProfileMode::Clean;
@@ -252,9 +255,13 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         eprintln!("keyjutsu: {e}");
         return ExitCode::FAILURE;
     }
+    let mut git_reports = Vec::new();
     for (i, before) in baseline.iter().enumerate() {
         match git::report(before, &git_dir.join(i.to_string())) {
-            Ok(r) => print_git(&r, args.snapshot),
+            Ok(r) => {
+                print_git(&r, args.snapshot);
+                git_reports.push(r);
+            }
             Err(e) => eprintln!("keyjutsu: cannot compare {} after the run: {e}", before.root),
         }
     }
@@ -262,6 +269,26 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         println!("The shell ended before the plan finished. Checkpoint: {}", cp_path.display());
         return ExitCode::FAILURE;
     };
+    if !args.ephemeral {
+        let finished = fingerprint::now_rfc3339();
+        let record = keyjutsu_core::history::SessionRecord {
+            id: keyjutsu_core::store::new_id(&finished),
+            started_at: started.clone(),
+            finished_at: finished,
+            task: snapshot.plan().title.clone().unwrap_or_else(|| snapshot.plan().task_id.clone()),
+            agent: snapshot.plan().agent.clone(),
+            snapshot: snapshot.to_json(),
+            checkpoint: Some(checkpoint.clone()),
+            outcome: outcome.clone(),
+            git: git_reports,
+        };
+        match keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root())
+            .and_then(|s| keyjutsu_core::history::save(&s, &record))
+        {
+            Ok(()) => println!("Recorded as session {} in the encrypted history.", record.id),
+            Err(e) => eprintln!("keyjutsu: the session was not recorded: {e}"),
+        }
+    }
     for run in &checkpoint.runs {
         let mark = if run.succeeded { "ok    " } else { "FAILED" };
         println!("  {mark} {}", run.step);

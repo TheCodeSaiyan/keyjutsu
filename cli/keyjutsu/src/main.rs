@@ -7,6 +7,7 @@
 mod agent_cli;
 mod console;
 mod git_cli;
+mod history_cli;
 mod plans;
 mod recover_cli;
 mod run_cli;
@@ -26,6 +27,69 @@ use keyjutsu_core::{SessionOptions, demo};
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Subcommand)]
+enum HistoryCommand {
+    /// Every recorded session, oldest first.
+    List,
+    /// One session: its task, agent, outcome and steps.
+    Show { id: String },
+    /// Compare this machine with the one the session was approved on.
+    Recheck { id: String },
+}
+
+#[derive(Subcommand)]
+enum TechniqueCommand {
+    /// Make a completed session into a Technique.
+    Promote {
+        session: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value = "")]
+        description: String,
+        /// A value in the session's plan to make a parameter: NAME=VALUE.
+        #[arg(long = "param", value_name = "NAME=VALUE")]
+        params: Vec<String>,
+    },
+    List,
+    /// Make a draft plan from a Technique, to validate and approve.
+    Use {
+        id: String,
+        #[arg(long = "param", value_name = "NAME=VALUE")]
+        params: Vec<String>,
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
+    /// Save an adapted template as a new revision; earlier ones are kept.
+    Revise {
+        id: String,
+        #[arg(long)]
+        template: std::path::PathBuf,
+    },
+    /// Write a Technique for sharing, without this machine's details.
+    Export {
+        id: String,
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
+    /// Read a shared Technique as an untrusted draft.
+    Import {
+        file: std::path::PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum StoreCommand {
+    /// Delete what KeyJutsu keeps.
+    Clear {
+        #[arg(long)]
+        history: bool,
+        #[arg(long)]
+        techniques: bool,
+        #[arg(long)]
+        artifacts: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -88,7 +152,19 @@ enum Command {
         /// Run apart from your working tree: in a new worktree, or on a new branch.
         #[arg(long, value_enum)]
         isolate: Option<IsolateChoice>,
+        /// Keep no record of this session in the encrypted history.
+        #[arg(long)]
+        ephemeral: bool,
     },
+    /// The encrypted history of past sessions.
+    #[command(subcommand)]
+    History(HistoryCommand),
+    /// Reusable Techniques made from successful sessions.
+    #[command(subcommand)]
+    Technique(TechniqueCommand),
+    /// Manage what KeyJutsu keeps on this machine.
+    #[command(subcommand)]
+    Store(StoreCommand),
     /// What a run did to the Git repositories it worked in.
     #[command(subcommand)]
     Git(GitCommand),
@@ -352,22 +428,43 @@ fn main() -> ExitCode {
             })
         }
         Command::Git(GitCommand::Diff { snapshot }) => git_cli::diff(&snapshot),
-        Command::Run { snapshot, mode, clean, resume, settle, isolate } => run_cli::run(run_cli::RunArgs {
-            snapshot: &snapshot,
-            mode: mode.map(|m| match m {
-                ModeChoice::Performance => ExecutionMode::Performance,
-                ModeChoice::Assisted => ExecutionMode::Assisted,
-                ModeChoice::Auto => ExecutionMode::AutoPerformance,
-                ModeChoice::Direct => ExecutionMode::Direct,
-            }),
-            clean,
-            resume: resume.map(|from| from.unwrap_or_else(|| run_cli::checkpoint_path(&snapshot))),
-            settle: &settle,
-            isolate: isolate.map(|i| match i {
-                IsolateChoice::Worktree => run_cli::Isolation::Worktree,
-                IsolateChoice::Branch => run_cli::Isolation::Branch,
-            }),
-        }),
+        Command::History(HistoryCommand::List) => history_cli::history_list(),
+        Command::History(HistoryCommand::Show { id }) => history_cli::history_show(&id),
+        Command::History(HistoryCommand::Recheck { id }) => history_cli::history_recheck(&id),
+        Command::Technique(TechniqueCommand::Promote { session, name, description, params }) => {
+            history_cli::technique_promote(&session, &name, &description, &params)
+        }
+        Command::Technique(TechniqueCommand::List) => history_cli::technique_list(),
+        Command::Technique(TechniqueCommand::Use { id, params, out }) => {
+            history_cli::technique_use(&id, &params, &out)
+        }
+        Command::Technique(TechniqueCommand::Revise { id, template }) => {
+            history_cli::technique_revise(&id, &template)
+        }
+        Command::Technique(TechniqueCommand::Export { id, out }) => history_cli::technique_export(&id, &out),
+        Command::Technique(TechniqueCommand::Import { file }) => history_cli::technique_import(&file),
+        Command::Store(StoreCommand::Clear { history, techniques, artifacts }) => {
+            history_cli::store_clear(history, techniques, artifacts)
+        }
+        Command::Run { snapshot, mode, clean, resume, settle, isolate, ephemeral } => {
+            run_cli::run(run_cli::RunArgs {
+                snapshot: &snapshot,
+                mode: mode.map(|m| match m {
+                    ModeChoice::Performance => ExecutionMode::Performance,
+                    ModeChoice::Assisted => ExecutionMode::Assisted,
+                    ModeChoice::Auto => ExecutionMode::AutoPerformance,
+                    ModeChoice::Direct => ExecutionMode::Direct,
+                }),
+                clean,
+                resume: resume.map(|from| from.unwrap_or_else(|| run_cli::checkpoint_path(&snapshot))),
+                settle: &settle,
+                isolate: isolate.map(|i| match i {
+                    IsolateChoice::Worktree => run_cli::Isolation::Worktree,
+                    IsolateChoice::Branch => run_cli::Isolation::Branch,
+                }),
+                ephemeral,
+            })
+        }
         Command::Shell(shell) => session(shell.options(), None),
         Command::Demo { shell, performance } => {
             let options = shell.options();

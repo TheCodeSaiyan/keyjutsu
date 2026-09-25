@@ -175,6 +175,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
         .openpty(PtySize { rows: 30, cols: 120, pixel_width: 0, pixel_height: 0 })
         .unwrap();
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_keyjutsu"));
+    cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
     cmd.args(["run", snap.to_str().unwrap(), "--mode", "performance", "--clean"]);
     let mut child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);
@@ -228,6 +229,17 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     assert!(screen.wait_for("Complete: 1 steps."), "no outcome:\n{}", screen.plain());
     assert!(status.success(), "{status:?}");
     assert!(dir.join("snap.checkpoint.json").exists(), "a checkpoint was written");
+    assert!(screen.plain().contains("Recorded as session"), "{}", screen.plain());
+    let listed = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+        .args(["history", "list"])
+        .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&listed.stdout);
+    assert!(
+        text.contains("complete") && text.contains("Say hello"),
+        "the session is in the history:\n{text}"
+    );
 }
 
 #[test]
@@ -282,6 +294,8 @@ fn launch_in(
     if let Some(dir) = cwd {
         cmd.cwd(dir);
     }
+    // Sessions these tests run go to a history of their own, not the operator's.
+    cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
     let child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);
     let mut reader = pair.master.try_clone_reader().unwrap();

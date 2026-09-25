@@ -238,3 +238,18 @@ against a local server instead of the internet. Integrity does not rest on
 the transport either way: a staged copy is used only if its SHA-256 matches
 the approved pin. Plain HTTP to any other host is still refused
 (`invalid/artifact-over-plain-http.json`).
+
+## D25. A file store rather than SQLite
+
+§35 prefers SQLite "or an equivalent robust embedded store". The history is
+one encrypted file per record, written atomically, because the records are
+few and read whole, and SQLite would add a C build and a second persistence
+model to KeyJutsu ([ADR 0016](adr/0016-encrypted-file-store.md)). The cost
+is that listing reads every record; at many thousands of sessions an index
+would be needed.
+
+## D26. No desktop history or Technique screens yet
+
+Milestone 14 is built in the core and the CLI. The desktop has no screens
+for the history or Techniques, and its runs are not yet recorded; the CLI's
+are.
