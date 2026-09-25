@@ -145,7 +145,7 @@ it is, and the row says which part is not.
 | Something else takes the broker's place, and is run elevated. | The installer is per-machine, into Program Files, which only Administrators can write; KeyJutsu starts only the `keyjutsu-broker.exe` beside its own program. | Held by Windows' file permissions. A development build run from a user-writable folder has no such protection. |
 | The PATH entry makes `keyjutsu` shadow another program, or another program shadow a system one. | The install folder is appended to the user's PATH, never prepended, and only if it is not already there; the entry is removed on uninstall. | Held (`path_with` and `path_without` tests; the Sandbox install trial checks the entry arrives and goes). |
 | A crafted folder name turns "Open KeyJutsu here" into a different command. | The folder is passed quoted as one argument (`--cwd "%V"`); Windows folder names cannot contain `"`. The only quoting quirk, a drive root's `"C:\"`, is repaired. | Held (`a_drive_root_survives_windows_quoting`). |
-| Uninstalling leaves KeyJutsu reachable. | The uninstaller removes the PATH entry and both Explorer menus before the files. | Held (Sandbox install trial). The encrypted history in the user's profile is left, as the operator's data; `keyjutsu store clear` removes it. |
+| Uninstalling leaves KeyJutsu reachable. | The uninstaller removes the PATH entry and both Explorer menus before the files. | Held (Sandbox install trial). The encrypted history in the user's profile is left, as the operator's data; `keyjutsu store clear --history --techniques` removes it. |
 
 ## Release gates
 

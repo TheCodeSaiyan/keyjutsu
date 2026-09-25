@@ -16,6 +16,7 @@
     "types:index": "node packages/types/scripts/write-index.mjs",
     "schemas:check": "node schemas/check.mjs",
     "release:gates": "node scripts/release-gates.mjs",
+    "docs:check": "node scripts/docs-check.mjs",
     "desktop:dev": "pnpm --filter @keyjutsu/desktop tauri dev",
     "desktop:build": "pnpm --filter @keyjutsu/desktop tauri build",
     "tokens": "node scripts/design-tokens.mjs",

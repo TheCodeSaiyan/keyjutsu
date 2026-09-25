@@ -5,118 +5,163 @@
   </picture>
 </h1>
 
-KeyJutsu lets you mash random keys while flawless, genuinely working terminal
-commands appear and run in a real shell.
+**Mash random keys while real, validated commands type themselves perfectly
+and run in a real shell. The typing is theatre; everything that runs was
+checked and approved by you first.**
 
-The commands are real, the terminal is real and the changes to your machine
-are real. Only the typing is theatre. Underneath, the idea is serious: an AI
-agent proposes a plan, KeyJutsu checks it against your actual machine, you
-review and approve it, and only then does anything run, with each step checked
-after it runs.
+[![CI](https://github.com/ntatschner/keyjutsu/actions/workflows/ci.yml/badge.svg)](https://github.com/ntatschner/keyjutsu/actions/workflows/ci.yml)
+[![Licence](https://img.shields.io/badge/licence-GPL--3.0--only-informational)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-informational)](docs/guides/installing.md)
 
-> **Status: early.** All 17 milestones are built: the real
-> terminal, the performance engine, the plan model, approval, validation,
-> agent integration, the desktop plan workspace, execution of approved
-> plans, credential gates, the elevation broker, recovery, staged downloads,
-> Git safety, an encrypted history with reusable Techniques, plans that
-> cross restarts, an installer, and a security hardening pass whose release
-> gates all pass (`pnpm release:gates`). Early still means unsigned
-> installers and gaps the [threat model](THREAT_MODEL.md#not-covered) lists. Planning, validation, approval and
-> execution work in the desktop app and in the CLI (`keyjutsu agents`,
-> `keyjutsu plan`, `keyjutsu run`, `keyjutsu recover`). Per milestone: [0–2](docs/architecture/milestones-0-2.md),
-> [3](docs/architecture/milestone-3.md), [4](docs/architecture/milestone-4.md),
-> [5](docs/architecture/milestone-5.md), [6](docs/architecture/milestone-6.md),
-> [7](docs/architecture/milestone-7.md),
-> [8](docs/architecture/milestone-8.md), [9](docs/architecture/milestone-9.md),
-> [10](docs/architecture/milestone-10.md),
-> [11](docs/architecture/milestone-11.md), [12](docs/architecture/milestone-12.md),
-> [13](docs/architecture/milestone-13.md), [14](docs/architecture/milestone-14.md),
-> [15](docs/architecture/milestone-15.md), [16](docs/architecture/milestone-16.md), [17](docs/architecture/milestone-17.md).
+Underneath the show, the idea is serious. An AI agent you already use
+investigates your problem and proposes a plan. KeyJutsu checks every command
+against your actual machine, without running any of them. You read it and
+approve it. Only then does anything run, one keystroke of yours at a time,
+with each step checked after it runs.
 
-Windows 11 x64 only for now.
+> **Status: early.** All 17 milestones of the specification are built, and
+> the eight release gates pass. Early means there's no published release or
+> signed installer yet, and the gaps the
+> [threat model](THREAT_MODEL.md#not-covered) lists are real.
+
+## Start here
+
+- **You use a terminal and an AI coding agent already.** Read on, then
+  [install it](docs/guides/installing.md) and
+  [try the demo](docs/guides/first-performance.md). Five minutes.
+- **You're new to AI or to terminals.** Start with
+  [KeyJutsu in plain words](docs/plain/README.md). It explains what an agent
+  and a plan are before it asks you to type anything.
+- **You want to know whether to trust it.** The
+  [threat model](THREAT_MODEL.md) says what's protected, from whom, what's
+  tested, and what isn't covered.
+
+## What it does for you
+
+### The performance: any key, the right command
+
+Each key you press types the next character of an approved command, whatever
+the key was. When the command's complete, the next key runs it, for real, in
+PowerShell 7, Windows PowerShell or `cmd`, inside Windows' own pseudo-console.
+A step moves on when the shell reports it finished, never on a timer, and a
+failure stops everything and gives you the keyboard back. Ctrl+Alt+Shift+K
+takes the terminal back at any moment.
+
+```powershell
+keyjutsu demo --clean
+```
+
+On a clean Windows 11 in Windows Sandbox, the demo's three commands took 595
+mashed keys, and not one of those keys reached the shell as itself.
+
+[Your first performance, step by step](docs/guides/first-performance.md)
+
+### Plans from the agent you already use, kept read-only
+
+KeyJutsu doesn't bring its own AI. It runs Codex, Claude Code, Gemini, GitHub
+Copilot or Cursor under your own account, each in its own read-only mode, and
+takes back a plan: data, not a script. You see what would be sent before it's
+sent, and anything that looks like a secret is taken out first.
+
+```powershell
+keyjutsu plan propose "Find out why the Print Spooler keeps stopping" --agent claude --out spooler.json
+```
+
+[Getting a plan from an agent](docs/guides/planning.md)
+
+### Checks that run nothing, and approval that means something
+
+Validation reads every command through PowerShell's own parser and checks it
+against this machine: does it exist, are its parameters real, what does it
+need, how risky is it. KeyJutsu rates risk itself; an agent can raise a
+step's risk but never lower it. Approving seals the plan so that changing any
+step voids its approval, and a critical step needs its own typed phrase,
+which no amount of key-mashing can produce.
+
+```powershell
+keyjutsu plan validate spooler.json
+keyjutsu plan approve spooler.json --out spooler.approved.json
+```
+
+### A run that checks itself, and stops rather than guesses
+
+Before anything's typed, the machine is compared with the one the plan was
+approved on. After each step, its checks run. Passwords are typed by you
+into PowerShell's own masked prompt, never by KeyJutsu. Administrator steps
+go through one UAC prompt before the performance, not halfway through it.
+A step that failed stays failed until you decide: look first, undo with a
+plan you've read, or repair and carry on.
+
+```powershell
+keyjutsu run spooler.approved.json
+```
+
+[Running a plan](docs/guides/running-a-plan.md) ·
+[When a run stops](docs/guides/when-a-run-stops.md)
+
+### Plans that survive a restart, and plans you can reuse
+
+A plan can stop for a Windows restart and carry on afterwards, once
+KeyJutsu has checked the restart really happened and what came before still
+holds. A run that worked can become a Technique, to use again with new
+values, and it's validated again rather than trusted because it worked once.
+
+[Reusing a plan that worked](docs/guides/techniques.md)
 
 ## Install
 
-`pnpm desktop:build` produces an installer in `target/release/bundle/nsis/`.
-It installs for every user into Program Files (so it asks for Administrator
-once), then asks two questions: put `keyjutsu` on your PATH, and add "Open
-KeyJutsu here" to Explorer's folder menus. `/S` installs silently and answers
-yes to both. Either can be changed later:
-
-```powershell
-keyjutsu setup path add|remove|status
-keyjutsu setup explorer add|remove|status
-```
-
-The programs are built with the C runtime linked in, so nothing else needs
-installing; the desktop app needs the WebView2 runtime, which Windows 11
-already has. Uninstall from Settings, or `uninstall.exe /S`: the PATH entry
-and the menus go before the files. Your encrypted history stays until
-`keyjutsu store clear`.
-
-Installers are not signed yet, so Windows warns about an unknown publisher.
+Windows 11, x64. There's no published release yet; build the installer with
+`pnpm desktop:build` (below), then follow
+[Installing](docs/guides/installing.md). It installs for every user, asks for
+Administrator once, and offers to put `keyjutsu` on your PATH and "Open
+KeyJutsu here" on Explorer's folder menus.
 
 ## Build from source
 
-You need Rust (1.88 or later), Node 22+, pnpm 9 and PowerShell 7 for the best
-experience; Windows PowerShell 5.1 and cmd work too.
+You need Rust 1.88 or later, Node 22 or later and pnpm 9.
 
 ```powershell
 pnpm install
-cargo run -p keyjutsu-cli -- doctor        # is this machine ready?
-cargo run -p keyjutsu-cli -- demo          # mash keys; read-only commands appear
-cargo run -p keyjutsu-cli -- perform -c "Get-Service -Name Winmgmt"
-pnpm desktop:dev                            # the desktop app
+cargo run -p keyjutsu-cli -- doctor     # is this machine ready?
+cargo run -p keyjutsu-cli -- demo       # mash keys; read-only commands appear
+pnpm desktop:dev                        # the desktop app
+pnpm desktop:build                      # the installer, in target/release/bundle/nsis/
 ```
 
-While a performance is armed:
-
-| Key | Does |
-| --- | --- |
-| Any ordinary key | types the next character of the staged command (or a word, with `--turbo`) |
-| Any key at the end of a command | submits it (configurable: `--submit enter` or `--submit auto`) |
-| Ctrl+C | a real interrupt, always |
-| Esc | goes to a running command; ignored while KeyJutsu is typing |
-| Ctrl+Shift+K | private operator controls (desktop); pause and resume (CLI) |
-| Ctrl+Alt+Shift+K | disarm immediately and hand the terminal back |
-
-`--mode auto` types and runs everything by itself; `--mode direct` skips the
-typing effect entirely.
-
-To run a plan: validate and approve it, then run the snapshot. Nothing runs
-unless every step is READY and the machine still matches what was approved.
-
-```powershell
-keyjutsu plan approve plan.json --out plan.approved.json
-keyjutsu run plan.approved.json --mode performance
-# after a failure: review the recovery plan, and roll back only with --confirm
-keyjutsu recover plan.approved.json
-keyjutsu recover plan.approved.json --confirm
-# or revise, approve again, and resume from the old checkpoint
-keyjutsu run plan.v2.approved.json --resume plan.approved.checkpoint.json
-```
+[Contributing](CONTRIBUTING.md) has the tests and the checks a change has to
+pass.
 
 ## How it holds together
 
 - The typed text comes from the shell's own echo, not from KeyJutsu drawing
   what it meant to type. A step finishes when the shell reports it finished,
-  through prompt marks stamped with a per-session secret, never when a timer
-  runs out.
-- A failed command stops the performance and hands the keyboard back. It does
-  not carry on to keep the show going.
+  through prompt marks stamped with a per-session secret.
+- A failed command stops the performance and hands the keyboard back. It
+  doesn't carry on to keep the show going.
 - The desktop's React code can only ask. Every rule about what may reach the
   shell lives in the Rust core, which the desktop app and the CLI share.
 
-[Architecture](docs/architecture/overview.md) ·
-[State machine](docs/architecture/execution-state-machine.md) ·
-[Decisions](docs/architecture/adr/README.md) ·
-[Threat model](THREAT_MODEL.md) ·
-[Plan schema](docs/schemas/plan.md) ·
-[Deviations from the specification](docs/architecture/deviations.md)
+## Documentation
+
+[The documentation index](docs/README.md) has everything: guides,
+plain-language pages, the [command reference](docs/commands.md),
+[recipes](docs/recipes.md), and the internals, from the
+[architecture](docs/architecture/overview.md) to every
+[deviation from the specification](docs/architecture/deviations.md).
+
+## Help
+
+Stuck? [Getting help](SUPPORT.md) says what to try first and what to include.
+Found a security problem? [SECURITY.md](SECURITY.md) says how to report it
+privately. Everyone taking part is asked to follow the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Privacy
 
-No telemetry, no crash reporting, no network calls. See [PRIVACY.md](PRIVACY.md).
+No telemetry, no crash reporting, no update check. KeyJutsu's only network
+requests are the downloads a plan names, when you stage them; agents talk to
+their own providers under your account. [PRIVACY.md](PRIVACY.md) has what's
+stored and where.
 
 ## Licence
 
@@ -125,7 +170,7 @@ GNU General Public License, version 3 only (`GPL-3.0-only`). See
 
 You can use, study, change and share KeyJutsu freely. If you distribute a
 modified version, you must publish its source under the same licence, so a
-closed fork is not possible. The libraries KeyJutsu builds on keep their own
+closed fork isn't possible. The libraries KeyJutsu builds on keep their own
 permissive licences (MIT, Apache-2.0, BSD, Zlib, ISC, MPL-2.0), all of which
 can be combined with GPL-3.0. Why this licence and not the Apache-2.0 the
 specification names: [ADR 0012](docs/architecture/adr/0012-gpl-3-licence.md).

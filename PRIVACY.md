@@ -30,7 +30,9 @@ All of it on this machine, under `%LOCALAPPDATA%\KeyJutsu`:
   and a record of each plan you approved and each checkpoint KeyJutsu wrote,
   so an edited or copied file is refused. Encrypted with AES-256-GCM under a
   key that only your Windows account on this machine can unlock (DPAPI).
-  `keyjutsu store clear` removes it; `keyjutsu run --ephemeral` records
+  `keyjutsu store clear --history --techniques` removes those; the
+  approval and checkpoint records, which hold only hashes, stay so that
+  snapshots you approved still run. `keyjutsu run --ephemeral` records
   nothing in the history.
 - **`runs`**: plans approved in the app, as readable JSON, with their
   checkpoints.

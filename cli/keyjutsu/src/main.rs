@@ -66,59 +66,81 @@ enum HistoryCommand {
     /// Every recorded session, oldest first.
     List,
     /// One session: its task, agent, outcome and steps.
-    Show { id: String },
+    Show {
+        /// The session's id, from `keyjutsu history list`.
+        id: String,
+    },
     /// Compare this machine with the one the session was approved on.
-    Recheck { id: String },
+    Recheck {
+        /// The session's id, from `keyjutsu history list`.
+        id: String,
+    },
 }
 
 #[derive(Subcommand)]
 enum TechniqueCommand {
     /// Make a completed session into a Technique.
     Promote {
+        /// The session's id, from `keyjutsu history list`. It must have completed.
         session: String,
+        /// What to call the Technique.
         #[arg(long)]
         name: String,
+        /// What it is for, in a sentence.
         #[arg(long, default_value = "")]
         description: String,
         /// A value in the session's plan to make a parameter: NAME=VALUE.
         #[arg(long = "param", value_name = "NAME=VALUE")]
         params: Vec<String>,
     },
+    /// Every saved Technique, with its revision and parameters.
     List,
     /// Make a draft plan from a Technique, to validate and approve.
     Use {
+        /// The Technique's id, from `keyjutsu technique list`.
         id: String,
+        /// A value for one of its parameters: NAME=VALUE. Parameters with a
+        /// default may be left out.
         #[arg(long = "param", value_name = "NAME=VALUE")]
         params: Vec<String>,
+        /// Where to write the draft plan.
         #[arg(long)]
         out: std::path::PathBuf,
     },
     /// Save an adapted template as a new revision; earlier ones are kept.
     Revise {
+        /// The Technique's id.
         id: String,
+        /// A plan file to become the new template.
         #[arg(long)]
         template: std::path::PathBuf,
     },
     /// Write a Technique for sharing, without this machine's details.
     Export {
+        /// The Technique's id.
         id: String,
+        /// Where to write the export.
         #[arg(long)]
         out: std::path::PathBuf,
     },
     /// Read a shared Technique as an untrusted draft.
     Import {
+        /// A file written by `keyjutsu technique export`.
         file: std::path::PathBuf,
     },
 }
 
 #[derive(Subcommand)]
 enum StoreCommand {
-    /// Delete what KeyJutsu keeps.
+    /// Delete what KeyJutsu keeps. Say which; nothing is cleared by default.
     Clear {
+        /// Every recorded session.
         #[arg(long)]
         history: bool,
+        /// Every Technique and all its revisions.
         #[arg(long)]
         techniques: bool,
+        /// Every staged download.
         #[arg(long)]
         artifacts: bool,
     },
@@ -127,7 +149,10 @@ enum StoreCommand {
 #[derive(Subcommand)]
 enum GitCommand {
     /// KeyJutsu's changes alone, against each file as it was just before the run.
-    Diff { snapshot: std::path::PathBuf },
+    Diff {
+        /// The snapshot the run was made from.
+        snapshot: std::path::PathBuf,
+    },
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -150,6 +175,7 @@ enum Command {
     },
     /// Show how to undo what a stopped run changed, and with --confirm, do it.
     Recover {
+        /// The approved snapshot the run was made from.
         snapshot: std::path::PathBuf,
         /// The checkpoint of the run to recover; the one next to the snapshot otherwise.
         #[arg(long, value_name = "CHECKPOINT")]
@@ -166,6 +192,7 @@ enum Command {
     },
     /// Execute an approved snapshot in this console.
     Run {
+        /// An approved snapshot, from `keyjutsu plan approve`.
         snapshot: std::path::PathBuf,
         /// How steps without their own mode are delivered; the plan's default otherwise.
         #[arg(long, value_enum)]
@@ -222,9 +249,8 @@ enum Command {
     /// Work with plan files.
     #[command(subcommand)]
     Plan(PlanCommand),
-    /// Perform commands you supply. Before approved plans exist (Milestone 8)
-    /// this is how to stage your own commands; they carry no approval and run
-    /// exactly as if you had typed them.
+    /// Perform commands you supply. They are yours: no plan, no validation and
+    /// no approval, and they run exactly as if you had typed them.
     Perform {
         /// A command to stage. Repeat for several steps, run in order.
         #[arg(short = 'c', long = "command", required = true)]
@@ -278,9 +304,12 @@ enum PlanCommand {
     },
     /// Ask an agent to revise one step, with your guidance.
     Revise {
+        /// The plan to revise.
         file: std::path::PathBuf,
+        /// The id of the step to redo; no other step may change.
         #[arg(long)]
         step: String,
+        /// What you want different about it.
         #[arg(long)]
         guidance: String,
         /// The task, if the plan's title does not say it well enough.
@@ -288,12 +317,15 @@ enum PlanCommand {
         task: Option<String>,
         #[command(flatten)]
         agent: AgentArgs,
+        /// Where to write the revised plan.
         #[arg(long)]
         out: std::path::PathBuf,
     },
     /// Ask a second agent to challenge a plan. It cannot change it.
     Review {
+        /// The plan to review.
         file: std::path::PathBuf,
+        /// The task, if the plan's title does not say it well enough.
         #[arg(long)]
         task: Option<String>,
         #[command(flatten)]
@@ -305,6 +337,7 @@ enum PlanCommand {
     /// Check a plan file against the schema and its structure, and show the
     /// order its steps would run in.
     Check {
+        /// The plan file.
         file: std::path::PathBuf,
         /// Treat it as a stored plan, which may carry KeyJutsu's own state.
         /// By default it is checked as an agent's proposal, which may not.
@@ -315,6 +348,7 @@ enum PlanCommand {
     /// tools, preconditions, privilege, risk and, where trustworthy, a
     /// -WhatIf dry run. Nothing the plan names is run.
     Validate {
+        /// The plan file.
         file: std::path::PathBuf,
         /// Skip -WhatIf dry runs.
         #[arg(long)]
@@ -324,11 +358,15 @@ enum PlanCommand {
         json: bool,
     },
     /// Print each step's hash: what an approval of that step binds to.
-    Hash { file: std::path::PathBuf },
+    Hash {
+        /// The plan file.
+        file: std::path::PathBuf,
+    },
     /// Approve a plan and seal it into an immutable snapshot. Every step is
     /// approved except critical ones, which each need --confirm with their
     /// typed phrase.
     Approve {
+        /// The plan file.
         file: std::path::PathBuf,
         /// Where to write the snapshot.
         #[arg(long)]
@@ -346,6 +384,7 @@ enum PlanCommand {
     /// Download every artifact the plan needs, check it against its pinned
     /// hash, and keep it for the run. Nothing is downloaded while a plan runs.
     Stage {
+        /// The plan file.
         file: std::path::PathBuf,
         /// Write a copy of the plan with the hash of each unpinned artifact
         /// filled in, for you to review before approving.
@@ -354,13 +393,19 @@ enum PlanCommand {
     },
     /// Check a sealed snapshot has not been altered.
     Verify {
+        /// The approved snapshot.
         snapshot: std::path::PathBuf,
         /// Also compare this machine with the one the plan was approved on.
         #[arg(long)]
         environment: bool,
     },
     /// Show what changed between two versions of a plan, and what that affects.
-    Diff { old: std::path::PathBuf, new: std::path::PathBuf },
+    Diff {
+        /// The earlier plan or snapshot.
+        old: std::path::PathBuf,
+        /// The later one.
+        new: std::path::PathBuf,
+    },
 }
 
 #[derive(clap::Args)]
@@ -376,11 +421,16 @@ struct ShellArgs {
 
 #[derive(clap::Args)]
 struct PerformanceArgs {
+    /// Performance: each key you press types the next character. Assisted:
+    /// each key types a short burst, up to the end of a word. Auto: it types
+    /// and runs everything by itself. Direct: no typing effect at all.
     #[arg(long, value_enum, default_value_t = ModeChoice::Performance)]
     mode: ModeChoice,
     /// In performance mode, advance a word per key instead of a character.
     #[arg(long)]
     turbo: bool,
+    /// What submits a finished command: any key, only Enter, or KeyJutsu
+    /// itself once it is typed.
     #[arg(long, value_enum, default_value_t = SubmitChoice::AnyKey)]
     submit: SubmitChoice,
 }

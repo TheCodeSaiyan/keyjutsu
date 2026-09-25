@@ -117,11 +117,13 @@ export function NewTask({ agents, report, busy, onPlan, onOpen }: Props) {
         </section>
         <section className="card">
           <h2>Execution</h2>
-          <p className="small muted">Standard user · no elevation broker yet</p>
+          <p className="small muted">
+            Standard user · Administrator steps ask once, through the broker
+          </p>
         </section>
         <section className="card">
           <h2>Privacy</h2>
-          <p className="small muted">No telemetry · nothing stored but your run folders</p>
+          <p className="small muted">No telemetry · what it keeps stays on this machine</p>
         </section>
       </div>
     </div>

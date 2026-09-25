@@ -36,7 +36,7 @@ What was built, and what the "done when" in §60 rests on.
   assumed PowerShell 7, and on a clean machine it would not start.
 - **Uninstalling** removes the PATH entry and both Explorer menus, then the
   files. The encrypted history in the user's profile is left as the operator's
-  data; `keyjutsu store clear` removes it.
+  data; `keyjutsu store clear --history --techniques` removes it.
 - **CI** builds the installer on every run and keeps it as an artifact, and
   signs it when a signing certificate is configured as secrets. Only the
   signing step sees the secrets.

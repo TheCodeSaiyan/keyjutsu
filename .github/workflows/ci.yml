@@ -32,6 +32,9 @@ jobs:
       # §57: a release does not ship unless every gate's named tests pass.
       # A renamed or deleted test fails its gate rather than dropping out.
       - run: node scripts/release-gates.mjs
+      # The docs against the CLI just built: commands, options, links,
+      # headings, pages nothing links to, and the house style.
+      - run: node scripts/docs-check.mjs
       # ts-rs rewrites the TypeScript bindings during `cargo test`. A diff here
       # means a Rust IPC type changed without its TypeScript counterpart.
       - name: Generated TypeScript is current
