@@ -67,6 +67,38 @@ opens with what you'll have at the end, and numbers its steps.
 exist, a broken link or heading, a page nothing links to, and the words the
 house style avoids.
 
+## Releasing
+
+Versions are `MAJOR.MINOR.PATCH`. The version is written in several places
+that have to agree (the workspace `Cargo.toml`, `tauri.conf.json`, the
+`package.json` files and the installer's name in the install guides), so it's
+set with one command and checked in CI:
+
+```powershell
+node scripts/version.mjs set 0.2.0     # every place, and Cargo.lock
+git commit -am "Release 0.2.0"
+git tag -a v0.2.0 -F notes.md           # what changed, for the release page
+git push origin main v0.2.0
+```
+
+The tag starts `.github/workflows/release.yml`. It refuses a tag that
+disagrees with the version in the code, builds the installer, signs it and
+every program in it, installs it on a clean runner, runs `keyjutsu doctor`,
+uninstalls it and checks nothing was left, and only then publishes. The
+release page gets the tag's notes, the one-line installer
+(`scripts/install.ps1`, which checks the download against `SHA256SUMS` and its
+signature before running it), and whether this release is signed. Running the
+workflow from the Actions page builds and checks everything and publishes
+nothing, and says so in its title.
+
+Signing uses Azure Trusted Signing through GitHub's OIDC token, so there is no
+certificate file to keep. It's switched on by the repository's `release`
+environment having these secrets: `ARTIFACT_SIGNING_ACCOUNT`,
+`ARTIFACT_SIGNING_ENDPOINT`, `ARTIFACT_SIGNING_PROFILE`, and `AZURE_CLIENT_ID`,
+`AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID` for the federated login. With
+none of them, releases are built unsigned and their page says so; with only
+some, the build refuses rather than half-signing.
+
 ## Contributions and licensing
 
 KeyJutsu is licensed GPL-3.0-only ([LICENSE](LICENSE)), and by contributing

@@ -6,8 +6,10 @@ that your computer is ready.
 ## Before you start
 
 You'll need the KeyJutsu installer. Its name is
-`KeyJutsu_0.1.0_x64-setup.exe`. Nobody has published a ready-made copy yet,
-so for now someone who builds software has to make it for you.
+`KeyJutsu_0.1.0_x64-setup.exe`, and it's on the
+[releases page](https://github.com/ntatschner/keyjutsu/releases/latest). If
+that page is empty, no copy has been published yet, and someone who builds
+software has to make one for you.
 
 You'll also need to know your computer's **administrator** password, or have
 someone who does nearby. You type it once.

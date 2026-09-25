@@ -112,9 +112,16 @@ values, and it's validated again rather than trusted because it worked once.
 
 ## Install
 
-Windows 11, x64. There's no published release yet; build the installer with
-`pnpm desktop:build` (below), then follow
-[Installing](docs/guides/installing.md). It installs for every user, asks for
+Windows 11, x64. In PowerShell:
+
+```powershell
+irm https://github.com/ntatschner/keyjutsu/releases/latest/download/install.ps1 | iex
+```
+
+It checks the download against the release's `SHA256SUMS` and its signature
+before running anything. Until the first release is published, build the
+installer with `pnpm desktop:build` (below). [Installing](docs/guides/installing.md)
+has each step. It installs for every user, asks for
 Administrator once, and offers to put `keyjutsu` on your PATH and "Open
 KeyJutsu here" on Explorer's folder menus.
 

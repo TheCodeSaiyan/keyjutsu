@@ -11,9 +11,11 @@ and `keyjutsu doctor` has told you whether this machine is ready.
   Files for every user, and that needs one UAC prompt. The reason is the
   elevation broker: it is started as Administrator, so it has to live where
   only Administrators can replace it.
-- **The installer,** `KeyJutsu_0.1.0_x64-setup.exe`. No release has been
-  published yet, so build it: `pnpm desktop:build`, from a clone with Rust and
-  Node installed, leaves it in `target/release/bundle/nsis/`.
+- **The installer,** `KeyJutsu_0.1.0_x64-setup.exe`, from the
+  [latest release](https://github.com/ntatschner/keyjutsu/releases/latest).
+  Until the first release is published, build it: `pnpm desktop:build`, from
+  a clone with Rust and Node installed, leaves it in
+  `target/release/bundle/nsis/`.
 
 You don't need PowerShell 7, the Visual C++ runtime or an AI agent first.
 KeyJutsu falls back to Windows PowerShell, which every Windows has; the
@@ -23,7 +25,16 @@ programs carry their own C runtime; and agents can come later.
 
 ### 1. Run the installer
 
-Double-click it. The installer isn't signed yet, so Windows shows "Windows
+The quickest way is one line in PowerShell:
+
+```powershell
+irm https://github.com/ntatschner/keyjutsu/releases/latest/download/install.ps1 | iex
+```
+
+It downloads the installer, checks it against the release's `SHA256SUMS`
+and refuses if it differs, checks its signature, and then runs it: the same
+installer, with the same questions. Or download the installer yourself and
+double-click it. The installer isn't signed yet, so Windows shows "Windows
 protected your PC": choose **More info**, then **Run anyway**. Then approve the
 UAC prompt.
 
