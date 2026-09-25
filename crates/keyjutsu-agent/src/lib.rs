@@ -15,4 +15,6 @@ pub mod session;
 
 pub use agents::AgentKind;
 pub use detect::{AgentInfo, detect_all};
-pub use session::{AgentError, AgentHandle, Agents, ProcessRunner, Proposal, Runner, StepRevision};
+pub use session::{
+    AgentError, AgentHandle, Agents, ProcessRunner, Proposal, RunFailure, Runner, StepRevision,
+};

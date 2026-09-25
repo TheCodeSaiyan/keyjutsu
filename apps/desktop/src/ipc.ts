@@ -60,6 +60,9 @@ export const ipc = {
   stage: () => invoke<workspace.WorkspaceView>("workspace_stage"),
   retryStep: (agent: agent.AgentKind, step: string, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_retry_step", { agent, step, guidance }),
+  /** Ask the agent to fix the step the last run failed at, from what it printed. */
+  fixFailure: (agent: agent.AgentKind, guidance: string) =>
+    invoke<workspace.WorkspaceView>("workspace_fix_failure", { agent, guidance }),
   revise: (agent: agent.AgentKind, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_revise", { agent, guidance }),
   review: (agent: agent.AgentKind) =>

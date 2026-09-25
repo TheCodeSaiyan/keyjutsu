@@ -83,8 +83,19 @@ struct Plans {
     sealed: Mutex<Option<(ApprovedSnapshot, PathBuf)>>,
     /// The latest run's checkpoint, for recovery.
     checkpoint: Mutex<Option<PathBuf>>,
+    /// The latest run's failure, if it failed: which step, how, and that
+    /// run's checkpoint. An agent fixing the step reads it, and the next run
+    /// resumes from the checkpoint instead of starting again.
+    failed: Mutex<Option<Failed>>,
     /// The operator's answer to a critical confirmation: `Some(None)` declines.
     answer: Arc<(Mutex<Option<Option<String>>>, Condvar)>,
+}
+
+#[derive(Clone)]
+struct Failed {
+    step: String,
+    failure: keyjutsu_core::agent::RunFailure,
+    checkpoint: PathBuf,
 }
 
 fn message(e: CoreError) -> String {
@@ -275,6 +286,7 @@ fn workspace_open(text: String, plans: State<'_, Arc<Plans>>) -> Result<Workspac
     let view = w.view();
     *locked(&plans.workspace) = Some(w);
     *locked(&plans.sealed) = None;
+    *locked(&plans.failed) = None;
     Ok(view)
 }
 
@@ -302,6 +314,7 @@ async fn workspace_propose(
         let view = w.view();
         *locked(&plans.workspace) = Some(w);
         *locked(&plans.sealed) = None;
+        *locked(&plans.failed) = None;
         Ok(view)
     })
     .await
@@ -415,7 +428,25 @@ async fn workspace_retry_step(
     plans: State<'_, Arc<Plans>>,
 ) -> Result<WorkspaceView, String> {
     agent_request(plans.inner(), agent, move |w, a, h, at| {
-        w.retry_step(a, h, &step, &guidance, at).map(|_| ()).map_err(|e| e.to_string())
+        w.retry_step(a, h, &step, &guidance, None, at).map(|_| ()).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Ask the agent to fix the step the last run failed at, showing it what that
+/// step printed. The replacement is a draft like any other: it is validated
+/// and approved before it can run.
+#[tauri::command]
+async fn workspace_fix_failure(
+    agent: AgentKind,
+    guidance: String,
+    plans: State<'_, Arc<Plans>>,
+) -> Result<WorkspaceView, String> {
+    let failed = locked(&plans.failed).clone().ok_or("the last run did not fail")?;
+    agent_request(plans.inner(), agent, move |w, a, h, at| {
+        w.retry_step(a, h, &failed.step, &guidance, Some(&failed.failure), at)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     })
     .await
 }
@@ -480,6 +511,13 @@ fn plan_run(
 ) -> Result<(), String> {
     let (session, sink) = sessions.get(id)?;
     let (snapshot, path) = locked(&plans.sealed).clone().ok_or("approve the plan first")?;
+    // After a failure, carry on from where that run stopped: steps that
+    // succeeded and have not changed are not run again, whatever the revision.
+    let resume = match locked(&plans.failed).clone() {
+        Some(f) => Some(keyjutsu_core::approvals::load_checkpoint(&open_store()?, &f.checkpoint)?),
+        None => None,
+    };
+    let remember = plans.inner().clone();
     let checkpoint = path.with_file_name("snapshot.checkpoint.json");
     *locked(&plans.checkpoint) = Some(checkpoint.clone());
     let answer = plans.answer.clone();
@@ -541,7 +579,7 @@ fn plan_run(
         let (outcome, _) = execute(
             &Driver { session: &session, events: &rx },
             &snapshot,
-            None,
+            resume,
             &options,
             &fingerprint::now_rfc3339,
             &|event| {
@@ -549,6 +587,18 @@ fn plan_run(
             },
         );
         *locked(&sink.forward) = None;
+        *locked(&remember.failed) = match &outcome {
+            keyjutsu_core::execute::Outcome::Failed { step, expected, actual, output } => Some(Failed {
+                step: step.clone(),
+                failure: keyjutsu_core::agent::RunFailure {
+                    expected: expected.clone(),
+                    actual: actual.clone(),
+                    output: output.clone(),
+                },
+                checkpoint: checkpoint.clone(),
+            }),
+            _ => None,
+        };
         let git = baseline.iter().filter_map(|(before, copies)| git::report(before, copies).ok()).collect();
         let _ = on_event.send(RunMessage::Done {
             outcome,
@@ -673,6 +723,7 @@ fn main() {
             workspace_validate,
             workspace_stage,
             workspace_retry_step,
+            workspace_fix_failure,
             workspace_revise,
             workspace_review,
             workspace_approve,

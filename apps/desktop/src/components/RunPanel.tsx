@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { recovery, RunMessage } from "@keyjutsu/types";
+import type { agent, recovery, RunMessage } from "@keyjutsu/types";
 import { outcomeLine } from "../plan";
 
 type Done = Extract<RunMessage, { kind: "done" }>;
@@ -7,8 +7,12 @@ type Done = Extract<RunMessage, { kind: "done" }>;
 interface Props {
   done: Done;
   busy: boolean;
+  /** Installed agents, for asking one to fix a failed step. */
+  agents: agent.AgentInfo[];
   onReview(): Promise<recovery.RecoveryItem[]>;
   onRecover(): Promise<recovery.RecoveryResult[]>;
+  /** Ask the agent to fix the failed step; the revised plan opens for review. */
+  onFix(agent: agent.AgentKind, guidance: string): Promise<void>;
   onBack(): void;
 }
 
@@ -17,8 +21,12 @@ interface Props {
  * the four choices of §29. Nothing is rolled back unless the operator
  * reviews the recovery plan and then confirms it.
  */
-export function RunPanel({ done, busy, onReview, onRecover, onBack }: Props) {
+export function RunPanel({ done, busy, agents, onReview, onRecover, onFix, onBack }: Props) {
   const [items, setItems] = useState<recovery.RecoveryItem[] | null>(null);
+  const installed = agents.filter((a) => a.path !== null);
+  const [fixWith, setFixWith] = useState<agent.AgentKind | null>(installed[0]?.kind ?? null);
+  const [guidance, setGuidance] = useState("");
+  const failed = done.outcome.kind === "failed" ? done.outcome : null;
   const [results, setResults] = useState<recovery.RecoveryResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const complete = done.outcome.kind === "complete";
@@ -57,14 +65,69 @@ export function RunPanel({ done, busy, onReview, onRecover, onBack }: Props) {
           )}
         </div>
       ))}
+      {failed && failed.output.trim() && (
+        <details open>
+          <summary className="small">What the step printed</summary>
+          {/* The same text the agent is shown, before redaction. */}
+          <pre className="code">{failed.output.trim()}</pre>
+        </details>
+      )}
       {!complete && !items && (
         <>
           <p className="small">Nothing has been rolled back. Your choices:</p>
           <ul className="small plain">
             <li>Diagnose first: the terminal is as the step left it.</li>
+            <li>Ask an agent to fix the step from what it printed, then approve and carry on.</li>
             <li>Review the recovery plan, then roll back if it is right.</li>
             <li>Stop here without rolling back.</li>
           </ul>
+          {failed && (
+            <div className="stack">
+              <label className="small">
+                Guidance for the fix
+                <textarea
+                  value={guidance}
+                  onChange={(e) => setGuidance(e.target.value)}
+                  placeholder="Start the service it depends on first."
+                />
+              </label>
+              <label className="small">
+                Agent
+                <select
+                  aria-label="Agent to fix the step"
+                  value={fixWith ?? ""}
+                  onChange={(e) => setFixWith(e.target.value as agent.AgentKind)}
+                  disabled={installed.length === 0}
+                >
+                  {installed.length === 0 && <option value="">No agent installed</option>}
+                  {installed.map((a) => (
+                    <option key={a.kind} value={a.kind}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="small muted">
+                The agent is shown this step, your guidance and what the step printed, with anything
+                that looks like a secret taken out. The fix comes back as a draft: nothing runs
+                until it is validated and you approve it, and then the run carries on from this
+                step.
+              </p>
+              <button
+                disabled={busy || !fixWith}
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    await onFix(fixWith!, guidance.trim());
+                  } catch (e) {
+                    setError(String(e));
+                  }
+                }}
+              >
+                Ask the agent to fix it
+              </button>
+            </div>
+          )}
           <div className="stack">
             <button
               disabled={busy}

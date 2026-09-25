@@ -405,13 +405,14 @@ impl Workspace {
         agent: &AgentHandle,
         step: &str,
         guidance: &str,
+        failure: Option<&keyjutsu_agent::RunFailure>,
         at: &str,
     ) -> Result<PlanDiff, WorkspaceError> {
         if self.draft.plan().step(step).is_none() {
             return Err(WorkspaceError::UnknownStep(step.into()));
         }
         let findings = self.findings_for(step);
-        let request = StepRevision { step, guidance, findings: &findings };
+        let request = StepRevision { step, guidance, findings: &findings, failure };
         let p = agents.revise_step(agent, &self.task, self.draft.plan(), &request, at)?;
         self.note("You", guidance, Some(step), at);
         let change = self.adopt(p.plan.into_plan(), None, at)?;

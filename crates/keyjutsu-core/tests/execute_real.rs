@@ -326,6 +326,31 @@ fn checkpoints_are_written_as_the_plan_runs() {
     t.session.close();
 }
 
+/// A failed step carries what it printed, and nothing from the steps before
+/// it, so the agent asked to fix it reads the real error.
+#[test]
+fn a_failed_step_carries_what_it_printed() {
+    let dir = scratch("failure-output");
+    let missing = fwd(&dir.join("never-made.txt"));
+    let mut first = step("first", "Write-Output 'from-the-first-step'");
+    first["internal_validation"] = json!([{"exit_code": {"equals": 0}}]);
+    let mut second = step("second", "Write-Output 'the-widget-is-missing'");
+    second["internal_validation"] = json!([{"path_exists": {"path": missing}}]);
+    let snap = approve(&plan(json!([first, second]), json!([])));
+    let t = terminal();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    match outcome {
+        Outcome::Failed { step, output, .. } => {
+            assert_eq!(step, "second");
+            assert!(output.contains("the-widget-is-missing"), "{output:?}");
+            assert!(!output.contains("from-the-first-step"), "only this step's output: {output:?}");
+            assert!(!output.contains('\x1b'), "no colour codes: {output:?}");
+        }
+        other => panic!("expected Failed, got {other:?}"),
+    }
+    t.session.close();
+}
+
 /// Failure injection: the checkpoint cannot be written. The step would leave
 /// no record of having started, so a crash during it would look like it
 /// never ran; it is not started.

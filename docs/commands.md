@@ -82,8 +82,10 @@ it shows exactly what would be sent and stops.
 ### `keyjutsu plan revise FILE --step STEP --guidance TEXT --agent AGENT --out FILE`
 
 Asks an agent to redo one step, with your guidance and what validation found.
-No other step may change. `--task` gives the task if the plan's title doesn't
-say it well enough; `--send` as above.
+No other step may change. `--session ID` names a recorded run in which that
+step failed: the agent is also shown what it printed, redacted, to diagnose
+from. `--task` gives the task if the plan's title doesn't say it well enough;
+`--send` as above.
 
 ### `keyjutsu plan review FILE --agent AGENT`
 

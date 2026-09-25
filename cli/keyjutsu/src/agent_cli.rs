@@ -182,15 +182,43 @@ fn load(file: &Path) -> Result<Plan, ExitCode> {
     })
 }
 
-pub fn revise(
-    file: &Path,
-    step: &str,
-    guidance: &str,
-    task: Option<&str>,
-    agent: &str,
-    send: bool,
-    out: &Path,
-) -> ExitCode {
+pub struct Revise<'a> {
+    pub file: &'a Path,
+    pub step: &'a str,
+    pub guidance: &'a str,
+    pub task: Option<&'a str>,
+    pub session: Option<&'a str>,
+    pub agent: &'a str,
+    pub send: bool,
+    pub out: &'a Path,
+}
+
+/// The failure of `step` in recorded session `id`, for the agent to read.
+fn recorded_failure(id: &str, step: &str) -> Result<keyjutsu_core::agent::RunFailure, String> {
+    let store = keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root())?;
+    let record = keyjutsu_core::history::load(&store, id)?;
+    match record.outcome {
+        keyjutsu_core::execute::Outcome::Failed { step: failed, expected, actual, output }
+            if failed == step =>
+        {
+            Ok(keyjutsu_core::agent::RunFailure { expected, actual, output })
+        }
+        keyjutsu_core::execute::Outcome::Failed { step: failed, .. } => {
+            Err(format!("in session {id} it was step `{failed}` that failed, not `{step}`"))
+        }
+        _ => Err(format!("session {id} did not end in a failed step")),
+    }
+}
+
+pub fn revise(args: Revise<'_>) -> ExitCode {
+    let Revise { file, step, guidance, task, session, agent, send, out } = args;
+    let failure = match session.map(|id| recorded_failure(id, step)).transpose() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("keyjutsu: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     let plan = match load(file) {
         Ok(p) => p,
         Err(c) => return c,
@@ -221,6 +249,10 @@ pub fn revise(
     for f in &findings {
         println!("  validation: {f}");
     }
+    if let Some(f) = &failure {
+        println!("  failed:     {} ({})", f.actual, f.expected);
+        println!("  output:     the last {} characters it printed, redacted", f.output.chars().count());
+    }
     if !send {
         println!();
         println!("Nothing was sent. Add --send to send this request.");
@@ -232,7 +264,7 @@ pub fn revise(
         &agent,
         &task,
         &plan,
-        &StepRevision { step, guidance, findings: &findings },
+        &StepRevision { step, guidance, findings: &findings, failure: failure.as_ref() },
         &fingerprint::now_rfc3339(),
     ) {
         Ok(p) => {

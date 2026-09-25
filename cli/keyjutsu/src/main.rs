@@ -320,6 +320,11 @@ enum PlanCommand {
         /// The task, if the plan's title does not say it well enough.
         #[arg(long)]
         task: Option<String>,
+        /// A recorded run in which this step failed: the agent is shown what
+        /// it printed, redacted, to diagnose from. Its id is in
+        /// `keyjutsu history list`.
+        #[arg(long)]
+        session: Option<String>,
         #[command(flatten)]
         agent: AgentArgs,
         /// Where to write the revised plan.
@@ -507,8 +512,17 @@ fn main() -> ExitCode {
         Command::Plan(PlanCommand::Propose { task, agent, files, folder, out }) => {
             agent_cli::propose(&task, &agent.agent, agent.send, &files, folder.as_deref(), &out)
         }
-        Command::Plan(PlanCommand::Revise { file, step, guidance, task, agent, out }) => {
-            agent_cli::revise(&file, &step, &guidance, task.as_deref(), &agent.agent, agent.send, &out)
+        Command::Plan(PlanCommand::Revise { file, step, guidance, task, session, agent, out }) => {
+            agent_cli::revise(agent_cli::Revise {
+                file: &file,
+                step: &step,
+                guidance: &guidance,
+                task: task.as_deref(),
+                session: session.as_deref(),
+                agent: &agent.agent,
+                send: agent.send,
+                out: &out,
+            })
         }
         Command::Plan(PlanCommand::Review { file, task, agent, record }) => {
             agent_cli::review(&file, task.as_deref(), &agent.agent, agent.send, record.as_deref())

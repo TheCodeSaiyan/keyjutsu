@@ -173,7 +173,7 @@ fn no_secret_reaches_an_agent_by_any_route() {
     edited.steps[0].commands[0].text = format!("gh auth login --with-token {TOKEN}");
     let guidance = format!("Use my token {TOKEN} for it");
     let findings = vec![format!("dry run printed: Authorization: Bearer {}", &TOKEN[4..])];
-    let request = StepRevision { step: "fix", guidance: &guidance, findings: &findings };
+    let request = StepRevision { step: "fix", guidance: &guidance, findings: &findings, failure: None };
     let step = json!({"id": "fix", "title": "Fix", "objective": "Repair.", "kind": "command",
         "shell": {"kind": "pwsh"}, "commands": [{"text": "Start-Service -Name docker"}]});
     let runner = Replay::new(vec![
@@ -211,7 +211,8 @@ fn a_step_revision_changes_that_step_only_and_discards_validation() {
         "shell": {"kind": "pwsh"}, "commands": [{"text": "Start-Service -Name docker"}]});
     let runner = Replay::new(vec![claude_says(&renamed), claude_says(&good)]);
     let findings = vec!["risk: High".to_owned()];
-    let request = StepRevision { step: "fix", guidance: "Do not force it.", findings: &findings };
+    let request =
+        StepRevision { step: "fix", guidance: "Do not force it.", findings: &findings, failure: None };
     let revised =
         agents(&runner).revise_step(&handle(AgentKind::ClaudeCode), "t", &validated, &request, AT).unwrap();
 

@@ -581,6 +581,17 @@ export function App() {
                 <RunPanel
                   done={runDone}
                   busy={busy !== null}
+                  agents={agents ?? []}
+                  onFix={async (fixWith, guidance) => {
+                    setBusy("The agent is working out what went wrong…");
+                    try {
+                      setWs(await ipc.fixFailure(fixWith, guidance));
+                      setRunDone(null);
+                      setSpace("plan");
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
                   onReview={() => ipc.recoveryPlan()}
                   onRecover={async () => {
                     if (sessionId === null) throw new Error("no terminal");

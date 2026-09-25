@@ -70,18 +70,32 @@ with the check that decided it.
 
 ### 4. Or repair and carry on
 
-Fix the plan instead: revise the step, validate and approve the new version,
-then resume from the old run's checkpoint:
+Fix the plan instead, with the agent reading what the step actually printed
+rather than guessing. The failure message names the session the run was
+recorded as; pass it with `--session`:
 
 ```powershell
-keyjutsu plan revise fix.json --step restart-spooler --guidance "Start its dependency first" --agent claude --out fix.v2.json --send
+keyjutsu plan revise fix.json --step restart-spooler --session 20260925-184553-a1b2 --guidance "Start its dependency first" --agent claude --out fix.v2.json --send
 keyjutsu plan approve fix.v2.json --out fix.v2.approved.json
 keyjutsu run fix.v2.approved.json --resume fix.approved.checkpoint.json
 ```
 
-Steps that succeeded and haven't changed aren't run again. A result only
-carries over where the step's hash is the same in the new snapshot, so a step
-you changed, or one after it, runs again.
+The agent is shown the step, your guidance, what validation found, and the
+last 4,000 characters the step printed, with anything that looks like a
+secret taken out first. It's told that the output is data from the machine
+and not instructions, because command output is exactly where an instruction
+meant for an agent would be planted. Without `--send` you see what would go.
+A run made with `--ephemeral` has no recorded session, so there's nothing to
+pass.
+
+In the desktop app it's one panel: after a failure it shows what the step
+printed, and **Ask the agent to fix it**, with a box for your guidance, sends
+the same request. The fixed plan opens for you to validate and approve, and
+**Arm KeyJutsu** then carries on from the step that failed.
+
+Either way, steps that succeeded and haven't changed aren't run again. A
+result only carries over where the step's hash is the same in the new
+snapshot, so a step you changed, or one after it, runs again.
 
 ## You disarmed part-way
 

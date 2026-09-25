@@ -172,6 +172,11 @@ pub enum Outcome {
         step: String,
         expected: String,
         actual: String,
+        /// The end of what the step printed, without colour codes, so the
+        /// agent asked to fix it can read the real error (§61). Redacted
+        /// before it is sent anywhere, like everything given to an agent.
+        #[serde(default)]
+        output: String,
     },
     /// The operator disarmed.
     Aborted {
@@ -263,6 +268,15 @@ pub fn needs_reconfirmation(sealed_at: &str, now_secs: u64) -> bool {
 /// returns what they typed, or `None` if they declined. The executor, not
 /// the gate, decides whether it matches.
 pub type CriticalGate = std::sync::Arc<dyn Fn(&CriticalConfirmation) -> Option<String> + Send + Sync>;
+
+/// How much of a failed step's output is kept: enough for the error and what
+/// led to it, not a whole log.
+pub const FAILURE_OUTPUT_CHARS: usize = 4000;
+
+fn tail(text: &str, max_chars: usize) -> String {
+    let skip = text.chars().count().saturating_sub(max_chars);
+    text.chars().skip(skip).collect()
+}
 
 #[derive(Clone)]
 pub struct ExecuteOptions {
@@ -1069,6 +1083,9 @@ pub fn execute(
             }
         }
         let started_at = now();
+        // Where this step's output begins, for the failure report.
+        let output_from = driver.session.output_mark();
+        let mut elevated_output: Option<String> = None;
         checkpoint.in_progress = Some(InProgress {
             step: id.clone(),
             step_hash: step_hash.clone(),
@@ -1149,6 +1166,7 @@ pub fn execute(
             }
             match runner.run_step(snapshot.snapshot_hash(), &id, &step_hash) {
                 Ok(run) => {
+                    elevated_output = Some(run.output.clone());
                     observe(ExecutionEvent::ElevatedOutput { step: id.clone(), text: run.output });
                     Performed::Finished(run.outcomes)
                 }
@@ -1217,7 +1235,11 @@ pub fn execute(
                 (None, None) => (String::new(), String::new()),
             };
             forget(&asked);
-            return finish(Outcome::Failed { step: id, expected, actual }, checkpoint);
+            let output = match elevated_output {
+                Some(text) => tail(&crate::headless::strip_ansi(&text), FAILURE_OUTPUT_CHARS),
+                None => driver.session.output_since(output_from, FAILURE_OUTPUT_CHARS),
+            };
+            return finish(Outcome::Failed { step: id, expected, actual, output }, checkpoint);
         }
         facts.steps.insert(id, StepResult::Succeeded { exit_code: last_exit });
     }

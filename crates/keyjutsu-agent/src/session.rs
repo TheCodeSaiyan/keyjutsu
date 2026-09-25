@@ -110,8 +110,20 @@ pub struct StepRevision<'a> {
     pub step: &'a str,
     pub guidance: &'a str,
     /// What validation found about the step, so the agent revises against
-    /// evidence as well as the operator's words (§11).
+    /// evidence as well as the operator's words.
     pub findings: &'a [String],
+    /// How the step failed when it ran, if it did: the agent diagnoses from
+    /// what really happened rather than guessing.
+    pub failure: Option<&'a RunFailure>,
+}
+
+/// A step's failure when it ran: what its checks expected, what happened,
+/// and the end of what it printed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RunFailure {
+    pub expected: String,
+    pub actual: String,
+    pub output: String,
 }
 
 /// An accepted plan from an agent, recorded with its provenance.
@@ -295,13 +307,13 @@ impl<R: Runner> Agents<'_, R> {
         request: &StepRevision<'_>,
         at: &str,
     ) -> Result<Proposal, AgentError> {
-        let StepRevision { step, guidance, findings } = *request;
+        let StepRevision { step, guidance, findings, failure } = *request;
         let index = plan
             .steps
             .iter()
             .position(|s| s.id == step)
             .ok_or_else(|| AgentError::UnknownStep(step.to_owned()))?;
-        let text = prompt::revise_step(task, &public_json(plan), step, guidance, findings);
+        let text = prompt::revise_step(task, &public_json(plan), step, guidance, findings, failure);
         let base = {
             let mut p = plan.clone();
             p.keyjutsu = None;
