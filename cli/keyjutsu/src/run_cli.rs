@@ -401,6 +401,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         println!("The shell ended before the plan finished. Checkpoint: {}", cp_path.display());
         return ExitCode::FAILURE;
     };
+    let mut recorded_as: Option<String> = None;
     if !args.ephemeral {
         let finished = fingerprint::now_rfc3339();
         let record = keyjutsu_core::history::SessionRecord {
@@ -417,7 +418,10 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         match keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root())
             .and_then(|s| keyjutsu_core::history::save(&s, &record))
         {
-            Ok(()) => println!("Recorded as session {} in the encrypted history.", record.id),
+            Ok(()) => {
+                println!("Recorded as session {} in the encrypted history.", record.id);
+                recorded_as = Some(record.id.clone());
+            }
             Err(e) => eprintln!("keyjutsu: the session was not recorded: {e}"),
         }
     }
@@ -454,7 +458,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             println!("Complete: {}.", crate::count(checkpoint.runs.len(), "step", "steps"));
             ExitCode::SUCCESS
         }
-        Outcome::Failed { step, expected, actual } => {
+        Outcome::Failed { step, expected, actual, .. } => {
             println!();
             println!("Step `{step}` failed. The plan stopped there.");
             println!("  expected: {expected}");
@@ -466,9 +470,19 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             println!("  Roll back: the same, with --confirm.");
             println!("  Stop here without rolling back: do nothing.");
             println!();
-            println!(
-                "To repair instead: `keyjutsu plan revise` with your guidance, validate and approve again, then"
-            );
+            match &recorded_as {
+                // The agent is shown what the step printed, from the record.
+                Some(id) => {
+                    println!("To repair instead, let an agent read what the step printed:");
+                    println!(
+                        "  keyjutsu plan revise <plan> --step {step} --session {id} --guidance \"...\" --agent <agent>"
+                    );
+                    println!("then validate and approve again, and");
+                }
+                None => println!(
+                    "To repair instead: `keyjutsu plan revise` with your guidance, validate and approve again, then"
+                ),
+            }
             println!("`keyjutsu run <new snapshot> --resume {}`;", cp_path.display());
             println!("steps that already succeeded and are unchanged are not run again.");
             ExitCode::FAILURE

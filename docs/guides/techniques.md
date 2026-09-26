@@ -6,10 +6,8 @@ because it worked last time.
 
 ## Before you start
 
-- A run that completed, recorded in the history. Runs from the CLI are
-  recorded unless you used `--ephemeral`. Runs from the desktop app aren't
-  recorded yet, and it has no history or Technique screens, so this guide is
-  CLI only.
+- A run that completed, recorded in the history. Every run is recorded, from
+  the desktop app or the CLI, except a CLI run made with `--ephemeral`.
 
 ## Why a Technique isn't a shortcut
 
@@ -36,7 +34,18 @@ snapshot inside the record is still intact.
 `keyjutsu history recheck` with the id compares this machine with the one the
 session was approved on, and names the steps that would need validating again.
 
+In the desktop app, **History** lists every run, newest first. Select one to
+see its steps.
+
 ### 2. Make it a Technique
+
+In the desktop app, a completed run has **Make it a Technique** under its
+steps: give it a name, and list any parameters as `name = value`, one per
+line.
+
+![The History screen. A completed run, Check that Windows Management Instrumentation is running, is selected, with its two steps marked ok. Below them, Make it a Technique: a name, and one parameter, service_name = Winmgmt, then the Make a Technique button.](../images/history.png)
+
+From the CLI:
 
 ```powershell
 keyjutsu technique promote 20260925-184553-a1b2 --name "Check a Windows service" --param service_name=Winmgmt
@@ -50,6 +59,15 @@ parentheses, line breaks or invisible characters, so it can't turn into a
 second command.
 
 ### 3. Use it
+
+In the desktop app, **Techniques** lists them, each with its revision and how
+many machines it has worked on. Select one, fill in its parameters, and
+**Make a draft plan**: the draft opens in the Plan screen, not validated,
+for you to validate and approve.
+
+![The Techniques screen. One Technique, revision 1, worked on 1 machine, is selected, with its service_name parameter filled in as Winmgmt and the Make a draft plan button.](../images/techniques.png)
+
+From the CLI:
 
 ```powershell
 keyjutsu technique list

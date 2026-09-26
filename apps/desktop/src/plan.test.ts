@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { plan } from "@keyjutsu/types";
 import {
+  boundaryStep,
   formFromStep,
   idFor,
   linesToCommands,
@@ -112,5 +113,24 @@ describe("outcomes", () => {
       outcomeLine({ kind: "failed", step: "b", expected: "exit 0", actual: "exit 3" }),
     ).toContain("Expected exit 0; got exit 3");
     expect(outcomeLine({ kind: "aborted", step: "b", in_doubt: true })).toContain("unknown");
+  });
+
+  it("says how to carry on after each kind of boundary, in the app", () => {
+    expect(outcomeLine({ kind: "boundary", phase: "install", boundary: "windows_restart" })).toBe(
+      "Phase install is done. The plan waits for a Windows restart.",
+    );
+    const all: plan.Boundary[] = [
+      "windows_restart",
+      "sign_out",
+      "shell_restart",
+      "wsl_restart",
+      "docker_restart",
+    ];
+    for (const b of all) {
+      expect(boundaryStep(b)).toMatch(/continue/);
+      expect(boundaryStep(b)).not.toMatch(/--resume/);
+    }
+    // A restart or sign-out closes the app: it offers to continue when it opens again.
+    expect(boundaryStep("windows_restart")).toContain("open KeyJutsu");
   });
 });

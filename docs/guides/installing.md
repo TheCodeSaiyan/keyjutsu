@@ -117,6 +117,24 @@ agent's credential file exists; the file is never opened.
   keyjutsu setup explorer remove
   ```
 
+## Trying it without installing
+
+Each release also has `KeyJutsu_0.1.0_x64-portable.zip`: the app and the
+CLI, with nothing to install. Unzip the folder anywhere you can write to and
+run `keyjutsu-desktop.exe`, or `keyjutsu.exe` from a terminal.
+
+It can't run Administrator steps. Those go through KeyJutsu's elevation
+broker, which runs as Administrator, so it's only installed where only
+Administrators can replace it; in a folder you can write to, anything running
+as you could swap it. A plan with Administrator steps is still validated,
+and refused before it runs.
+
+It doesn't add itself to your PATH or to Explorer, and has no Start menu entry
+or uninstaller; `keyjutsu setup path add` and `keyjutsu setup explorer add`
+do the first two for your account if you want them. It keeps its history in
+the same place as an installed copy, so deleting the folder leaves that
+behind until you run `keyjutsu store clear`.
+
 ## Uninstalling
 
 **Settings**, then **Apps**, then **Installed apps**, then **KeyJutsu**, then
@@ -136,7 +154,12 @@ everything in there.
   with 1 so a script can tell. ConPTY failing means performances can't work
   at all on this machine; a shell failing means only that shell is out.
 - **The installer stops with nothing installed.** On a machine without WebView2
-  and without a network, it can't fetch the runtime and gives up. The CLI
-  alone would work there, but there's no CLI-only installer yet.
+  and without a network, it can't fetch the runtime and gives up. Only the app
+  needs WebView2, so `keyjutsu.exe` from the portable build works there.
+- **You need someone's help.** `keyjutsu diagnostics preview` prints what they
+  would need to know about this machine and KeyJutsu, without your tasks,
+  commands, name or secrets; `keyjutsu diagnostics save FILE` writes it out
+  for you to read and send. [Privacy](../../PRIVACY.md#diagnostic-bundles)
+  lists what's in it.
 
 Next: [your first performance](first-performance.md).

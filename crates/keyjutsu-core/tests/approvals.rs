@@ -160,3 +160,55 @@ fn a_store_opened_by_many_at_once_keeps_one_key() {
         }
     }
 }
+
+/// A run folder as the desktop app writes it: the snapshot, and beside it a
+/// checkpoint that stopped after phase `one` for a Windows restart.
+fn waiting_run(store: &Store, dir: &Path, snapshot: &ApprovedSnapshot, at: &str) -> PathBuf {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(dir.join("snapshot.json"), snapshot.to_json()).unwrap();
+    let mut cp = Checkpoint::new(snapshot.snapshot_hash());
+    cp.boundary = Some(keyjutsu_core::boundary::BoundaryWait {
+        after_phase: "one".into(),
+        kind: keyjutsu_core::plan::model::Boundary::WindowsRestart,
+        identity: None,
+        recorded_at: at.into(),
+    });
+    let path = dir.join("snapshot.checkpoint.json");
+    save_checkpoint(store, &cp, &path).unwrap();
+    path
+}
+
+#[test]
+fn after_a_restart_only_a_run_this_account_approved_and_stopped_is_offered() {
+    use keyjutsu_core::boundary::find_waiting;
+    let dir = scratch("waiting");
+    let store = Store::open(&dir.join("store")).unwrap();
+
+    let older = sealed(&plan("Get-Date"));
+    record_approval(&store, &older).unwrap();
+    let a = waiting_run(&store, &dir.join("a"), &older, "2026-09-25T04:00:00Z");
+    let newer = sealed(&plan("Get-Location"));
+    record_approval(&store, &newer).unwrap();
+    let b = waiting_run(&store, &dir.join("b"), &newer, "2026-09-25T05:00:00Z");
+    let found = find_waiting(&store, [a.clone(), b.clone()]).unwrap();
+    assert_eq!(found.checkpoint_path, b, "the most recent wait is the one offered");
+    assert_eq!(found.snapshot.snapshot_hash(), newer.snapshot_hash());
+
+    // A snapshot this account never approved, with a checkpoint that is
+    // KeyJutsu's own: never offered.
+    let unapproved = sealed(&plan("Get-Process"));
+    let c = waiting_run(&store, &dir.join("c"), &unapproved, "2026-09-25T06:00:00Z");
+    assert_eq!(find_waiting(&store, [c.clone()]).map(|w| w.checkpoint_path), None);
+
+    // A checkpoint edited after KeyJutsu wrote it: never offered.
+    let text = std::fs::read_to_string(&b).unwrap().replace("05:00:00", "07:00:00");
+    std::fs::write(&b, text).unwrap();
+    let found = find_waiting(&store, [a.clone(), b, c]).unwrap();
+    assert_eq!(found.checkpoint_path, a);
+
+    // A run that crossed its boundary no longer waits.
+    let mut crossed = load_checkpoint(&store, &a).unwrap();
+    crossed.boundary = None;
+    save_checkpoint(&store, &crossed, &a).unwrap();
+    assert!(find_waiting(&store, [a, dir.join("missing").join("snapshot.checkpoint.json")]).is_none());
+}

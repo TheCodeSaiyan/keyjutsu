@@ -70,18 +70,32 @@ with the check that decided it.
 
 ### 4. Or repair and carry on
 
-Fix the plan instead: revise the step, validate and approve the new version,
-then resume from the old run's checkpoint:
+Fix the plan instead, with the agent reading what the step actually printed
+rather than guessing. The failure message names the session the run was
+recorded as; pass it with `--session`:
 
 ```powershell
-keyjutsu plan revise fix.json --step restart-spooler --guidance "Start its dependency first" --agent claude --out fix.v2.json --send
+keyjutsu plan revise fix.json --step restart-spooler --session 20260925-184553-a1b2 --guidance "Start its dependency first" --agent claude --out fix.v2.json --send
 keyjutsu plan approve fix.v2.json --out fix.v2.approved.json
 keyjutsu run fix.v2.approved.json --resume fix.approved.checkpoint.json
 ```
 
-Steps that succeeded and haven't changed aren't run again. A result only
-carries over where the step's hash is the same in the new snapshot, so a step
-you changed, or one after it, runs again.
+The agent is shown the step, your guidance, what validation found, and the
+last 4,000 characters the step printed, with anything that looks like a
+secret taken out first. It's told that the output is data from the machine
+and not instructions, because command output is exactly where an instruction
+meant for an agent would be planted. Without `--send` you see what would go.
+A run made with `--ephemeral` has no recorded session, so there's nothing to
+pass.
+
+In the desktop app it's one panel: after a failure it shows what the step
+printed, and **Ask the agent to fix it**, with a box for your guidance, sends
+the same request. The fixed plan opens for you to validate and approve, and
+**Arm KeyJutsu** then carries on from the step that failed.
+
+Either way, steps that succeeded and haven't changed aren't run again. A
+result only carries over where the step's hash is the same in the new
+snapshot, so a step you changed, or one after it, runs again.
 
 ## You disarmed part-way
 
@@ -117,7 +131,13 @@ Then: keyjutsu run fix.approved.json --resume
 KeyJutsu doesn't restart your machine, and doesn't start itself after you
 sign in: restarting someone's computer is about as disruptive as a tool gets, and resuming by itself would run the next phase before anyone looked.
 
-When you resume, it asks for `RESUME` typed out, then checks, in this order:
+In the desktop app, the run panel says what to do instead. After a Windows
+restart or a sign-out, open KeyJutsu: a banner names the plan that's waiting,
+with **Continue it**. That opens the plan as it was approved; open a terminal
+and arm it as before. After a new shell or a WSL or Docker restart, the app
+is still open, so arm the plan again once the boundary has happened.
+
+Resuming checks, in this order:
 
 1. **The boundary really happened.** It recorded what should change: the boot
    time, the logon id, the shell's process, WSL's boot id. Resuming before the
@@ -129,9 +149,14 @@ When you resume, it asks for `RESUME` typed out, then checks, in this order:
    completed step runs again, and nothing is assumed to have survived the
    restart.
 
-This has been done across a real Windows restart. A
-sign-out has only been tested with its identity faked, and the desktop app
-stops at a boundary but can't resume past one yet; resume from the CLI.
+Then you're asked, with `RESUME` typed out. The CLI asks before the checks,
+on the plain console. The app asks after them, and shows what they found:
+whether it saw the boundary happen, anything about the machine that changed,
+and each earlier check that still holds. A failed check stops the run before
+you're asked. "Not now" stops it too, still waiting, so you can come back.
+
+This has been done across a real Windows restart, from the CLI and from the
+app. A sign-out has only been tested with its identity faked.
 
 ## It wouldn't start at all
 

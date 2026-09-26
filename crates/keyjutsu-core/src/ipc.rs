@@ -55,12 +55,21 @@ pub enum RunMessage {
     Confirm {
         confirmation: crate::execute::CriticalConfirmation,
     },
+    /// Resuming after a session boundary: what KeyJutsu checked. The window
+    /// asks the operator and answers with `plan_confirm`, `RESUME` to go on.
+    /// Nothing more runs until it does.
+    Resume {
+        notice: crate::boundary::BoundaryNotice,
+    },
     Done {
         outcome: crate::execute::Outcome,
         snapshot: String,
         checkpoint: String,
-        /// What the run did to each Git repository it worked in (§31).
+        /// What the run did to each Git repository it worked in.
         git: Vec<crate::git::RepoReport>,
+        /// The id it was recorded under in the encrypted history, if it was.
+        #[ts(optional)]
+        session: Option<String>,
     },
 }
 
@@ -72,4 +81,32 @@ pub struct Sealed {
     /// Where it was written, so the CLI can run or recover it too.
     pub path: String,
     pub sealed_at: String,
+}
+
+/// A run that stopped at a session boundary and has not crossed it yet.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct WaitingRun {
+    pub title: String,
+    pub after_phase: String,
+    pub boundary: keyjutsu_plan::model::Boundary,
+    pub recorded_at: String,
+}
+
+/// A waiting run, opened to continue: the plan to show, and its snapshot.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct WaitingOpened {
+    pub view: crate::workspace::WorkspaceView,
+    pub sealed: Sealed,
+}
+
+/// A Technique made into a draft plan in the workspace, and how this machine
+/// compares with where it worked. Nothing is approved or run: the draft is
+/// validated and approved like any other plan.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct TechniqueDraft {
+    pub view: crate::workspace::WorkspaceView,
+    pub fit: crate::technique::Fit,
 }

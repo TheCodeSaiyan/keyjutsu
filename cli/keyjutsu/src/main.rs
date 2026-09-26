@@ -152,6 +152,20 @@ enum StoreCommand {
 }
 
 #[derive(Subcommand)]
+enum DiagnosticsCommand {
+    /// Print the bundle: everything a save would write, and nothing else.
+    Preview,
+    /// Write the bundle to a plain text file, to read before sending it.
+    Save {
+        /// Where to write it.
+        file: std::path::PathBuf,
+        /// Replace an existing file.
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum GitCommand {
     /// KeyJutsu's changes alone, against each file as it was just before the run.
     Diff {
@@ -242,6 +256,10 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// A diagnostic bundle for someone helping you: versions, checks and
+    /// counts, with no tasks, commands, output or secrets. Nothing is sent.
+    #[command(subcommand)]
+    Diagnostics(DiagnosticsCommand),
     /// Open an ordinary interactive shell through KeyJutsu's terminal.
     Shell(ShellArgs),
     /// Run the safe, read-only demo performance.
@@ -320,6 +338,11 @@ enum PlanCommand {
         /// The task, if the plan's title does not say it well enough.
         #[arg(long)]
         task: Option<String>,
+        /// A recorded run in which this step failed: the agent is shown what
+        /// it printed, redacted, to diagnose from. Its id is in
+        /// `keyjutsu history list`.
+        #[arg(long)]
+        session: Option<String>,
         #[command(flatten)]
         agent: AgentArgs,
         /// Where to write the revised plan.
@@ -502,13 +525,27 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Doctor { json } => doctor(json),
+        Command::Diagnostics(DiagnosticsCommand::Preview) => {
+            print!("{}", keyjutsu_core::diagnostics::collect());
+            ExitCode::SUCCESS
+        }
+        Command::Diagnostics(DiagnosticsCommand::Save { file, force }) => save_diagnostics(&file, force),
         Command::Agents { action: None, json } => agent_cli::list(json),
         Command::Agents { action: Some(AgentsCommand::Check { live }), .. } => agent_cli::check(live),
         Command::Plan(PlanCommand::Propose { task, agent, files, folder, out }) => {
             agent_cli::propose(&task, &agent.agent, agent.send, &files, folder.as_deref(), &out)
         }
-        Command::Plan(PlanCommand::Revise { file, step, guidance, task, agent, out }) => {
-            agent_cli::revise(&file, &step, &guidance, task.as_deref(), &agent.agent, agent.send, &out)
+        Command::Plan(PlanCommand::Revise { file, step, guidance, task, session, agent, out }) => {
+            agent_cli::revise(agent_cli::Revise {
+                file: &file,
+                step: &step,
+                guidance: &guidance,
+                task: task.as_deref(),
+                session: session.as_deref(),
+                agent: &agent.agent,
+                send: agent.send,
+                out: &out,
+            })
         }
         Command::Plan(PlanCommand::Review { file, task, agent, record }) => {
             agent_cli::review(&file, task.as_deref(), &agent.agent, agent.send, record.as_deref())
@@ -643,6 +680,24 @@ fn session(options: SessionOptions, performance: Option<console::Performance>) -
         );
     }
     if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+}
+
+fn save_diagnostics(file: &std::path::Path, force: bool) -> ExitCode {
+    if file.exists() && !force {
+        eprintln!("keyjutsu: {} already exists; pass --force to replace it", file.display());
+        return ExitCode::FAILURE;
+    }
+    match std::fs::write(file, keyjutsu_core::diagnostics::collect()) {
+        Ok(()) => {
+            println!("Saved the diagnostic bundle to {}.", file.display());
+            println!("It is plain text: read it before you send it to anyone. Nothing has been sent.");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("keyjutsu: could not write {}: {e}", file.display());
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn doctor(json: bool) -> ExitCode {

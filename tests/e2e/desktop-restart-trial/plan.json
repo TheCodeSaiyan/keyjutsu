@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "desktop-restart-trial",
+  "task_id": "desktop-restart-trial",
+  "title": "Leave a marker, restart Windows, then finish",
+  "target": { "id": "local", "kind": "local_windows" },
+  "agent": { "name": "codex", "version": "0.154.0" },
+  "phases": [
+    { "id": "before-restart", "steps": ["prepare"], "boundary_after": "windows_restart" },
+    { "id": "after-restart", "steps": ["finish"] }
+  ],
+  "steps": [
+    {
+      "id": "prepare",
+      "title": "Leave a marker",
+      "objective": "Write a file that has to survive the restart.",
+      "kind": "command",
+      "shell": { "kind": "windows_powershell" },
+      "commands": [
+        { "text": "Set-Content -LiteralPath C:/kj/work/marker.txt -Value before-restart" }
+      ],
+      "internal_validation": [{ "path_exists": { "path": "C:/kj/work/marker.txt" } }]
+    },
+    {
+      "id": "finish",
+      "title": "Record that the plan finished",
+      "objective": "Write a second file, only after the restart.",
+      "kind": "command",
+      "shell": { "kind": "windows_powershell" },
+      "depends_on": ["prepare"],
+      "commands": [
+        { "text": "Set-Content -LiteralPath C:/kj/work/result.txt -Value finished-after-restart" }
+      ]
+    }
+  ]
+}

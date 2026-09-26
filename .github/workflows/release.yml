@@ -182,6 +182,8 @@ jobs:
     timeout-minutes: 15
     needs: installer
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: keyjutsu-installer
@@ -212,6 +214,12 @@ jobs:
           & "$dir\keyjutsu.exe" doctor --json | Out-Null
           # doctor may find problems on a bare runner; it may not fail to report.
           if ($LASTEXITCODE -gt 1) { throw "doctor failed to report ($LASTEXITCODE)" }
+          # Tolerated above, so it must not fail the step on the way out:
+          # Actions ends a pwsh step with the last native exit code.
+          $global:LASTEXITCODE = 0
+          # The portable build is the programs just installed and checked, so
+          # it is signed exactly when the installed copy is.
+          ./scripts/portable.ps1 -From $dir -Version $version -Out portable
           $path = [Environment]::GetEnvironmentVariable('Path', 'User')
           if (-not ($path -split ';' -contains $dir)) { throw 'the install folder is not on the PATH' }
           $u = Start-Process "$dir\uninstall.exe" -ArgumentList '/S' -Wait -PassThru
@@ -221,6 +229,41 @@ jobs:
           $path = [Environment]::GetEnvironmentVariable('Path', 'User')
           if ($path -split ';' -contains $dir) { throw 'PATH entry left after uninstalling' }
           "Installed $said, ran doctor, and uninstalled cleanly."
+
+      # Unzipped where nothing was ever installed, and run from there: the
+      # portable build has to work with the installed copy gone.
+      - name: Run the portable build
+        shell: pwsh
+        run: |
+          $version = '${{ needs.installer.outputs.version }}'
+          $zip = "portable/KeyJutsu_${version}_x64-portable.zip"
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\portable"
+          $dir = "$env:RUNNER_TEMP\portable\KeyJutsu-$version"
+          foreach ($f in 'keyjutsu-desktop.exe', 'keyjutsu.exe', 'README.txt', 'LICENSE') {
+            if (-not (Test-Path "$dir\$f")) { throw "not in the portable build: $f" }
+          }
+          # Started as Administrator, so never shipped in a folder the user can write to.
+          if (Test-Path "$dir\keyjutsu-broker.exe") { throw 'the portable build must not carry the elevation broker' }
+          $said = & "$dir\keyjutsu.exe" --version
+          if ($said -ne "keyjutsu $version") { throw "portable keyjutsu --version said '$said', not $version" }
+          $report = & "$dir\keyjutsu.exe" doctor --json | Out-String | ConvertFrom-Json
+          if ($LASTEXITCODE -gt 1) { throw "portable doctor failed to report ($LASTEXITCODE)" }
+          $global:LASTEXITCODE = 0
+          $broker = $report.checks | Where-Object name -eq 'Elevation broker'
+          if ($broker.status -eq 'ok') { throw "the portable build claims an elevation broker: $($broker.detail)" }
+          Push-Location portable
+          Get-ChildItem *.zip | ForEach-Object {
+            ((Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower() + '  ' + $_.Name) |
+              Set-Content -NoNewline "$($_.Name).sha256"
+          }
+          Pop-Location
+          "Ran $said from the portable build, which says it cannot run Administrator steps."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyjutsu-portable
+          path: portable/
+          if-no-files-found: error
 
   release:
     name: Publish the release
@@ -238,6 +281,11 @@ jobs:
           name: keyjutsu-installer
           path: out
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: keyjutsu-portable
+          path: out
+
       - name: Collect checksums
         run: |
           set -euo pipefail
@@ -248,6 +296,20 @@ jobs:
           # Checked here, against the very files about to be published.
           sha256sum -c SHA256SUMS
           cat SHA256SUMS
+
+      # For microsoft/winget-pkgs, from the very installer being published.
+      # Kept as a workflow artifact: submitting is a separate step, in
+      # CONTRIBUTING.md.
+      - name: Write the winget manifests
+        run: |
+          version="${{ needs.installer.outputs.version }}"
+          node scripts/winget.mjs "$version" "out/KeyJutsu_${version}_x64-setup.exe" winget
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifests
+          path: winget/
+          if-no-files-found: error
 
       # What changed in this version is written in the tag; the part every
       # release carries follows it. The commands come first, because the page
@@ -282,10 +344,16 @@ jobs:
           Or download \`KeyJutsu_${version}_x64-setup.exe\` below and check it
           against \`SHA256SUMS\` yourself.
 
+          To try it without installing, \`KeyJutsu_${version}_x64-portable.zip\`
+          holds the app and the CLI: unzip it and run \`keyjutsu-desktop.exe\`.
+          It can't run Administrator steps, adds nothing to your PATH or
+          Explorer, and its \`README.txt\` says why.
+
           ## The small print
 
           Windows 11, x64. ${signed} The installer was installed, run and
-          uninstalled on a clean runner before this page was published.
+          uninstalled on a clean runner before this page was published, and
+          the portable build was run there once it had gone.
           STANDING
           cat notes.md
 
@@ -295,6 +363,7 @@ jobs:
         with:
           files: |
             out/*.exe
+            out/*.zip
             out/SHA256SUMS
             scripts/install.ps1
           body_path: notes.md

@@ -37,6 +37,27 @@ Sends each installed agent a tiny request, on your accounts, and checks the
 adapter still works with its version. `--live` is required, so it can't
 happen by accident.
 
+### `keyjutsu diagnostics preview`
+
+Prints a diagnostic bundle for someone helping you with a problem: the
+KeyJutsu and Windows versions, every `doctor` check, how each shell behaved
+in the pseudo-console, the agents and their versions, and how many runs and
+Techniques the history holds. It leaves out tasks, plans, commands,
+terminal contents, what runs printed, environment variables and
+credentials. Your profile folder, your Windows user name and the computer's
+name are replaced with placeholders, and anything shaped like a secret is
+redacted. Nothing is sent anywhere.
+
+### `keyjutsu diagnostics save FILE`
+
+Writes the same bundle to `FILE`, as plain text, so you can read it before
+you send it. The machine is checked again as it's saved, so timings can
+differ from an earlier preview; nothing else is added.
+
+| Option | |
+| --- | --- |
+| `--force` | replace an existing file |
+
 ## Performing
 
 ### `keyjutsu demo`
@@ -82,8 +103,10 @@ it shows exactly what would be sent and stops.
 ### `keyjutsu plan revise FILE --step STEP --guidance TEXT --agent AGENT --out FILE`
 
 Asks an agent to redo one step, with your guidance and what validation found.
-No other step may change. `--task` gives the task if the plan's title doesn't
-say it well enough; `--send` as above.
+No other step may change. `--session ID` names a recorded run in which that
+step failed: the agent is also shown what it printed, redacted, to diagnose
+from. `--task` gives the task if the plan's title doesn't say it well enough;
+`--send` as above.
 
 ### `keyjutsu plan review FILE --agent AGENT`
 

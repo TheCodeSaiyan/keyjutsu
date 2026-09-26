@@ -178,5 +178,62 @@ fn diff_names_the_steps_that_need_revalidation() {
     assert!(out.status.success());
     let t = text(&out);
     assert!(t.contains("changed  date: commands"), "{t}");
-    assert!(t.contains("2 step(s) require revalidation"), "date and svc after it: {t}");
+    assert!(t.contains("2 steps require revalidation"), "date and svc after it: {t}");
+}
+
+/// `plan revise --session` reads the failure from the encrypted history, and
+/// refuses a session that failed at another step or did not fail at all.
+#[test]
+fn a_revision_takes_its_failure_from_the_recorded_session() {
+    use keyjutsu_core::execute::Outcome;
+    use keyjutsu_core::history::{SessionRecord, save};
+    let dir = scratch("revise-session");
+    let file = write(&dir, "plan.json", &read_only_plan());
+    let store =
+        keyjutsu_core::store::Store::open(&Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store")).unwrap();
+    let record = |id: &str, outcome: Outcome| SessionRecord {
+        id: id.into(),
+        started_at: "2026-09-25T00:00:00Z".into(),
+        finished_at: "2026-09-25T00:01:00Z".into(),
+        task: "t".into(),
+        agent: serde_json::from_value(json!({"name": "codex", "version": "1"})).unwrap(),
+        snapshot: String::new(),
+        checkpoint: None,
+        outcome,
+        git: Vec::new(),
+    };
+    let failed = |step: &str| Outcome::Failed {
+        step: step.into(),
+        expected: "exit code 0".into(),
+        actual: "a command exited with 1".into(),
+        output: "it broke".into(),
+    };
+    save(&store, &record("20260925-000100-aaaa", failed("other"))).unwrap();
+    save(&store, &record("20260925-000100-bbbb", Outcome::Complete)).unwrap();
+    let revise = |session: &str| {
+        keyjutsu(&[
+            "plan",
+            "revise",
+            &file,
+            "--step",
+            "look",
+            "--guidance",
+            "g",
+            "--session",
+            session,
+            "--agent",
+            "codex",
+            "--out",
+            "unused.json",
+        ])
+    };
+    let wrong_step = revise("20260925-000100-aaaa");
+    assert_eq!(wrong_step.status.code(), Some(1));
+    assert!(
+        text(&wrong_step).contains("it was step `other` that failed, not `look`"),
+        "{}",
+        text(&wrong_step)
+    );
+    let not_failed = revise("20260925-000100-bbbb");
+    assert!(text(&not_failed).contains("did not end in a failed step"), "{}", text(&not_failed));
 }

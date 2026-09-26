@@ -49,6 +49,7 @@ run 'plan-approve-critical-confirmed' @('plan', 'approve', 'clear-build-cache.js
     '--confirm', 'clear-cache=DELETE THE OLD BUILD CACHE')
 run 'plan-propose' @('plan', 'propose', 'Find out why the Print Spooler keeps stopping', '--agent', 'claude', '--out', 'spooler.json')
 run 'setup-status' @('setup', 'path', 'status')
+run 'diagnostics' @('diagnostics', 'preview')
 
 # The plans with this machine's validation recorded, for the Plan screen.
 foreach ($pair in @(@('check-a-service', 'validated'), @('clear-build-cache', 'critical-validated'))) {
@@ -101,10 +102,51 @@ Start-Sleep -Seconds 2
 d chord '^+k'                     # operator controls
 Start-Sleep -Seconds 2
 d capture '' 'performance'
-d chord '^%+k'                    # disarm
+d click 'Disarm'                  # from the operator controls
+Start-Sleep -Seconds 2
+
+# The diagnostic bundle: previewed, then saved, and the saved file kept to
+# compare with what the preview showed.
+d click 'Preview bundle'
+Start-Sleep -Seconds 25
+d capture '' 'diagnostics'
+d click 'Save bundle'
+Start-Sleep -Seconds 3
+Get-ChildItem "$env:LOCALAPPDATA\KeyJutsu\diagnostics\*.txt" -ErrorAction SilentlyContinue |
+    ForEach-Object { Copy-Item $_.FullName "$out\diagnostics-saved.txt"; log "saved bundle $($_.Name)" }
 
 launch "$kj\work\validated.json"
 d capture '' 'plan-workspace'
+
+# A run in the app, recorded, made a Technique and used again: the end of
+# the specification's V1 scenario. Direct mode, so no keys are needed.
+launch "$kj\work\validated.json"
+d click 'Terminal'
+Start-Sleep -Seconds 6
+d click 'Direct'
+d click 'Plan'
+Start-Sleep -Seconds 2
+d click 'Approve plan'
+Start-Sleep -Seconds 6
+d click 'Arm KeyJutsu'
+Start-Sleep -Seconds 30
+d capture '' 'run-complete'
+d click 'History'
+Start-Sleep -Seconds 3
+d click 'Check that Windows Management Instrumentation'
+Start-Sleep -Seconds 3
+d click 'Parameters, one per line'
+d keys 'service_name = Winmgmt'
+Start-Sleep -Seconds 1
+d capture '' 'history'
+d click 'Make a Technique'
+Start-Sleep -Seconds 3
+d click 'Check that Windows Management Instrumentation'
+Start-Sleep -Seconds 2
+d capture '' 'techniques'
+d click 'Make a draft plan'
+Start-Sleep -Seconds 5
+d capture '' 'technique-draft'
 
 launch "$kj\work\critical-validated.json"
 d click 'Approve plan'

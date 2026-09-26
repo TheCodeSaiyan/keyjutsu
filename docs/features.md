@@ -162,23 +162,35 @@ still holds. It has been run across a real Windows restart.
 
 ## History and Techniques
 
-Every CLI run is recorded, encrypted, unless you ask it not to be. A run that
+Every run is recorded, encrypted, from the desktop app or the CLI; a CLI run
+can opt out with `--ephemeral`. A run that
 worked can become a Technique, with parameters, to use again. A Technique
 never runs because it worked before: it makes a draft that's validated and
 approved here, with a note of which steps are on unfamiliar ground.
 
 [Reusing a plan that worked](guides/techniques.md)
 
+## Diagnostics you read before sharing
+
+When you need help, a diagnostic bundle gives someone the versions, the
+readiness checks and how each shell behaved, without your tasks, commands,
+output, name or secrets. You see all of it before it's saved, and KeyJutsu
+sends it nowhere: in the app, **Diagnostics** in the Terminal screen's side
+panel has **Preview bundle** and then **Save bundle**, and the CLI has
+`keyjutsu diagnostics preview` and `keyjutsu diagnostics save FILE`.
+
+[Commands](commands.md#keyjutsu-diagnostics-preview)
+
 ## A desktop app and a CLI, with one set of rules
 
 The desktop app (New task, Plan and Terminal) and the `keyjutsu` CLI drive
 the same Rust core, so there's one implementation of what may reach a shell.
-The desktop has no history or Technique screens yet, and stops at a restart
-boundary without resuming past it; the CLI does both.
+After a restart, the desktop app offers to continue the plan that was
+waiting, and asks before it crosses the boundary, as the CLI does.
 
 ## Checked against its own rules
 
-The eight release gates are named lists of tests, 78 in all,
+The eight release gates are named lists of tests, 80 in all,
 run by `pnpm release:gates` and in CI; a renamed or deleted test fails its
 gate. Untrusted inputs are fuzzed as part of the ordinary suite: plans,
 snapshots, broker requests and terminal output. Fuzzing the terminal scanner

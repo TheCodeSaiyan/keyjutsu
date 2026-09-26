@@ -405,13 +405,14 @@ impl Workspace {
         agent: &AgentHandle,
         step: &str,
         guidance: &str,
+        failure: Option<&keyjutsu_agent::RunFailure>,
         at: &str,
     ) -> Result<PlanDiff, WorkspaceError> {
         if self.draft.plan().step(step).is_none() {
             return Err(WorkspaceError::UnknownStep(step.into()));
         }
         let findings = self.findings_for(step);
-        let request = StepRevision { step, guidance, findings: &findings };
+        let request = StepRevision { step, guidance, findings: &findings, failure };
         let p = agents.revise_step(agent, &self.task, self.draft.plan(), &request, at)?;
         self.note("You", guidance, Some(step), at);
         let change = self.adopt(p.plan.into_plan(), None, at)?;
@@ -564,11 +565,25 @@ impl Workspace {
             });
         }
         if overall.unvalidated > 0 {
-            overall.blocking.push(format!("{} step(s) need validation", overall.unvalidated));
+            overall.blocking.push(format!(
+                "{} validation",
+                keyjutsu_plan::count(
+                    usize::try_from(overall.unvalidated).unwrap_or(usize::MAX),
+                    "step needs",
+                    "steps need"
+                )
+            ));
         }
         let not_ready = overall.needs_review + overall.blocked + overall.invalid;
         if not_ready > 0 {
-            overall.blocking.push(format!("{not_ready} step(s) are not ready"));
+            overall.blocking.push(format!(
+                "{} not ready",
+                keyjutsu_plan::count(
+                    usize::try_from(not_ready).unwrap_or(usize::MAX),
+                    "step is",
+                    "steps are"
+                )
+            ));
         }
         WorkspaceView {
             task: self.task.clone(),
@@ -653,12 +668,15 @@ fn detail(step: &Step) -> String {
 /// Where a snapshot and its runs are kept: `%LOCALAPPDATA%\KeyJutsu\runs`,
 /// one folder per snapshot, named for the plan and the snapshot's hash.
 pub fn run_folder(snapshot: &ApprovedSnapshot) -> std::path::PathBuf {
-    let base =
-        std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
     let hash = snapshot.snapshot_hash();
-    base.join("KeyJutsu").join("runs").join(format!(
-        "{}-{}",
-        snapshot.plan().plan_id,
-        &hash[..hash.len().min(12)]
-    ))
+    runs_root().join(format!("{}-{}", snapshot.plan().plan_id, &hash[..hash.len().min(12)]))
+}
+
+/// Where the desktop app keeps the plans it approved, one folder each.
+pub fn runs_root() -> std::path::PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("KeyJutsu")
+        .join("runs")
 }

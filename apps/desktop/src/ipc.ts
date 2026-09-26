@@ -1,8 +1,10 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   agent,
+  history,
   plan,
   recovery,
+  technique,
   workspace,
   KeyChord,
   OpenRequest,
@@ -15,6 +17,9 @@ import type {
   TerminalMessage,
   TerminalProfile,
   TerminalSize,
+  TechniqueDraft,
+  WaitingOpened,
+  WaitingRun,
 } from "@keyjutsu/types";
 
 /**
@@ -23,6 +28,10 @@ import type {
  */
 export const ipc = {
   readinessScan: () => invoke<ReadinessReport>("readiness_scan"),
+  /** The diagnostic bundle, in full, as it would be saved. */
+  diagnosticsPreview: () => invoke<string>("diagnostics_preview"),
+  /** Save the bundle last previewed; returns where. */
+  diagnosticsSave: () => invoke<string>("diagnostics_save"),
   terminalProfile: () => invoke<TerminalProfile>("terminal_profile"),
 
   openTerminal: (request: OpenRequest, onMessage: (m: TerminalMessage) => void) => {
@@ -60,6 +69,19 @@ export const ipc = {
   stage: () => invoke<workspace.WorkspaceView>("workspace_stage"),
   retryStep: (agent: agent.AgentKind, step: string, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_retry_step", { agent, step, guidance }),
+  /** Recorded runs, newest first. */
+  history: () => invoke<history.SessionSummary[]>("history_list"),
+  historyShow: (id: string) => invoke<history.SessionRecord>("history_show", { id }),
+  /** Make a completed run a Technique; each pair is a parameter and the value it stands for. */
+  promote: (session: string, name: string, description: string, params: [string, string][]) =>
+    invoke<technique.Technique>("technique_promote", { session, name, description, params }),
+  techniques: () => invoke<technique.Technique[]>("technique_list"),
+  /** A Technique as a draft plan in the workspace, to validate and approve. */
+  useTechnique: (id: string, values: Record<string, string>) =>
+    invoke<TechniqueDraft>("technique_use", { id, values }),
+  /** Ask the agent to fix the step the last run failed at, from what it printed. */
+  fixFailure: (agent: agent.AgentKind, guidance: string) =>
+    invoke<workspace.WorkspaceView>("workspace_fix_failure", { agent, guidance }),
   revise: (agent: agent.AgentKind, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_revise", { agent, guidance }),
   review: (agent: agent.AgentKind) =>
@@ -74,6 +96,10 @@ export const ipc = {
   },
   /** What the operator typed for a critical step, or null to decline. Rust compares it. */
   confirm: (typed: string | null) => invoke<void>("plan_confirm", { typed }),
+  /** A run stopped at a restart or other boundary, waiting to continue. */
+  waitingRun: () => invoke<WaitingRun | null>("run_waiting"),
+  /** Open it to continue: the next run resumes, and asks before crossing. */
+  openWaiting: () => invoke<WaitingOpened>("run_waiting_open"),
   recoveryPlan: () => invoke<recovery.RecoveryItem[]>("recovery_plan"),
   recover: (id: number) => invoke<recovery.RecoveryResult[]>("recovery_run", { id }),
 };

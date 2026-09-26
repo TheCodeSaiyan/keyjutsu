@@ -34,21 +34,23 @@ const places = [
     find: (t) => JSON.parse(t).version,
     set: (t, v) => t.replace(/("version": ")[^"]+(")/, `$1${v}$2`),
   })),
-  // The installer's name, and `keyjutsu doctor`'s first line, as the guides
+  // The installer's and portable build's names, and `keyjutsu doctor`'s first line, as the guides
   // quote them. Every mention on the page must match.
   ...["docs/guides/installing.md", "docs/plain/installing.md"].map((file) => ({
     file,
     find: (t) => {
       const seen = new Set(
-        [...t.matchAll(/KeyJutsu_(\d+\.\d+\.\d+)_x64-setup\.exe|^KeyJutsu (\d+\.\d+\.\d+)$/gm)].map(
-          (m) => m[1] ?? m[2],
-        ),
+        [
+          ...t.matchAll(
+            /KeyJutsu_(\d+\.\d+\.\d+)_x64-(?:setup\.exe|portable\.zip)|^KeyJutsu (\d+\.\d+\.\d+)$/gm,
+          ),
+        ].map((m) => m[1] ?? m[2]),
       );
       return seen.size === 1 ? [...seen][0] : seen.size === 0 ? undefined : [...seen].join(" and ");
     },
     set: (t, v) =>
       t
-        .replace(/KeyJutsu_\d+\.\d+\.\d+_x64-setup\.exe/g, `KeyJutsu_${v}_x64-setup.exe`)
+        .replace(/KeyJutsu_\d+\.\d+\.\d+_x64-(setup\.exe|portable\.zip)/g, `KeyJutsu_${v}_x64-$1`)
         .replace(/^KeyJutsu \d+\.\d+\.\d+$/gm, `KeyJutsu ${v}`),
   })),
 ];

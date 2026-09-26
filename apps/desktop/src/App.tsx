@@ -20,16 +20,21 @@ import type {
   TerminalMessage,
   TerminalProfile,
   TerminalSize,
+  WaitingRun,
 } from "@keyjutsu/types";
 import { INPUT_OWNED, ipc } from "./ipc";
 import { TerminalView, type TerminalHandle } from "./components/TerminalView";
 import { ReadinessPanel } from "./components/ReadinessPanel";
+import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { Overlay } from "./components/Overlay";
 import { NewTask } from "./components/NewTask";
 import { PlanWorkspace } from "./components/PlanWorkspace";
 import { CriticalDialog } from "./components/CriticalDialog";
 import { RunPanel } from "./components/RunPanel";
-import { confirmationFor } from "./plan";
+import { ResumeDialog } from "./components/ResumeDialog";
+import { HistoryView } from "./components/HistoryView";
+import { TechniquesView } from "./components/TechniquesView";
+import { boundaryName, confirmationFor } from "./plan";
 import mark from "./assets/mark.png";
 
 const SHELL_NAMES: Record<ShellKind, string> = {
@@ -87,11 +92,17 @@ export function App() {
     readFlag(FIRST_RUN_KEY) ? "workspace" : "first-run",
   );
   // Where the operator is: the task, the plan, or the terminal (§8).
-  const [space, setSpace] = useState<"task" | "plan" | "terminal">("task");
+  const [space, setSpace] = useState<"task" | "plan" | "terminal" | "history" | "techniques">(
+    "task",
+  );
   const [agents, setAgents] = useState<agent.AgentInfo[] | null>(null);
   const [ws, setWs] = useState<workspace.WorkspaceView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [sealed, setSealed] = useState<Sealed | null>(null);
+  // A run stopped at a restart or other boundary, and what was checked
+  // before crossing it.
+  const [waiting, setWaiting] = useState<WaitingRun | null>(null);
+  const [resumeNotice, setResumeNotice] = useState<execute.BoundaryNotice | null>(null);
   const [running, setRunning] = useState(false);
   const [runDone, setRunDone] = useState<Extract<RunMessage, { kind: "done" }> | null>(null);
   const [critical, setCritical] = useState<{
@@ -139,6 +150,16 @@ export function App() {
       .agents()
       .then(setAgents)
       .catch(() => setAgents([]));
+    // After a restart, a plan may be waiting on this side of it. That is
+    // not a first run, whatever the first-run marker says: go straight to
+    // the offer to continue it.
+    ipc
+      .waitingRun()
+      .then((w) => {
+        setWaiting(w);
+        if (w) setView("workspace");
+      })
+      .catch(() => setWaiting(null));
     ipc
       .workspace()
       .then((w) => {
@@ -326,9 +347,13 @@ export function App() {
       case "confirm":
         setCritical({ confirmation: m.confirmation, purpose: "run", rest: [], typed: {} });
         break;
+      case "resume":
+        setResumeNotice(m.notice);
+        break;
       case "done":
         setRunning(false);
         setRunDone(m);
+        setWaiting(null);
         break;
       case "execution":
         // An Administrator step ran in the elevation broker's shell: show
@@ -493,6 +518,22 @@ export function App() {
                 Terminal
               </button>
             </li>
+            <li>
+              <button
+                aria-current={space === "history" ? "page" : undefined}
+                onClick={() => setSpace("history")}
+              >
+                History
+              </button>
+            </li>
+            <li>
+              <button
+                aria-current={space === "techniques" ? "page" : undefined}
+                onClick={() => setSpace("techniques")}
+              >
+                Techniques
+              </button>
+            </li>
           </ul>
           <p className="rail-foot small muted">
             Local target · {report?.windows.product ?? "Windows"}
@@ -512,6 +553,32 @@ export function App() {
             {error}
           </p>
         )}
+        {waiting && !fullTerminal && (
+          <div className="banner waiting" role="status">
+            <p>
+              <strong>{waiting.title}</strong> is waiting to continue. Phase{" "}
+              <code>{waiting.after_phase}</code> finished before a {boundaryName(waiting.boundary)}.
+            </p>
+            <button
+              className="primary"
+              disabled={busy !== null}
+              onClick={() =>
+                void ipc
+                  .openWaiting()
+                  .then((o) => {
+                    setWs(o.view);
+                    setSealed(o.sealed);
+                    setRunDone(null);
+                    setWaiting(null);
+                    setSpace("plan");
+                  })
+                  .catch((e) => setError(String(e)))
+              }
+            >
+              Continue it
+            </button>
+          </div>
+        )}
         {space === "task" && !fullTerminal && (
           <NewTask
             agents={agents}
@@ -521,6 +588,19 @@ export function App() {
               act("The agent is investigating…", () => ipc.propose(task, kind, context))
             }
             onOpen={(text) => act("Reading the plan…", () => ipc.openPlan(text))}
+          />
+        )}
+        {space === "history" && !fullTerminal && (
+          <HistoryView busy={busy !== null} onPromoted={() => setSpace("techniques")} />
+        )}
+        {space === "techniques" && !fullTerminal && (
+          <TechniquesView
+            busy={busy !== null}
+            onDraft={(draft) => {
+              setWs(draft.view);
+              setSealed(null);
+              setSpace("plan");
+            }}
           />
         )}
         {space === "plan" && ws && !fullTerminal && (
@@ -581,6 +661,17 @@ export function App() {
                 <RunPanel
                   done={runDone}
                   busy={busy !== null}
+                  agents={agents ?? []}
+                  onFix={async (fixWith, guidance) => {
+                    setBusy("The agent is working out what went wrong…");
+                    try {
+                      setWs(await ipc.fixFailure(fixWith, guidance));
+                      setRunDone(null);
+                      setSpace("plan");
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
                   onReview={() => ipc.recoveryPlan()}
                   onRecover={async () => {
                     if (sessionId === null) throw new Error("no terminal");
@@ -702,6 +793,10 @@ export function App() {
                   <h2>Readiness</h2>
                   <ReadinessPanel report={report} />
                 </section>
+                <section>
+                  <h2>Diagnostics</h2>
+                  <DiagnosticsPanel />
+                </section>
               </aside>
             )}
 
@@ -742,6 +837,20 @@ export function App() {
         </div>
       </main>
       {dialog}
+      {resumeNotice && (
+        <ResumeDialog
+          notice={resumeNotice}
+          onConfirm={(typed) => {
+            setResumeNotice(null);
+            void ipc.confirm(typed);
+            term.current?.focus();
+          }}
+          onCancel={() => {
+            setResumeNotice(null);
+            void ipc.confirm(null);
+          }}
+        />
+      )}
     </div>
   );
 }

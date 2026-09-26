@@ -39,12 +39,16 @@ const gates = {
   "Secret handling": [
     "a_secret_in_pasted_context_never_reaches_the_agent",
     "no_secret_reaches_an_agent_by_any_route",
+    "a_failed_step_is_diagnosed_from_its_real_output",
+    "fixing_a_failed_step_shows_the_agent_what_it_printed",
     "common_secret_shapes_are_removed_and_counted_but_never_echoed",
     "the_store_is_encrypted_and_records_cannot_be_swapped",
     "a_store_opened_by_many_at_once_keeps_one_key",
     "the_nonce_never_appears_in_debug_output",
     "a_credential_is_entered_and_used_without_being_seen_or_kept",
     "without_send_nothing_leaves_the_machine_and_nothing_is_written",
+    "the_bundle_names_no_one_and_holds_no_secret",
+    "the_preview_names_neither_the_user_nor_the_machine",
   ],
   "Execution state machine": [
     "mashing_arbitrary_keys_delivers_exactly_the_staged_command",

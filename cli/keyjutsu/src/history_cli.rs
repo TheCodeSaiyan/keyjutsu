@@ -299,13 +299,13 @@ pub fn store_clear(history_too: bool, techniques: bool, artifacts: bool) -> Exit
     };
     if history_too {
         match store.clear(history::KIND) {
-            Ok(n) => println!("Cleared {n} session(s)."),
+            Ok(n) => println!("Cleared {}.", crate::count(n, "session", "sessions")),
             Err(e) => return fail(e),
         }
     }
     if techniques {
         match store.clear(technique::KIND) {
-            Ok(n) => println!("Cleared {n} Technique revision(s)."),
+            Ok(n) => println!("Cleared {}.", crate::count(n, "Technique revision", "Technique revisions")),
             Err(e) => return fail(e),
         }
     }

@@ -212,7 +212,7 @@ fn retrying_a_step_gives_the_agent_the_findings_and_discards_validation() {
     let runner =
         Replay(RefCell::new(vec![claude_says(&revised["steps"][1], "Formatted.")]), RefCell::default());
     let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
-    let change = w.retry_step(&agents, &claude(), "b", "Show it as a list.", AT).unwrap();
+    let change = w.retry_step(&agents, &claude(), "b", "Show it as a list.", None, AT).unwrap();
 
     assert_eq!(w.plan().step("b").unwrap().commands[0].text, "Get-Location | Format-List");
     assert!(change.affected.contains(&"b".to_owned()));
@@ -222,6 +222,33 @@ fn retrying_a_step_gives_the_agent_the_findings_and_discards_validation() {
     assert_eq!(r["b"], None, "the replacement is not validated");
     let notes: Vec<String> = w.view().notes.into_iter().map(|n| n.text).collect();
     assert_eq!(notes, ["Show it as a list.", "Formatted."]);
+}
+
+/// The V1 recovery loop: a step failed when it ran, and the agent asked to
+/// fix it is shown what it printed, redacted, as well as the guidance.
+#[test]
+fn fixing_a_failed_step_shows_the_agent_what_it_printed() {
+    let mut w = validated(&chain());
+    let mut revised = chain();
+    revised["steps"][1]["commands"][0]["text"] = json!("Get-Location | Format-List");
+    let runner = Replay(
+        RefCell::new(vec![claude_says(&revised["steps"][1], "It needed a list.")]),
+        RefCell::default(),
+    );
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let failure = keyjutsu_core::agent::RunFailure {
+        expected: "exit code 0".into(),
+        actual: "a command exited with 1".into(),
+        output: "Get-Location : the path is locked\napi_key=abcdefghijklmnopqrstuvwxyz0123".into(),
+    };
+    w.retry_step(&agents, &claude(), "b", "Try another way.", Some(&failure), AT).unwrap();
+
+    let prompt = &runner.1.borrow()[0].stdin;
+    assert!(prompt.contains("the path is locked"), "{prompt}");
+    assert!(prompt.contains("a command exited with 1"));
+    assert!(!prompt.contains("abcdefghijklmnopqrstuvwxyz0123"), "the key was sent");
+    assert_eq!(w.plan().step("b").unwrap().commands[0].text, "Get-Location | Format-List");
+    assert_eq!(readiness(&w)["b"], None, "the fix must be validated before it can run");
 }
 
 #[test]

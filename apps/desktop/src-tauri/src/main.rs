@@ -22,7 +22,9 @@ use keyjutsu_core::execute::{
 use keyjutsu_core::execution::{
     ExecutionState, PerformanceConfig, PerformanceSnapshot, StagedScript, StagedStep,
 };
-use keyjutsu_core::ipc::{OpenRequest, RunMessage, ScriptSource, Sealed, TerminalMessage};
+use keyjutsu_core::ipc::{
+    OpenRequest, RunMessage, ScriptSource, Sealed, TerminalMessage, WaitingOpened, WaitingRun,
+};
 use keyjutsu_core::plan::ApprovedSnapshot;
 use keyjutsu_core::plan::model::Step;
 use keyjutsu_core::readiness::{self, ReadinessReport};
@@ -83,8 +85,22 @@ struct Plans {
     sealed: Mutex<Option<(ApprovedSnapshot, PathBuf)>>,
     /// The latest run's checkpoint, for recovery.
     checkpoint: Mutex<Option<PathBuf>>,
+    /// The latest run's failure, if it failed: which step, how, and that
+    /// run's checkpoint. An agent fixing the step reads it, and the next run
+    /// resumes from the checkpoint instead of starting again.
+    failed: Mutex<Option<Failed>>,
+    /// The checkpoint of a run stopped at a session boundary, waiting to
+    /// cross it. The next run of the same snapshot resumes from it.
+    waiting: Mutex<Option<PathBuf>>,
     /// The operator's answer to a critical confirmation: `Some(None)` declines.
     answer: Arc<(Mutex<Option<Option<String>>>, Condvar)>,
+}
+
+#[derive(Clone)]
+struct Failed {
+    step: String,
+    failure: keyjutsu_core::agent::RunFailure,
+    checkpoint: PathBuf,
 }
 
 fn message(e: CoreError) -> String {
@@ -102,6 +118,32 @@ fn locked<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[tauri::command]
 async fn readiness_scan() -> Result<ReadinessReport, String> {
     tauri::async_runtime::spawn_blocking(readiness::scan).await.map_err(|e| e.to_string())
+}
+
+/// The bundle last shown to the operator: only that is ever saved, so what
+/// they read is what they get.
+#[derive(Default)]
+struct Diagnostics(Mutex<Option<String>>);
+
+#[tauri::command]
+async fn diagnostics_preview(diagnostics: State<'_, Arc<Diagnostics>>) -> Result<String, String> {
+    let text = tauri::async_runtime::spawn_blocking(keyjutsu_core::diagnostics::collect)
+        .await
+        .map_err(|e| e.to_string())?;
+    *locked(&diagnostics.0) = Some(text.clone());
+    Ok(text)
+}
+
+/// Saves the previewed bundle and shows it in Explorer. Nothing is sent.
+#[tauri::command]
+fn diagnostics_save(diagnostics: State<'_, Arc<Diagnostics>>) -> Result<String, String> {
+    let text = locked(&diagnostics.0).clone();
+    let text = text.ok_or("preview the bundle first: only a bundle you have seen is saved")?;
+    let file = keyjutsu_core::diagnostics::save(&text, &keyjutsu_core::diagnostics::default_dir())?;
+    let mut select = std::ffi::OsString::from("/select,");
+    select.push(&file);
+    let _ = std::process::Command::new("explorer.exe").arg(select).spawn();
+    Ok(file.display().to_string())
 }
 
 #[tauri::command]
@@ -275,6 +317,7 @@ fn workspace_open(text: String, plans: State<'_, Arc<Plans>>) -> Result<Workspac
     let view = w.view();
     *locked(&plans.workspace) = Some(w);
     *locked(&plans.sealed) = None;
+    *locked(&plans.failed) = None;
     Ok(view)
 }
 
@@ -302,6 +345,7 @@ async fn workspace_propose(
         let view = w.view();
         *locked(&plans.workspace) = Some(w);
         *locked(&plans.sealed) = None;
+        *locked(&plans.failed) = None;
         Ok(view)
     })
     .await
@@ -415,7 +459,25 @@ async fn workspace_retry_step(
     plans: State<'_, Arc<Plans>>,
 ) -> Result<WorkspaceView, String> {
     agent_request(plans.inner(), agent, move |w, a, h, at| {
-        w.retry_step(a, h, &step, &guidance, at).map(|_| ()).map_err(|e| e.to_string())
+        w.retry_step(a, h, &step, &guidance, None, at).map(|_| ()).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Ask the agent to fix the step the last run failed at, showing it what that
+/// step printed. The replacement is a draft like any other: it is validated
+/// and approved before it can run.
+#[tauri::command]
+async fn workspace_fix_failure(
+    agent: AgentKind,
+    guidance: String,
+    plans: State<'_, Arc<Plans>>,
+) -> Result<WorkspaceView, String> {
+    let failed = locked(&plans.failed).clone().ok_or("the last run did not fail")?;
+    agent_request(plans.inner(), agent, move |w, a, h, at| {
+        w.retry_step(a, h, &failed.step, &guidance, Some(&failed.failure), at)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     })
     .await
 }
@@ -480,6 +542,38 @@ fn plan_run(
 ) -> Result<(), String> {
     let (session, sink) = sessions.get(id)?;
     let (snapshot, path) = locked(&plans.sealed).clone().ok_or("approve the plan first")?;
+    // After a failure, carry on from where that run stopped: steps that
+    // succeeded and have not changed are not run again, whatever the revision.
+    // After a session boundary, carry on from the far side of it.
+    let from = match locked(&plans.failed).clone() {
+        Some(f) => Some(f.checkpoint),
+        None => locked(&plans.waiting).clone().filter(|w| w.parent() == path.parent()),
+    };
+    let resume = match from {
+        Some(f) => Some(keyjutsu_core::approvals::load_checkpoint(&open_store()?, &f)?),
+        None => None,
+    };
+    // Crossing a boundary is the operator's decision, made on what KeyJutsu
+    // found on this side of it, and made by typing RESUME: Rust compares it.
+    let resume_gate = resume.as_ref().and_then(|c| c.boundary.as_ref()).map(|_| {
+        let channel = on_event.clone();
+        let answer = plans.answer.clone();
+        let gate: keyjutsu_core::boundary::ResumeGate =
+            Arc::new(move |notice: &keyjutsu_core::boundary::BoundaryNotice| {
+                *locked(&answer.0) = None;
+                let _ = channel.send(RunMessage::Resume { notice: notice.clone() });
+                let (lock, ready) = &*answer;
+                let mut slot = locked(lock);
+                loop {
+                    if let Some(a) = slot.take() {
+                        return a.as_deref() == Some(RESUME_WORD);
+                    }
+                    slot = ready.wait(slot).unwrap_or_else(|e| e.into_inner());
+                }
+            });
+        gate
+    });
+    let remember = plans.inner().clone();
     let checkpoint = path.with_file_name("snapshot.checkpoint.json");
     *locked(&plans.checkpoint) = Some(checkpoint.clone());
     let answer = plans.answer.clone();
@@ -520,6 +614,7 @@ fn plan_run(
             fingerprint::now_secs(),
         )
         .then_some(gate),
+        resume_gate,
         ..ExecuteOptions::default()
     };
     std::thread::spawn(move || {
@@ -538,10 +633,11 @@ fn plan_run(
             .collect();
         let (tx, rx) = channel();
         *locked(&sink.forward) = Some(tx);
-        let (outcome, _) = execute(
+        let started = fingerprint::now_rfc3339();
+        let (outcome, finished_checkpoint) = execute(
             &Driver { session: &session, events: &rx },
             &snapshot,
-            None,
+            resume,
             &options,
             &fingerprint::now_rfc3339,
             &|event| {
@@ -549,15 +645,165 @@ fn plan_run(
             },
         );
         *locked(&sink.forward) = None;
-        let git = baseline.iter().filter_map(|(before, copies)| git::report(before, copies).ok()).collect();
+        *locked(&remember.failed) = match &outcome {
+            keyjutsu_core::execute::Outcome::Failed { step, expected, actual, output } => Some(Failed {
+                step: step.clone(),
+                failure: keyjutsu_core::agent::RunFailure {
+                    expected: expected.clone(),
+                    actual: actual.clone(),
+                    output: output.clone(),
+                },
+                checkpoint: checkpoint.clone(),
+            }),
+            _ => None,
+        };
+        // Still on the near side of a boundary (it stopped at one, or the
+        // resume was refused): the next run continues from here.
+        *locked(&remember.waiting) = finished_checkpoint.boundary.is_some().then(|| checkpoint.clone());
+        let git: Vec<git::RepoReport> =
+            baseline.iter().filter_map(|(before, copies)| git::report(before, copies).ok()).collect();
+        // Recorded in the encrypted history, as the CLI records its runs, so
+        // a run that worked can become a Technique.
+        let finished = fingerprint::now_rfc3339();
+        let record = keyjutsu_core::history::SessionRecord {
+            id: keyjutsu_core::store::new_id(&finished),
+            started_at: started,
+            finished_at: finished,
+            task: snapshot.plan().title.clone().unwrap_or_else(|| snapshot.plan().task_id.clone()),
+            agent: snapshot.plan().agent.clone(),
+            snapshot: snapshot.to_json(),
+            checkpoint: Some(finished_checkpoint),
+            outcome: outcome.clone(),
+            git: git.clone(),
+        };
+        let session = open_store()
+            .and_then(|s| keyjutsu_core::history::save(&s, &record))
+            .map(|()| record.id.clone())
+            .ok();
         let _ = on_event.send(RunMessage::Done {
             outcome,
             snapshot: path.display().to_string(),
             checkpoint: checkpoint.display().to_string(),
             git,
+            session,
         });
     });
     Ok(())
+}
+
+/// What the operator types to cross a session boundary.
+const RESUME_WORD: &str = "RESUME";
+
+/// The run waiting at a boundary: the one this window stopped, or, after a
+/// restart, the most recent the app approved.
+fn find_waiting(plans: &Plans) -> Result<Option<keyjutsu_core::boundary::Waiting>, String> {
+    let mut candidates: Vec<PathBuf> = locked(&plans.waiting).clone().into_iter().collect();
+    if let Ok(dirs) = std::fs::read_dir(keyjutsu_core::workspace::runs_root()) {
+        candidates.extend(dirs.flatten().map(|d| d.path().join("snapshot.checkpoint.json")));
+    }
+    Ok(keyjutsu_core::boundary::find_waiting(&open_store()?, candidates))
+}
+
+/// A run waiting on the far side of a restart or other session boundary,
+/// if there is one: after a Windows restart, the app offers to continue it.
+#[tauri::command]
+fn run_waiting(plans: State<'_, Arc<Plans>>) -> Result<Option<WaitingRun>, String> {
+    Ok(find_waiting(&plans)?.and_then(|w| {
+        let plan = w.snapshot.plan();
+        let wait = w.wait()?;
+        Some(WaitingRun {
+            title: plan.title.clone().unwrap_or_else(|| plan.task_id.clone()),
+            after_phase: wait.after_phase.clone(),
+            boundary: wait.kind,
+            recorded_at: wait.recorded_at.clone(),
+        })
+    }))
+}
+
+/// Open the waiting run to continue it. Nothing runs: the next run resumes
+/// from its checkpoint, and asks before crossing the boundary.
+#[tauri::command]
+fn run_waiting_open(plans: State<'_, Arc<Plans>>) -> Result<WaitingOpened, String> {
+    let keyjutsu_core::boundary::Waiting {
+        snapshot, snapshot_path: path, checkpoint_path: checkpoint, ..
+    } = find_waiting(&plans)?.ok_or("no run is waiting to continue")?;
+    let draft = keyjutsu_core::plan::parse::ValidPlan::revalidate(snapshot.plan().clone(), false)
+        .map_err(|e| e.to_string())?;
+    let task = snapshot.plan().title.clone().unwrap_or_else(|| snapshot.plan().task_id.clone());
+    let w = Workspace::new(task, draft);
+    let view = w.view();
+    let sealed = Sealed {
+        snapshot_hash: snapshot.snapshot_hash().to_owned(),
+        path: path.display().to_string(),
+        sealed_at: snapshot.sealed_at().to_owned(),
+    };
+    *locked(&plans.workspace) = Some(w);
+    *locked(&plans.sealed) = Some((snapshot, path));
+    *locked(&plans.failed) = None;
+    *locked(&plans.checkpoint) = Some(checkpoint.clone());
+    *locked(&plans.waiting) = Some(checkpoint);
+    Ok(WaitingOpened { view, sealed })
+}
+
+/// Every recorded run, newest first.
+#[tauri::command]
+fn history_list() -> Result<Vec<keyjutsu_core::history::SessionSummary>, String> {
+    let mut list = keyjutsu_core::history::list(&open_store()?)?;
+    list.reverse();
+    Ok(list)
+}
+
+#[tauri::command]
+fn history_show(id: String) -> Result<keyjutsu_core::history::SessionRecord, String> {
+    keyjutsu_core::history::load(&open_store()?, &id)
+}
+
+/// Make a completed run into a Technique. Each pair is a parameter's name and
+/// the value in the run's plan that it stands for.
+#[tauri::command]
+fn technique_promote(
+    session: String,
+    name: String,
+    description: String,
+    params: Vec<(String, String)>,
+) -> Result<keyjutsu_core::technique::Technique, String> {
+    let store = open_store()?;
+    let record = keyjutsu_core::history::load(&store, &session)?;
+    let promote: Vec<keyjutsu_core::technique::Promote<'_>> = params
+        .iter()
+        .map(|(n, v)| keyjutsu_core::technique::Promote { name: n, description: "", value: v, pattern: None })
+        .collect();
+    let t = keyjutsu_core::technique::promote(
+        &record,
+        &name,
+        &description,
+        &promote,
+        &fingerprint::now_rfc3339(),
+    )?;
+    keyjutsu_core::technique::save(&store, &t)?;
+    Ok(t)
+}
+
+#[tauri::command]
+fn technique_list() -> Result<Vec<keyjutsu_core::technique::Technique>, String> {
+    keyjutsu_core::technique::list(&open_store()?)
+}
+
+#[tauri::command]
+fn technique_use(
+    id: String,
+    values: BTreeMap<String, String>,
+    plans: State<'_, Arc<Plans>>,
+) -> Result<keyjutsu_core::ipc::TechniqueDraft, String> {
+    let t = keyjutsu_core::technique::latest(&open_store()?, &id)?;
+    let draft = keyjutsu_core::technique::instantiate(&t, &values)?;
+    let fit = keyjutsu_core::technique::fit(&t, &draft, &fingerprint::collect(Some(draft.plan())));
+    let w = Workspace::open(&draft.to_json()).map_err(|e| e.to_string())?;
+    let view = w.view();
+    *locked(&plans.workspace) = Some(w);
+    *locked(&plans.sealed) = None;
+    *locked(&plans.failed) = None;
+    Ok(keyjutsu_core::ipc::TechniqueDraft { view, fit })
 }
 
 /// The operator's answer to a critical confirmation: what they typed, or
@@ -649,8 +895,13 @@ fn main() {
     let app = tauri::Builder::default()
         .manage(sessions)
         .manage(plans)
+        .manage(Arc::new(Diagnostics::default()))
         .invoke_handler(tauri::generate_handler![
             readiness_scan,
+            run_waiting,
+            run_waiting_open,
+            diagnostics_preview,
+            diagnostics_save,
             terminal_profile,
             terminal_open,
             terminal_write,
@@ -673,6 +924,12 @@ fn main() {
             workspace_validate,
             workspace_stage,
             workspace_retry_step,
+            workspace_fix_failure,
+            history_list,
+            history_show,
+            technique_promote,
+            technique_list,
+            technique_use,
             workspace_revise,
             workspace_review,
             workspace_approve,
