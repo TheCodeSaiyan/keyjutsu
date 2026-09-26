@@ -48,7 +48,9 @@ dialog, or in the run's own console, where the keys you type while it asks
 go to the answer and never to the shell. The hour counts to the moment the
 step comes up, so a long run can't carry an approval past it. Within the
 hour, the phrase you typed at approval stands, because being asked twice in
-five minutes teaches you to type it without reading.
+five minutes teaches you to type it without reading. If people are watching,
+[When KeyJutsu needs you](../performing.md#when-keyjutsu-needs-you-mid-performance)
+has ways to be asked that keep the illusion.
 
 If the plan has Administrator steps, Windows asks once, now, to start
 KeyJutsu's elevation broker, so no UAC prompt can appear in the middle of the

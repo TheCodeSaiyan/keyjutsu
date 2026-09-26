@@ -47,6 +47,9 @@ pub struct RunArgs<'a> {
     pub isolate: Option<Isolation>,
     /// Keep no record of the session.
     pub ephemeral: bool,
+    /// Put nothing of KeyJutsu's in the console: questions and notices go
+    /// to the window title, and step titles do not.
+    pub discreet: bool,
 }
 
 /// Where a run keeps its Git record: next to the snapshot.
@@ -192,7 +195,19 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     let asker = console::Asker::default();
     let asking = asker.clone();
     let sealed_at = snapshot.sealed_at().to_owned();
+    let discreet = args.discreet;
     let critical_gate: keyjutsu_core::execute::CriticalGate = Arc::new(move |c| {
+        if discreet {
+            // Only the title bar says so, and the answer is not shown.
+            let typed = asking.ask_in_title(&format!(
+                "KeyJutsu is waiting: type {} and press Enter, or Esc to stop",
+                c.phrase
+            ));
+            if typed.as_deref().map(str::trim) != Some(c.phrase.as_str()) {
+                console::set_title("KeyJutsu: not confirmed, so nothing more runs");
+            }
+            return typed;
+        }
         let mut text = format!("\n\nCRITICAL ACTION  {}  (approved {sealed_at})\n", c.title);
         for command in &c.commands {
             text.push_str(&format!("  runs:      {command}\n"));
@@ -317,6 +332,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         checkpoint_store: Some(store.clone()),
         ..ExecuteOptions::default()
     };
+    let discreet_run = args.discreet;
     let (plan_for_git, git_dir_c, baseline_c, start_c) =
         (snapshot.plan().clone(), git_dir.clone(), baseline.clone(), start.clone());
     let controller: console::Controller = Box::new(move |session, events| {
@@ -358,7 +374,8 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::SetTitle(t));
         };
         let observe = |e: ExecutionEvent| match &e {
-            ExecutionEvent::StepStarting { title: t, .. } => title(t),
+            // Discreet: the title bar is kept for what needs the operator.
+            ExecutionEvent::StepStarting { title: t, .. } if !discreet_run => title(t),
             // Staged typing is off: the operator must stop mashing and answer
             // for real, in the shell's own masked prompt.
             ExecutionEvent::CredentialRequired { prompt, .. } => {

@@ -661,3 +661,38 @@ fn an_old_approval_of_a_critical_step_is_confirmed_again_just_before_it_runs_in_
     writer.lock().unwrap().write_all(b"exit\r").unwrap();
     wait_exit(&mut child, &screen);
 }
+
+/// Discreet: the question goes to the window's title bar, the answer is
+/// typed unseen, and nothing of KeyJutsu's appears in the console the room
+/// is watching.
+#[test]
+fn a_discreet_run_asks_in_the_title_bar_and_shows_nothing_in_the_console() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-discreet-critical");
+    let _ = std::fs::remove_dir_all(&dir);
+    let victim = dir.join("victim");
+    std::fs::create_dir_all(&victim).unwrap();
+    std::fs::write(victim.join("keep.txt"), "x").unwrap();
+    let stale = critical_snapshot(&dir, &victim, "2026-09-24T00:00:00Z");
+    let snap = stale.display().to_string();
+    let args = ["run", &snap, "--mode", "direct", "--clean", "--ephemeral", "--presentation", "discreet"];
+    let (mut child, screen, writer) = launch_in(&args, None);
+    assert!(
+        screen.wait_for_raw("KeyJutsu is waiting: type REMOVE THE VICTIM and press Enter"),
+        "{}",
+        screen.plain()
+    );
+    writer.lock().unwrap().write_all(b"REMOVE THE VICTIM\r").unwrap();
+    let deadline = Instant::now() + TIMEOUT;
+    while victim.exists() {
+        assert!(Instant::now() < deadline, "the step never ran:\n{}", screen.plain());
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(screen.wait_for_raw("the run has ended"), "{}", screen.plain());
+    let seen = screen.plain();
+    assert!(!seen.contains("CRITICAL ACTION"), "{seen}");
+    assert!(!seen.contains("REMOVE THE VICTIM"), "the answer was shown: {seen}");
+    std::thread::sleep(Duration::from_millis(500));
+    writer.lock().unwrap().write_all(&win32_key(0x4B, 0x25, 0x0B, 0x1A)).unwrap();
+    writer.lock().unwrap().write_all(b"exit\r").unwrap();
+    assert!(wait_exit(&mut child, &screen).success(), "{}", screen.plain());
+}
