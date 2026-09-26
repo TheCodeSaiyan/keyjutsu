@@ -806,7 +806,9 @@ pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
 
 /// Execute `snapshot` on the session. Blocks until the plan completes, fails,
 /// is disarmed or cannot continue; `observe` hears every step as it goes.
+/// Only one run changes the machine at a time: the caller holds the lock.
 pub fn execute(
+    _held: &crate::runlock::RunLock,
     driver: &Driver<'_>,
     snapshot: &ApprovedSnapshot,
     resume: Option<Checkpoint>,

@@ -87,6 +87,7 @@ fn phase1(dir: &Path) -> ExitCode {
 
     let (session, events) = open_shell();
     let (outcome, checkpoint) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &session, events: &events },
         &snap,
         None,
@@ -107,6 +108,7 @@ fn phase1(dir: &Path) -> ExitCode {
     // Before any restart, resuming must be refused.
     let yes: ResumeGate = Arc::new(|_| true);
     let (early, _) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &session, events: &events },
         &snap,
         Some(checkpoint),
@@ -134,6 +136,7 @@ fn phase2(dir: &Path) -> ExitCode {
 
     // Restarted, but not yet confirmed: nothing may run.
     let (unconfirmed, _) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &session, events: &events },
         &snap,
         Some(checkpoint.clone()),
@@ -151,6 +154,7 @@ fn phase2(dir: &Path) -> ExitCode {
         true
     });
     let (outcome, _) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &session, events: &events },
         &snap,
         Some(checkpoint),

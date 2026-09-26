@@ -595,6 +595,9 @@ fn plan_run(
         .steps
         .iter()
         .any(|s| s.privilege == Some(keyjutsu_core::plan::model::Privilege::Administrator));
+    // One run changes this machine at a time, and this one is refused before
+    // Windows is asked to start a broker for it. Held until the run ends.
+    let held = keyjutsu_core::runlock::RunLock::take()?;
     let mut elevated_runner: Option<Arc<dyn keyjutsu_core::elevation::ElevatedRunner>> = None;
     let mut fingerprint_now: Option<keyjutsu_core::boundary::FingerprintNow> = None;
     if needs_admin && !keyjutsu_core::elevation::is_elevated() {
@@ -650,6 +653,7 @@ fn plan_run(
         *locked(&sink.forward) = Some(tx);
         let started = fingerprint::now_rfc3339();
         let (outcome, finished_checkpoint) = execute(
+            &held,
             &Driver { session: &session, events: &rx },
             &snapshot,
             resume,
@@ -695,6 +699,9 @@ fn plan_run(
             .and_then(|s| keyjutsu_core::history::save(&s, &record))
             .map(|()| record.id.clone())
             .ok();
+        // Free before the window hears the run is over, so a run started at
+        // once from there is not refused.
+        drop(held);
         let _ = on_event.send(RunMessage::Done {
             outcome,
             snapshot: path.display().to_string(),
@@ -871,6 +878,9 @@ async fn recovery_run(
     let (session, sink) = sessions.get(id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let items = plan_recovery(&snapshot, &checkpoint, &[])?;
+        // Recovery changes the machine too: one run or recovery at a time,
+        // refused before Windows is asked to start a broker for it.
+        let held = keyjutsu_core::runlock::RunLock::take()?;
         // An Administrator step's recovery commands run in the elevation
         // broker, started now with one UAC prompt, never in this terminal.
         let broker = if keyjutsu_core::recovery::needs_broker(&snapshot, &items) {
@@ -889,6 +899,7 @@ async fn recovery_run(
         *locked(&sink.forward) = Some(tx);
         let driver = Driver { session: &session, events: &rx };
         let results = recover(
+            &held,
             Some(&driver),
             broker.as_ref().map(|b| b as &dyn keyjutsu_core::elevation::ElevatedRunner),
             &snapshot,

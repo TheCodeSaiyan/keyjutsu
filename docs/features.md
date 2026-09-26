@@ -194,9 +194,9 @@ waiting, and asks before it crosses the boundary, as the CLI does.
 
 ## Checked against its own rules
 
-The eight release gates are named lists of tests, 80 in all,
-run by `pnpm release:gates` and in CI; a renamed or deleted test fails its
-gate. Untrusted inputs are fuzzed as part of the ordinary suite: plans,
+The eight release gates are named lists of tests, 90 in all,
+run by `pnpm release:gates`, in CI, and on the tagged commit before a release
+is published; a renamed or deleted test fails its gate. Untrusted inputs are fuzzed as part of the ordinary suite: plans,
 snapshots, broker requests and terminal output. Fuzzing the terminal scanner
 found that any command printing an unfinished escape sequence could make a
 step hang until its timeout; it was fixed with a test that fails on the old

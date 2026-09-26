@@ -98,6 +98,7 @@ fn run(
     resume: Option<Checkpoint>,
 ) -> (Outcome, Checkpoint) {
     execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &s.session, events: &s.events },
         snap,
         resume,

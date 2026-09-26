@@ -89,6 +89,7 @@ fn run(
 ) -> (Outcome, Checkpoint, Vec<ExecutionEvent>) {
     let seen = Mutex::new(Vec::new());
     let (outcome, checkpoint) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &t.session, events: &t.events },
         snap,
         resume,

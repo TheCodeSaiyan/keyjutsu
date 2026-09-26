@@ -159,6 +159,15 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         }
     }
     let fingerprint_now: keyjutsu_core::boundary::FingerprintNow = Arc::new(move |_| now.clone());
+    // One run changes this machine at a time, and this one is refused
+    // before Windows is asked to start a broker for it.
+    let held = match keyjutsu_core::runlock::RunLock::take() {
+        Ok(l) => l,
+        Err(reason) => {
+            eprintln!("keyjutsu: will not run: {reason}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Resuming past a session boundary needs the operator's word, typed
     // here on the plain console before anything starts.
@@ -385,6 +394,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             _ => {}
         };
         let done = execute(
+            &held,
             &Driver { session: &session, events: &events },
             &snap,
             resume,

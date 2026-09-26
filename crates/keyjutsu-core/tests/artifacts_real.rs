@@ -119,6 +119,7 @@ fn run(snap: &ApprovedSnapshot, store: &Path) -> Outcome {
         ..ExecuteOptions::default()
     };
     let (outcome, _) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &session, events: &events },
         snap,
         None,

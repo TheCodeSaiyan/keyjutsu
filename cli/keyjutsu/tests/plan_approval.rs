@@ -154,6 +154,29 @@ fn run_refuses_a_snapshot_this_account_did_not_approve() {
     }
 }
 
+/// While one run changes the machine, another is refused before it starts
+/// anything, broker and UAC prompt included.
+#[test]
+fn a_second_run_is_refused_while_one_changes_the_machine() {
+    let dir = scratch("one-at-a-time");
+    let file = write(&dir, "plan.json", &read_only_plan());
+    let snap = dir.join("snap.json");
+    let approved = keyjutsu(&["plan", "approve", &file, "--out", snap.to_str().unwrap()]);
+    assert!(approved.status.success(), "{}", text(&approved));
+    let name = format!(r"Local\keyjutsu-cli-test-held-{}", std::process::id());
+    let running = keyjutsu_core::runlock::RunLock::take_named(&name).unwrap();
+    let refused = Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
+        .args(["run", snap.to_str().unwrap()])
+        .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env("KEYJUTSU_RUN_LOCK", &name)
+        .output()
+        .unwrap();
+    assert_eq!(refused.status.code(), Some(1), "{}", text(&refused));
+    assert!(text(&refused).contains("another KeyJutsu run is changing this machine"), "{}", text(&refused));
+    assert!(!dir.join("snap.checkpoint.json").exists(), "nothing started");
+    drop(running);
+}
+
 #[test]
 fn an_existing_snapshot_is_not_overwritten_without_force() {
     let dir = scratch("force");
