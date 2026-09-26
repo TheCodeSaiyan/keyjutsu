@@ -599,7 +599,12 @@ fn plan_run(
     if needs_admin && !keyjutsu_core::elevation::is_elevated() {
         let exe =
             keyjutsu_broker::broker_path().ok_or("keyjutsu-broker.exe is not installed next to KeyJutsu")?;
-        elevated_runner = Some(Arc::new(keyjutsu_broker::launch(&exe, &path, snapshot.snapshot_hash())?));
+        elevated_runner = Some(Arc::new(keyjutsu_broker::launch(
+            &exe,
+            &path,
+            snapshot.snapshot_hash(),
+            &keyjutsu_core::artifacts::default_store(),
+        )?));
     }
     let options = ExecuteOptions {
         elevated_runner,

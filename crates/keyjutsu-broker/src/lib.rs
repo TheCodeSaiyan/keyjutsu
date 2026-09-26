@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use keyjutsu_core::elevation::{ElevatedRun, ElevatedRunner};
-use keyjutsu_core::execute::{ForwardingSink, Performed, perform, staged_for};
+use keyjutsu_core::execute::{ForwardingSink, Performed, hand_artifacts, perform, staged_for};
 use keyjutsu_core::execution::{ExecutionMode, PerformanceConfig, StepOutcome};
 use keyjutsu_core::headless::Collector;
 use keyjutsu_core::plan::ApprovedSnapshot;
@@ -31,6 +31,8 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(windows)]
 pub mod pipe;
+#[cfg(windows)]
+pub mod protected;
 
 /// Both ends must speak exactly this version.
 pub const PROTOCOL: u32 = 1;
@@ -164,10 +166,57 @@ impl Broker {
     }
 }
 
+/// Copy a step's artifacts from the operator's store `from` into `into`,
+/// laid out as a store, and return the line that hands them to the step.
+/// Each copy is checked against the hash pinned in the approved snapshot
+/// after it is made, so a staged file changed before or during the copy is
+/// refused: only what is in `into` is ever handed over.
+pub fn hand_over(step: &Step, from: &Path, into: &Path) -> Result<Option<String>, String> {
+    for a in &step.artifacts {
+        let Some(sha) = &a.sha256 else {
+            return Err(format!("artifact `{}` is not pinned to a hash", a.name));
+        };
+        let source = keyjutsu_core::artifacts::staged_path(from, sha, &a.name);
+        let copy = keyjutsu_core::artifacts::staged_path(into, sha, &a.name);
+        if let Some(parent) = copy.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::copy(&source, &copy)
+            .map_err(|_| format!("artifact `{}` is not staged: run `keyjutsu plan stage`", a.name))?;
+    }
+    keyjutsu_core::artifacts::assignment(into, step)
+}
+
 /// Run a step's lines in a fresh shell of its own, directly (no typing
 /// performance), and report each line's outcome and what was printed.
 /// In the broker this shell is elevated because the broker is.
 pub fn run_in_shell(snapshot: &ApprovedSnapshot, step: &Step) -> Result<ElevatedRun, String> {
+    run_step(snapshot, step, None)
+}
+
+/// As `run_in_shell`, handing the step its artifacts from the operator's
+/// store `artifacts`. They are copied into a folder only Administrators can
+/// write to, checked there, and removed after the step.
+pub fn run_step(
+    snapshot: &ApprovedSnapshot,
+    step: &Step,
+    artifacts: Option<&Path>,
+) -> Result<ElevatedRun, String> {
+    #[cfg(windows)]
+    let handed = if step.artifacts.is_empty() {
+        None
+    } else {
+        let store =
+            artifacts.ok_or("this step has artifacts, and the broker was not told where they are staged")?;
+        let dir = protected::ProtectedDir::create()?;
+        let line = hand_over(step, store, dir.path())?;
+        Some((dir, line))
+    };
+    #[cfg(not(windows))]
+    let handed: Option<((), Option<String>)> = {
+        let _ = artifacts;
+        if step.artifacts.is_empty() { None } else { return Err("artifacts need Windows".into()) }
+    };
     let kind = match step.shell.as_ref().map(|s| s.kind) {
         Some(ShellName::WindowsPowershell) => ShellKind::WindowsPowershell,
         Some(ShellName::Cmd) => ShellKind::Cmd,
@@ -189,7 +238,11 @@ pub fn run_in_shell(snapshot: &ApprovedSnapshot, step: &Step) -> Result<Elevated
     let before = out.plain_output().len();
     let config = PerformanceConfig { mode: ExecutionMode::Direct, ..PerformanceConfig::default() };
     let driver = keyjutsu_core::execute::Driver { session: &session, events: &events };
-    let performed = perform(&driver, staged_for(step, show), config);
+    let mut script = staged_for(step, show);
+    if let Some((_, Some(line))) = &handed {
+        hand_artifacts(&mut script, step, line.clone());
+    }
+    let performed = perform(&driver, script, config);
     let _ = session.wait_for_prompt(Duration::from_secs(10));
     let text = out.plain_output();
     session.close();
@@ -315,7 +368,14 @@ pub fn random_hex() -> String {
 }
 
 /// Start the broker elevated (one UAC prompt) for `snapshot`, and connect.
-pub fn launch(broker_exe: &Path, snapshot_file: &Path, snapshot_hash: &str) -> Result<BrokerClient, String> {
+/// `artifacts` is the operator's artifact store; the broker trusts nothing
+/// in it but what matches the approved snapshot's pinned hashes.
+pub fn launch(
+    broker_exe: &Path,
+    snapshot_file: &Path,
+    snapshot_hash: &str,
+    artifacts: &Path,
+) -> Result<BrokerClient, String> {
     let name = format!("keyjutsu-broker-{}", &random_hex()[..32]);
     let secret = random_hex();
     let args = [
@@ -329,6 +389,8 @@ pub fn launch(broker_exe: &Path, snapshot_file: &Path, snapshot_hash: &str) -> R
         snapshot_hash.to_owned(),
         "--secret".into(),
         secret.clone(),
+        "--artifacts".into(),
+        artifacts.display().to_string(),
     ];
     let quoted: Vec<String> = args.iter().map(|a| format!("'{}'", a.replace('\'', "''"))).collect();
     let script = format!(

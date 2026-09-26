@@ -150,7 +150,9 @@ keyjutsu git diff fix.approved.json
 A plan that downloads something names it with a SHA-256. `plan stage` fetches
 and checks it before approval, and it's checked again just before the step,
 so a URL that starts serving something else after you approved is caught.
-Nothing is downloaded while a plan runs.
+Nothing is downloaded while a plan runs. An Administrator step is given a
+copy the broker checked, in a folder only Administrators can change, never
+the file in your profile.
 
 ## Plans that cross a restart
 

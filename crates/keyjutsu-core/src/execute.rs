@@ -390,6 +390,22 @@ fn engine_mode(m: ExecutionMode) -> EngineMode {
 /// The staged lines for one plan step: its commands, then its visible
 /// validation unless the plan hides it. Operator steps become one user-input
 /// line: the operator does what the step says and presses Enter.
+/// Put the line that hands a step its artifacts in front of its commands.
+/// It is written directly, never performed.
+pub fn hand_artifacts(script: &mut StagedScript, step: &Step, line: String) {
+    script.steps.insert(
+        0,
+        StagedStep {
+            id: format!("{}#artifacts", step.id),
+            title: step.title.clone(),
+            command: line,
+            mode: Some(EngineMode::Direct),
+            submit: None,
+            answers: None,
+        },
+    );
+}
+
 pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
     if let (StepKind::Credential, Some(request)) = (step.kind, &step.credential) {
         return StagedScript {
@@ -1114,17 +1130,7 @@ pub fn execute(
         // Hand the step its staged artifacts, checked again just before it
         // runs; a copy that changed since staging stops the plan here.
         match crate::artifacts::assignment(&options.artifact_store, step) {
-            Ok(Some(line)) => script.steps.insert(
-                0,
-                StagedStep {
-                    id: format!("{id}#artifacts"),
-                    title: step.title.clone(),
-                    command: line,
-                    mode: Some(EngineMode::Direct),
-                    submit: None,
-                    answers: None,
-                },
-            ),
+            Ok(Some(line)) => hand_artifacts(&mut script, step, line),
             Ok(None) => {}
             Err(reason) => {
                 checkpoint.in_progress = None;
@@ -1151,18 +1157,6 @@ pub fn execute(
                     checkpoint,
                 );
             };
-            if !step.artifacts.is_empty() {
-                checkpoint.in_progress = None;
-                save(&checkpoint);
-                return finish(
-                    Outcome::Blocked {
-                        reason: format!(
-                            "step `{id}` needs Administrator and artifacts; the broker cannot hand over artifacts yet"
-                        ),
-                    },
-                    checkpoint,
-                );
-            }
             match runner.run_step(snapshot.snapshot_hash(), &id, &step_hash) {
                 Ok(run) => {
                     elevated_output = Some(run.output.clone());

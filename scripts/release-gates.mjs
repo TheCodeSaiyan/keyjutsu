@@ -20,6 +20,8 @@ const gates = {
     "any_byte_stream_is_read_as_frames_or_refused",
     "a_frame_claiming_four_gigabytes_is_refused_before_anything_is_allocated",
     "a_broker_that_dies_mid_step_leaves_the_step_in_doubt",
+    "an_elevated_step_is_handed_only_a_checked_copy_the_operator_cannot_touch",
+    "an_unelevated_account_cannot_write_into_the_admins_only_folder",
   ],
   "Plan integrity": [
     "changing_a_step_invalidates_it_and_everything_after_it",
