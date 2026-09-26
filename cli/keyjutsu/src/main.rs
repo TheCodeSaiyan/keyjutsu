@@ -646,7 +646,7 @@ fn session(options: SessionOptions, performance: Option<console::Performance>) -
         .as_ref()
         .map(|p| p.script.steps.iter().map(|s| s.title.clone()).collect())
         .unwrap_or_default();
-    let summary = match console::run(options, performance, None) {
+    let summary = match console::run(options, performance, None, None) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("keyjutsu: {e}");

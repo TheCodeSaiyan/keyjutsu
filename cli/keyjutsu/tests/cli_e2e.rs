@@ -32,6 +32,20 @@ impl Screen {
         true
     }
 
+    /// As `wait_for`, in the raw stream, where window titles are too.
+    fn wait_for_raw(&self, needle: &str) -> bool {
+        let deadline = Instant::now() + TIMEOUT;
+        let mut text = self.text.lock().unwrap();
+        while !text.contains(needle) {
+            let now = Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            text = self.changed.wait_timeout(text, deadline - now).unwrap().0;
+        }
+        true
+    }
+
     fn plain(&self) -> String {
         strip(&self.text.lock().unwrap())
     }
@@ -582,7 +596,7 @@ fn wait_exit(
 }
 
 #[test]
-fn an_old_approval_of_a_critical_step_is_confirmed_again_before_the_run() {
+fn an_old_approval_of_a_critical_step_is_confirmed_again_just_before_it_runs_in_the_cli() {
     let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-stale-critical");
     let _ = std::fs::remove_dir_all(&dir);
     let victim = dir.join("victim");
@@ -600,14 +614,21 @@ fn an_old_approval_of_a_critical_step_is_confirmed_again_before_the_run() {
         ]
     };
 
-    // Approved yesterday: asked again, and a wrong answer runs nothing.
+    // Approved yesterday: asked again in the run's console, just before the
+    // step, and a wrong answer runs nothing. Keys typed while it asks go to
+    // the answer, not the shell.
     let a = args(&stale);
     let (mut child, screen, writer) = launch_in(&a.iter().map(String::as_str).collect::<Vec<_>>(), None);
     assert!(screen.wait_for("Type REMOVE THE VICTIM to let it run"), "{}", screen.plain());
     writer.lock().unwrap().write_all(b"yes\r").unwrap();
+    assert!(screen.wait_for("Not confirmed: it will not run"), "{}", screen.plain());
+    assert!(victim.join("keep.txt").exists());
+    // The shell is handed back, and says so in the window's title.
+    assert!(screen.wait_for_raw("the run has ended"), "{}", screen.plain());
+    writer.lock().unwrap().write_all(b"exit\r").unwrap();
     let status = wait_exit(&mut child, &screen);
     assert!(!status.success());
-    assert!(screen.wait_for("Not confirmed. Nothing ran."), "{}", screen.plain());
+    assert!(screen.wait_for("was not confirmed"), "{}", screen.plain());
     assert!(victim.join("keep.txt").exists());
 
     // The right phrase lets it run.

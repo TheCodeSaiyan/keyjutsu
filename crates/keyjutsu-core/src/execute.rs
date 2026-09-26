@@ -287,8 +287,9 @@ pub struct ExecuteOptions {
     pub settled: BTreeMap<String, bool>,
     /// How long to wait for the shell to return to its prompt between steps.
     pub prompt_timeout: Duration,
-    /// Asked just before each critical step. Without one, the typed
-    /// confirmation given at approval is all there is.
+    /// Asked just before a critical step whose approval is more than an
+    /// hour old by then. Within the hour, the phrase typed at approval
+    /// stands; past it, a run with no gate stops at the step.
     pub critical_gate: Option<CriticalGate>,
     /// Where staged artifacts are kept.
     pub artifact_store: PathBuf,
@@ -1055,10 +1056,24 @@ pub fn execute(
                 checkpoint,
             );
         }
-        // A critical step is confirmed again, just before it runs.
-        if let Some(gate) = &options.critical_gate
-            && keyjutsu_plan::approval::is_critical(plan, step)
+        // A critical step approved more than an hour ago is confirmed again,
+        // just before it runs: judged now, not when the run began, so a long
+        // run cannot carry an old approval past its hour.
+        let now_secs = crate::fingerprint::parse_rfc3339(&now()).unwrap_or(u64::MAX);
+        if keyjutsu_plan::approval::is_critical(plan, step)
+            && needs_reconfirmation(snapshot.sealed_at(), now_secs)
         {
+            let Some(gate) = &options.critical_gate else {
+                save(&checkpoint);
+                return finish(
+                    Outcome::Blocked {
+                        reason: format!(
+                            "critical step `{id}` was approved more than an hour ago and must be confirmed again before it runs, and nothing here can ask"
+                        ),
+                    },
+                    checkpoint,
+                );
+            };
             let ask = critical_confirmation(plan, step);
             let typed = gate(&ask);
             if typed.as_deref().map(str::trim) != Some(ask.phrase.as_str()) {

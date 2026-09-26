@@ -74,7 +74,7 @@ Approving seals the plan into a snapshot: each step bound to a hash of what
 it runs and everything before it. Change a step and its approval, and every
 later step's, falls away. A critical step, KeyJutsu's own judgement rather
 than the agent's, needs its own typed phrase, both when it's approved and
-again before it runs if the approval is over an hour old.
+again just before it runs if, by then, the approval is over an hour old.
 
 The approval is also recorded in an encrypted store that only your Windows
 account on this machine can unlock, and `run` refuses a snapshot without that

@@ -168,7 +168,7 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
             // The terminal was only for the recovery commands.
             session.close();
         });
-        if let Err(e) = console::run(options, None, Some(controller)) {
+        if let Err(e) = console::run(options, None, Some(controller), None) {
             eprintln!("keyjutsu: {e}");
             return ExitCode::FAILURE;
         }
