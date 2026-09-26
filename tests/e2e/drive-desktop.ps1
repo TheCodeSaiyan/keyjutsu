@@ -134,6 +134,11 @@ switch ($Action) {
     $found = $null
     foreach ($try in 1..2) {
       $found = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+      # A label styled in capitals is reported in capitals: match ignoring case.
+      if (-not $found) {
+        $found = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
+          Where-Object { $_.Current.Name -ieq $Arg }) | Select-Object -First 1
+      }
       if ($found) { break }
       Start-Sleep -Seconds 1
     }
