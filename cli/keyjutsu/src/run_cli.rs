@@ -296,7 +296,12 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         println!(
             "This plan has Administrator steps. Windows will ask once, now, to start KeyJutsu's broker."
         );
-        match keyjutsu_broker::launch(&exe, args.snapshot, snapshot.snapshot_hash()) {
+        match keyjutsu_broker::launch(
+            &exe,
+            args.snapshot,
+            snapshot.snapshot_hash(),
+            &keyjutsu_core::artifacts::default_store(),
+        ) {
             Ok(client) => elevated_runner = Some(Arc::new(client)),
             Err(e) => {
                 eprintln!("keyjutsu: the elevation broker did not start: {e}. Nothing ran.");

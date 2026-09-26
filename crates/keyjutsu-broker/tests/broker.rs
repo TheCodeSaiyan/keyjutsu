@@ -213,3 +213,61 @@ fn the_broker_binary_refuses_a_snapshot_it_was_not_launched_for() {
         "an altered snapshot file"
     );
 }
+
+/// A step with one artifact, pinned to `bytes`' hash.
+fn artifact_step(bytes: &[u8]) -> keyjutsu_core::plan::model::Step {
+    let sha = keyjutsu_core::plan::hash::sha256_hex(bytes);
+    let draft = parse_plan(
+        &json!({
+            "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+            "target": {"id": "local", "kind": "local_windows"},
+            "agent": {"name": "codex", "version": "1"},
+            "steps": [{"id": "install", "title": "Install", "objective": "Uses a download.",
+                       "kind": "command", "shell": {"kind": "pwsh"}, "privilege": "administrator",
+                       "artifacts": [{"name": "tool.zip", "source": "https://example.com/tool.zip", "sha256": sha}],
+                       "commands": [{"text": "Get-Item -LiteralPath $KJ_ARTIFACTS['tool.zip']"}]}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    draft.plan().steps[0].clone()
+}
+
+fn stage(store: &Path, step: &keyjutsu_core::plan::model::Step, bytes: &[u8]) -> PathBuf {
+    let a = &step.artifacts[0];
+    let path = keyjutsu_core::artifacts::staged_path(store, a.sha256.as_ref().unwrap(), &a.name);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+/// An elevated step is handed the checked copy in the broker's own folder,
+/// never the operator's staged file, which anything unelevated can change.
+#[test]
+fn an_elevated_step_is_handed_only_a_checked_copy_the_operator_cannot_touch() {
+    use keyjutsu_broker::hand_over;
+    let dir = scratch("hand-over");
+    let (store, into) = (dir.join("store"), dir.join("protected"));
+    let step = artifact_step(b"the approved tool");
+    let staged = stage(&store, &step, b"the approved tool");
+
+    let line = hand_over(&step, &store, &into).unwrap().unwrap();
+    let copy =
+        keyjutsu_core::artifacts::staged_path(&into, step.artifacts[0].sha256.as_ref().unwrap(), "tool.zip");
+    assert!(line.contains(&copy.display().to_string()), "{line}");
+    assert!(!line.contains(&staged.display().to_string()), "the operator's copy was handed over: {line}");
+    assert_eq!(std::fs::read(&copy).unwrap(), b"the approved tool");
+
+    // Changed after staging: refused, whatever the operator's store says.
+    let _ = std::fs::remove_dir_all(&into);
+    std::fs::write(&staged, b"something else").unwrap();
+    let refused = hand_over(&step, &store, &into).unwrap_err();
+    assert!(refused.contains("changed since it was staged"), "{refused}");
+
+    // Never staged, or never pinned: refused.
+    let _ = std::fs::remove_dir_all(&store);
+    assert!(hand_over(&step, &store, &into).unwrap_err().contains("not staged"));
+    let mut unpinned = step.clone();
+    unpinned.artifacts[0].sha256 = None;
+    assert!(hand_over(&unpinned, &store, &into).unwrap_err().contains("not pinned"));
+}
