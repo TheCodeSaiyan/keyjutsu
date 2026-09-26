@@ -8,6 +8,6 @@ import type { StepState } from "./StepState";
  */
 export type KeyJutsuState = { revision?: number, steps: { [key in string]: StepState }, snapshot_hash?: string, 
 /**
- * Who did what to which step, in order (§7).
+ * Who did what to which step, in order.
  */
 provenance?: Array<ProvenanceEvent>, };

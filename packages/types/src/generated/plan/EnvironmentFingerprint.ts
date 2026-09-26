@@ -3,7 +3,7 @@ import type { FingerprintEntry } from "./FingerprintEntry";
 
 /**
  * The state of the machine an approval was given against. Compared later to
- * find drift (§33). Collected by `keyjutsu-core`; this crate only holds and
+ * find drift. Collected by `keyjutsu-core`; this crate only holds and
  * compares it.
  */
 export type EnvironmentFingerprint = { 

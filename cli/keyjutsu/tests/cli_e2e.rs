@@ -152,7 +152,7 @@ fn perform_types_the_staged_command_and_disarms_through_the_console() {
     assert!(status.success(), "exit status {status:?}");
 }
 
-/// Milestone 8 end to end: a plan approved with the CLI, then executed by
+/// End to end: a plan approved with the CLI, then executed by
 /// `keyjutsu run` in Performance mode inside a pseudo-console, with keys
 /// mashed through the console input stack.
 #[test]

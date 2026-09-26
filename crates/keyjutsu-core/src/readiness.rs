@@ -5,9 +5,6 @@
 //! ConPTY works, that KeyJutsu's prompt marks survive the user's profile and
 //! that staged typing reaches the input line intact. The probe command only
 //! prints a word.
-//!
-//! Items that later milestones deliver are reported as not yet built rather
-//! than left out, so the scan never implies a check it did not make.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -29,8 +26,6 @@ pub enum CheckStatus {
     Ok,
     Warning,
     Unavailable,
-    /// Belongs to a milestone that has not been built yet.
-    NotYetBuilt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]

@@ -1,4 +1,4 @@
-//! Milestone 4: approval binds to exact step hashes, a change invalidates the
+//! Approval binds to exact step hashes, a change invalidates the
 //! step and everything after it, critical steps need their typed phrase, and
 //! a sealed snapshot refuses to load if anything in it was altered.
 
@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 
 const AT: &str = "2026-09-25T01:00:00Z";
 
-/// §11's shape: s1 -> s2 -> s3 -> s4 -> s5, s2 -> s6, s3 -> s7.
+/// A graph with a branch: s1 -> s2 -> s3 -> s4 -> s5, s2 -> s6, s3 -> s7.
 fn chain() -> Value {
     let step = |n: u32| {
         json!({
@@ -75,7 +75,11 @@ fn changing_a_step_invalidates_it_and_everything_after_it() {
     let mut v = chain();
     v["steps"][2]["commands"][0]["text"] = "Write-Output changed".into();
     let after = plan(&v);
-    assert_eq!(invalidated(&book, &after), ["s3", "s4", "s5", "s7"], "§11's example, exactly");
+    assert_eq!(
+        invalidated(&book, &after),
+        ["s3", "s4", "s5", "s7"],
+        "the change and everything after it, exactly"
+    );
 
     // The untouched branch keeps its approval.
     let status = book.status(after.plan(), after.graph());

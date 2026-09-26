@@ -200,7 +200,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
         v.record("syntax", EvidenceResult::NotApplicable, "cmd.exe has no parser KeyJutsu can ask");
         v.uncertainty.push("cmd.exe syntax is not checked before the step runs".into());
     }
-    // Recovery (§29) is prepared before the step runs, so it must be
+    // Recovery is prepared before the step runs, so it must be
     // something KeyJutsu can actually carry out.
     if let Some(r) = &step.recovery {
         use keyjutsu_plan::model::{CaptureKind, RecoveryStrategy};
@@ -250,7 +250,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
         }
     }
 
-    // Network (§30): every host a line names must be declared, and declared
+    // Network: every host a line names must be declared, and declared
     // for use while the step runs, not only for staging.
     let declared = step.network.as_ref().map(|n| n.destinations.as_slice()).unwrap_or_default();
     for (text, _) in g.lines.iter().chain(g.support_lines.iter()) {
@@ -271,7 +271,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
         }
     }
 
-    // Artifacts (§30): pinned by hash, so what is approved is what runs.
+    // Artifacts: pinned by hash, so what is approved is what runs.
     for a in &step.artifacts {
         if is_cmd {
             v.fail(
@@ -295,7 +295,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
         }
     }
 
-    // Credentials (§25): asked for only through a prompt that masks them.
+    // Credentials: asked for only through a prompt that masks them.
     if step.kind == StepKind::Credential {
         match &step.credential {
             None => v.fail("credential", Readiness::Invalid, "the step does not say what it asks for"),

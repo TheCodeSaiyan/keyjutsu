@@ -1,4 +1,4 @@
-# A real Windows restart across a plan boundary (Milestone 15), in Windows
+# A real Windows restart across a plan boundary, in Windows
 # Sandbox so that nothing but a disposable machine restarts.
 #
 #   pwsh tests/e2e/restart-trial/run.ps1

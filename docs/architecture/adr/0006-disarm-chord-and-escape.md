@@ -1,6 +1,6 @@
 # 0006: The disarm chord is Ctrl+Alt+Shift+K and Esc keeps its meaning
 
-Status: accepted, Milestone 2.
+Status: accepted.
 
 ## Decision
 

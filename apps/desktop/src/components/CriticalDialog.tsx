@@ -3,7 +3,7 @@ import type { execute } from "@keyjutsu/types";
 
 interface Props {
   confirmation: execute.CriticalConfirmation;
-  /** "approve" at approval; "run" just before the step runs (§28). */
+  /** "approve" at approval; "run" just before the step runs. */
   purpose: "approve" | "run";
   onConfirm(typed: string): void;
   onCancel(): void;

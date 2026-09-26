@@ -1,4 +1,4 @@
-//! An independent review of a plan by a second agent (§7).
+//! An independent review of a plan by a second agent.
 //!
 //! A review cannot change the plan. Its findings are shown to the operator and
 //! can be passed to the primary agent as guidance for a revision; they are

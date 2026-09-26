@@ -18,7 +18,7 @@ duration of its own.
 
 ## Contrast, as measured
 
-The kit asks for "contrast suitable for normal text and statuses" (§24). These
+The kit asks for "contrast suitable for normal text and statuses". These
 are the WCAG 2.1 ratios of the kit's pairs, measured when the palette was first
 applied (AA asks 4.5:1 for normal text, 3:1 for large text and for icons):
 

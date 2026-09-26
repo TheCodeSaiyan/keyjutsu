@@ -5,15 +5,14 @@
 //! on the session; when the shell reports them finished, KeyJutsu runs the
 //! step's internal checks, records the result, writes a checkpoint and asks
 //! the plan's walk what comes next. Branches are decided by KeyJutsu from real
-//! outcomes, never by the agent (§10).
+//! outcomes, never by the agent.
 //!
 //! What this refuses to do:
 //!
-//! - run a snapshot that was not validated, or whose steps are not all READY
-//!   (§12);
-//! - carry on past a failure (§2.3): the outcome says what was expected and
+//! - run a snapshot that was not validated, or whose steps are not all READY;
+//! - carry on past a failure: the outcome says what was expected and
 //!   what happened;
-//! - assume a step that was running when KeyJutsu stopped succeeded (§52):
+//! - assume a step that was running when KeyJutsu stopped succeeded:
 //!   the checkpoint marks it in doubt and the operator settles it;
 //! - reuse a result from an earlier run unless the step's hash is unchanged.
 
@@ -98,7 +97,7 @@ pub struct InProgress {
 }
 
 /// Written before and after every step, so a crash, power loss or restart
-/// leaves a record of exactly what is known (§52).
+/// leaves a record of exactly what is known.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export, export_to = "execute/")]
 pub struct Checkpoint {
@@ -107,8 +106,8 @@ pub struct Checkpoint {
     pub runs: Vec<StepRun>,
     /// A step that had started and not finished. Its effect is unknown.
     pub in_progress: Option<InProgress>,
-    /// What each step declared it would change, captured just before it ran
-    /// (§29). Latest last.
+    /// What each step declared it would change, captured just before it ran.
+    /// Latest last.
     #[serde(default)]
     pub captures: Vec<crate::recovery::StepCapture>,
     /// The plan stopped at this boundary and has not yet crossed it.
@@ -173,7 +172,7 @@ pub enum Outcome {
         expected: String,
         actual: String,
         /// The end of what the step printed, without colour codes, so the
-        /// agent asked to fix it can read the real error (§61). Redacted
+        /// agent asked to fix it can read the real error. Redacted
         /// before it is sent anywhere, like everything given to an agent.
         #[serde(default)]
         output: String,
@@ -187,8 +186,8 @@ pub enum Outcome {
     Blocked {
         reason: String,
     },
-    /// Phase `phase` is done and the plan waits for a session boundary
-    /// (§32). Resuming checks that it happened.
+    /// Phase `phase` is done and the plan waits for a session boundary.
+    /// Resuming checks that it happened.
     Boundary {
         phase: String,
         boundary: keyjutsu_plan::model::Boundary,
@@ -213,7 +212,7 @@ pub enum ExecutionEvent {
         step: String,
     },
     /// An Administrator step ran in the elevation broker's own shell; this
-    /// is what it printed (§26, ADR 0011).
+    /// is what it printed (ADR 0011).
     ElevatedOutput {
         step: String,
         text: String,
@@ -231,7 +230,7 @@ pub enum ExecutionEvent {
     },
 }
 
-/// What the operator is shown before a critical step runs (§28).
+/// What the operator is shown before a critical step runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[ts(export, export_to = "execute/")]
 pub struct CriticalConfirmation {
@@ -288,15 +287,15 @@ pub struct ExecuteOptions {
     pub settled: BTreeMap<String, bool>,
     /// How long to wait for the shell to return to its prompt between steps.
     pub prompt_timeout: Duration,
-    /// Asked just before each critical step (§28). Without one, the typed
+    /// Asked just before each critical step. Without one, the typed
     /// confirmation given at approval is all there is.
     pub critical_gate: Option<CriticalGate>,
-    /// Where staged artifacts are kept (§30).
+    /// Where staged artifacts are kept.
     pub artifact_store: PathBuf,
     /// What identifies the far side of a boundary; the real checks if `None`.
     pub boundary_probe: Option<crate::boundary::BoundaryProbe>,
     /// Asked before resuming after a boundary. Without one, a plan never
-    /// resumes past a boundary (§32: resume only after confirmation).
+    /// resumes past a boundary: never without the operator confirming.
     pub resume_gate: Option<crate::boundary::ResumeGate>,
     /// This machine's environment now; collected for real if `None`.
     pub fingerprint_now: Option<crate::boundary::FingerprintNow>,
@@ -473,7 +472,7 @@ pub(crate) fn ps_quote(text: &str) -> String {
     out
 }
 
-/// The command that asks for a credential (§25). The shell's own prompt
+/// The command that asks for a credential. The shell's own prompt
 /// masks what the operator types, keeps it out of history, and holds it as a
 /// SecureString or PSCredential; KeyJutsu passes the keys through and never
 /// holds the secret. The variable name is checked by the schema.
@@ -499,7 +498,7 @@ pub fn credential_answers(request: &CredentialRequest) -> u32 {
     }
 }
 
-/// Removes the credentials a run asked for from the shell (§25: ephemeral).
+/// Removes the credentials a run asked for from the shell: they last only as long as the run.
 pub fn forget_command(variables: &[String]) -> String {
     format!("Remove-Variable -Name {} -Scope Global -ErrorAction Ignore", variables.join(","))
 }
@@ -756,7 +755,7 @@ pub fn execute(
 ) -> (Outcome, Checkpoint) {
     let mut checkpoint = Checkpoint::new(snapshot.snapshot_hash());
     let finish = |outcome: Outcome, checkpoint: Checkpoint| {
-        // Anything short of completion hands the keyboard back (§2.3). A step
+        // Anything short of completion hands the keyboard back. A step
         // that failed only its checks left a performance that had completed,
         // and a completed performance keeps the keyboard until disarmed.
         if outcome != Outcome::Complete {
@@ -769,7 +768,7 @@ pub fn execute(
         return finish(Outcome::Blocked { reason }, checkpoint);
     }
     // Everything the plan downloads must be staged and verified before it
-    // arms (§30): nothing is fetched while it runs.
+    // arms: nothing is fetched while it runs.
     for a in crate::artifacts::artifacts(snapshot.plan()) {
         if let Err(reason) = crate::artifacts::verify(&options.artifact_store, a) {
             return finish(Outcome::Blocked { reason }, checkpoint);
@@ -848,7 +847,7 @@ pub fn execute(
     }
     save(&checkpoint);
 
-    // Boundaries (§32). One is behind the plan once any step after it ran.
+    // Boundaries. One is behind the plan once any step after it ran.
     let probe = options.boundary_probe.clone().unwrap_or_else(crate::boundary::real_probe);
     let phase_of = |id: &str| plan.phases.iter().position(|p| p.steps.iter().any(|s| s == id));
     let mut crossed: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();

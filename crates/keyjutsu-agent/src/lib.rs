@@ -1,6 +1,6 @@
-//! Lite adapters for installed AI coding agents (§5).
+//! Lite adapters for installed AI coding agents.
 //!
-//! An agent investigates and proposes; it never executes (§2.1). KeyJutsu runs
+//! An agent investigates and proposes; it never executes. KeyJutsu runs
 //! each agent's CLI in its read-only mode, gives it a manifest-visible,
 //! redacted context, and treats everything it returns as an untrusted
 //! proposal that must pass the same gates as any other plan.

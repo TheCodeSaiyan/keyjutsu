@@ -1,10 +1,10 @@
 # 0002: ConPTY through `portable-pty`
 
-Status: accepted, Milestone 1.
+Status: accepted.
 
 ## Context
 
-Performance Mode has to run real commands in a real terminal (§15). On
+Performance Mode has to run real commands in a real terminal. On
 Windows that means ConPTY: `CreatePseudoConsole`, a pair of pipes and a
 process started with the pseudo-console attribute. That is a few hundred lines
 of `unsafe` Win32 code to write and keep correct, including the awkward parts

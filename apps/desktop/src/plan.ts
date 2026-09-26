@@ -7,7 +7,7 @@ import type { execute, plan, workspace } from "@keyjutsu/types";
  * check.
  */
 
-/** The kit's canonical state labels (§11), or "Validate" before validation. */
+/** The kit's canonical state labels, or "Validate" before validation. */
 export function readinessLabel(r: plan.Readiness | undefined, everValidated: boolean): string {
   switch (r) {
     case "READY":

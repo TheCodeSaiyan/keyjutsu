@@ -35,15 +35,14 @@ keyjutsu/
 │   │                               hashing, approval and sealed snapshots
 │   ├── keyjutsu-validation/      ✓ readiness, proof, evidence, risk, dry runs
 │   ├── keyjutsu-agent/           ✓ Codex, Claude Code, Gemini, Copilot, Cursor
-│   ├── keyjutsu-security/          M9: credential gates, classified logging
-│   ├── keyjutsu-broker/            M10: elevated broker binary and protocol
-│   └── keyjutsu-storage/           M14: DPAPI-protected SQLite store
+│   └── keyjutsu-broker/          ✓ elevation broker binary and its protocol
 ├── packages/types/               ✓ TypeScript generated from the Rust IPC types
 ├── schemas/plan/v1/              ✓ plan and proposal JSON Schemas, fixtures
 ├── tests/fixtures/               ✓ shared fixtures (Windows Terminal settings)
-├── docs/                         ✓ architecture, ADRs, schema guide
-├── installer/                      M16
-└── .github/workflows/            ✓ CI
+├── tests/e2e/                    ✓ clean-machine trials in Windows Sandbox
+├── scripts/                      ✓ release gates, docs check, versioning, signing
+├── docs/                         ✓ guides, reference, architecture, ADRs
+└── .github/workflows/            ✓ CI and releases
 ```
 
 There is no shared `packages/ui`: its only consumer would be the desktop app,
@@ -64,6 +63,9 @@ flowchart LR
     core --> agent["keyjutsu-agent"]
     agent --> plan
     agent --> validation
+    desktop --> broker["keyjutsu-broker"]
+    cli --> broker
+    broker --> core
     execution["keyjutsu-execution"] --> terminal["keyjutsu-terminal"]
 ```
 
@@ -88,8 +90,8 @@ Dependencies point one way, towards the platform:
   the machine and keeps a checkpoint. It is the only public surface the front
   ends use.
 - **Front ends** translate their own events into core calls and render what
-  comes back. The desktop's Rust layer (`src-tauri/src/main.rs`) is about 200
-  lines of command wrappers; the CLI's is argument parsing and a console loop.
+  comes back. The desktop's Rust layer (`src-tauri/src/main.rs`) is command
+  wrappers and the state a window keeps between them; the CLI's is argument parsing and a console loop.
 
 Core domain logic depends on neither Tauri nor React; `cargo test` builds and
 runs everything except the desktop crate without a frontend in sight.

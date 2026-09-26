@@ -1,4 +1,4 @@
-//! Milestone 7: the plan workspace. Validation is real (pwsh); agents are
+//! The plan workspace. Validation is real (pwsh); agents are
 //! replayed from recorded answers, as in the agent crate's tests.
 
 #![cfg(windows)]

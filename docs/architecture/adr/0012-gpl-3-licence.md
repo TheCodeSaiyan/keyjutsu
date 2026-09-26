@@ -1,11 +1,11 @@
 # 0012: KeyJutsu is licensed GPL-3.0-only
 
-Status: accepted, 24 September 2026. Supersedes the Apache-2.0 licence in
-specification §1.
+Status: accepted, 24 September 2026. Supersedes the Apache-2.0 licence
+first intended.
 
 ## Context
 
-The specification named Apache-2.0. The project owner asked for tighter terms
+Apache-2.0 was the licence first intended. The project owner asked for tighter terms
 that still let KeyJutsu use open-source tools. "Tighter" here means nobody can
 take KeyJutsu, change it and ship the result closed. Apache-2.0 allows exactly
 that.
@@ -14,11 +14,11 @@ that.
 
 | Licence | Closed forks | Still OSI open source | Fit |
 | --- | --- | --- | --- |
-| Apache-2.0 | allowed | yes | what the specification said; not tighter |
+| Apache-2.0 | allowed | yes | the licence first intended; not tighter |
 | MPL-2.0 | changed files must stay open; can be embedded in closed products | yes | tighter, but a wrapper around KeyJutsu can stay closed |
 | **GPL-3.0** | **not allowed when distributed** | **yes** | **KeyJutsu is a distributed desktop app, which is what the GPL covers** |
-| AGPL-3.0 | not allowed, including over a network | yes | adds nothing while KeyJutsu has no hosted service (§54) |
-| PolyForm Noncommercial, FSL | commercial use needs permission | no | contradicts "open source" in §1 |
+| AGPL-3.0 | not allowed, including over a network | yes | adds nothing while KeyJutsu has no hosted service |
+| PolyForm Noncommercial, FSL | commercial use needs permission | no | KeyJutsu is meant to be open source |
 
 ## Decision
 
@@ -33,7 +33,7 @@ or the Unlicense, apart from five MPL-2.0 crates. Every one can be combined
 into a GPL-3.0 program: Apache-2.0 is compatible with GPL version 3
 (though not version 2), and MPL-2.0 allows combination with the GPL unless a
 file opts out, which none of these do. Their own licence notices must still
-ship with binaries; that belongs to the release pipeline (M16), with the SBOM.
+ship with binaries; that belongs to the release pipeline, with the SBOM.
 
 A dependency added later needs the same check. A GPL-2.0-only or proprietary
 dependency could not be used.

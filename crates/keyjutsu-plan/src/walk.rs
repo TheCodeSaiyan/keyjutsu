@@ -1,11 +1,11 @@
 //! Deciding what runs next.
 //!
-//! KeyJutsu, not the agent, owns control flow (§10). Given what has happened
+//! KeyJutsu, not the agent, owns control flow. Given what has happened
 //! so far, `frontier` says which steps are ready, which have been skipped
 //! because no branch leads to them, and whether the plan has halted or
 //! finished. It is pure: the same plan and the same facts always give the same
 //! answer, which is what lets a crashed or rebooted session work out where it
-//! was (§32, §52).
+//! was.
 //!
 //! The rules:
 //!
@@ -18,7 +18,7 @@
 //!   skipped, the step is skipped too, because what it depends on never
 //!   happened.
 //! - Any failure halts the plan. Nothing after a failure is ready, whatever the
-//!   graph says (§2.3).
+//!   graph says.
 //! - A condition that cannot be decided leaves its step waiting and reports
 //!   which facts are needed. It is never guessed.
 
@@ -47,7 +47,7 @@ pub struct Frontier {
 
 impl Frontier {
     /// The single step to run next. V1 runs one machine-changing step at a
-    /// time (§34), in the graph's deterministic order.
+    /// time, in the graph's deterministic order.
     pub fn next(&self) -> Option<&str> {
         self.ready.first().map(String::as_str)
     }

@@ -5,7 +5,6 @@ const LABEL: Record<CheckStatus, { glyph: string; text: string }> = {
   ok: { glyph: "✓", text: "Ready" },
   warning: { glyph: "!", text: "Check" },
   unavailable: { glyph: "✕", text: "Unavailable" },
-  not_yet_built: { glyph: "–", text: "Not yet built" },
 };
 
 export function ReadinessPanel({ report }: { report: ReadinessReport | null }) {

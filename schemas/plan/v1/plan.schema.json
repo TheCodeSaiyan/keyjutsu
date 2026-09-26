@@ -890,7 +890,7 @@
           "$ref": "#/$defs/sha256"
         },
         "provenance": {
-          "description": "Who did what to which step, in order: authored, challenged, revised, edited, validated, approved (§7). Recorded by KeyJutsu; never taken from an agent.",
+          "description": "Who did what to which step, in order: authored, challenged, revised, edited, validated, approved. Recorded by KeyJutsu; never taken from an agent.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/provenance_event"

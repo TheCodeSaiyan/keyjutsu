@@ -1,13 +1,12 @@
 # 0001: The Rust core is the authority; the React front end only asks
 
-Status: accepted, Milestone 0.
+Status: accepted.
 
 ## Context
 
-The specification fixes the stack (Tauri, Rust, React, TypeScript, xterm.js,
-ConPTY) and says React must not be authoritative for approval, execution
-state, hashes, security policy, risk, credentials, broker authorisation or
-command execution (§3). A webview is also the part of the app most exposed to
+The stack is Tauri, Rust, React, TypeScript, xterm.js and ConPTY, and React
+must not be authoritative for approval, execution state, hashes, security
+policy, risk, credentials, broker authorisation or command execution. A webview is also the part of the app most exposed to
 content KeyJutsu does not control: terminal output is rendered there, and
 later so will agent text.
 
@@ -34,9 +33,9 @@ later so will agent text.
 A compromised renderer can still type into an *unarmed* terminal, exactly as
 the user could. That is inherent in a terminal app and is recorded in the
 threat model. What it cannot do is arm a performance on a dirty or busy line,
-push text into a line the engine owns, or (from Milestone 4) arm anything
-that is not an approved snapshot.
+push text into a line the engine owns, or arm anything that is not an
+approved snapshot.
 
 The cost is an IPC round trip per keypress while armed. Measured by eye in the
 desktop app it is not perceptible; it has not been measured properly and
-should be, before Milestone 8, with a typing-latency test.
+should be, with a typing-latency test.

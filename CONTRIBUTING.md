@@ -65,7 +65,10 @@ layout in [the documentation index](docs/README.md): a guide does one job,
 opens with what you'll have at the end, and numbers its steps.
 `pnpm docs:check` fails on a `keyjutsu` command or option that doesn't
 exist, a broken link or heading, a page nothing links to, and the words the
-house style avoids.
+house style avoids. It also fails, anywhere in the repository, on a
+reference to a numbered section of a planning document or to a build
+milestone: a reader has neither, so say what the reference stood for
+instead.
 
 ## Releasing
 

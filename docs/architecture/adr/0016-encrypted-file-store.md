@@ -1,12 +1,12 @@
 # 0016: History is an encrypted file store under a DPAPI-protected key
 
-Status: accepted, Milestone 14.
+Status: accepted.
 
 ## Context
 
-§35 asks for structured local persistence, "preferably SQLite or an
-equivalent robust embedded store", encrypted at rest with a random key
-protected by Windows DPAPI. What is stored is small and read whole: a
+KeyJutsu needs structured local persistence (SQLite, or an equivalent
+robust embedded store), encrypted at rest with a random key protected by
+Windows DPAPI. What is stored is small and read whole: a
 session record (the sealed snapshot, checkpoint and outcome), a Technique
 revision. There are tens or hundreds of them, not millions, and nothing
 queries across their contents.
@@ -41,7 +41,7 @@ queries across their contents.
   history. That is the intended trade: nothing is recoverable by anyone else.
 - `KEYJUTSU_STORE` moves the store; the tests use it so they never write to
   the operator's history.
-- Staged artifacts (Milestone 12) are not encrypted: they are public downloads
+- Staged artifacts are not encrypted: they are public downloads
   checked by hash. Run folders with snapshots and checkpoints are plain JSON
   so the CLI can use them; the encrypted copy of what matters is the session
   record.

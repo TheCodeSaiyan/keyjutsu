@@ -1,4 +1,4 @@
-# Real elevation through KeyJutsu's broker (Milestone 10), in Windows Sandbox
+# Real elevation through KeyJutsu's broker, in Windows Sandbox
 # so that the Administrator step (a key under HKLM) lands on a disposable
 # machine.
 #

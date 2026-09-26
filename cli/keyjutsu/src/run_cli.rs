@@ -3,7 +3,7 @@
 //! Before anything runs, the snapshot is re-checked (every hash), the
 //! preflight must pass (validated, every step READY, one shell), and this
 //! machine is compared with the one it was approved on: if anything a step
-//! depends on has changed since, nothing runs (§33).
+//! depends on has changed since, nothing runs.
 //!
 //! During the run, nothing is printed into the terminal: the performance is
 //! the shell's own output. Progress goes to the console title, and the
@@ -28,7 +28,7 @@ use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 use crate::console;
 use keyjutsu_core::git;
 
-/// Where the plan runs, relative to the operator's working tree (§31).
+/// Where the plan runs, relative to the operator's working tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Isolation {
     /// A temporary worktree on a new local branch; the working tree is untouched.
@@ -45,7 +45,7 @@ pub struct RunArgs<'a> {
     pub resume: Option<PathBuf>,
     pub settle: &'a [String],
     pub isolate: Option<Isolation>,
-    /// Keep no record of the session (§35).
+    /// Keep no record of the session.
     pub ephemeral: bool,
 }
 
@@ -165,7 +165,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     };
 
     // Resuming past a session boundary needs the operator's word, typed
-    // here on the plain console before anything starts (§32).
+    // here on the plain console before anything starts.
     let mut resume_gate = None;
     if let Some(wait) = resume.as_ref().and_then(|c| c.boundary.as_ref()) {
         let what = keyjutsu_core::boundary::describe(wait.kind);
@@ -187,7 +187,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     }
 
     // Critical steps approved more than an hour ago are confirmed again,
-    // here on the plain console, before anything starts (§28).
+    // here on the plain console, before anything starts.
     if keyjutsu_core::execute::needs_reconfirmation(snapshot.sealed_at(), fingerprint::now_secs()) {
         let plan = snapshot.plan();
         for id in snapshot.graph().topological_order() {
@@ -230,7 +230,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         options.profile = ProfileMode::Clean;
     }
 
-    // Git (§31): isolate if asked, then record every repository the plan
+    // Git: isolate if asked, then record every repository the plan
     // works in, so its changes can be told from the operator's afterwards.
     let mut start = std::env::current_dir().unwrap_or_default();
     if let Some(isolation) = args.isolate {
@@ -278,7 +278,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
 
     let result: Arc<Mutex<Option<(Outcome, Checkpoint)>>> = Arc::new(Mutex::new(None));
     let (snap, out, mode) = (snapshot.clone(), result.clone(), args.mode);
-    // Administrator steps (§26): one UAC prompt, now, before the performance,
+    // Administrator steps: one UAC prompt, now, before the performance,
     // for a broker pinned to this snapshot. Never in the middle of a run.
     let needs_admin = snapshot
         .plan()

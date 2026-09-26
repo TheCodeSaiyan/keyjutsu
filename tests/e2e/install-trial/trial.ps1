@@ -1,5 +1,5 @@
-# Runs inside Windows Sandbox only: KeyJutsu on a clean Windows 11
-# (Milestone 16). Install silently, check what the installer did, run the
+# Runs inside Windows Sandbox only: KeyJutsu on a clean Windows 11.
+# Install silently, check what the installer did, run the
 # readiness scan and agent detection, drive the safe demo in Performance
 # mode, uninstall, and check it all went.
 $kj = 'C:\kj'

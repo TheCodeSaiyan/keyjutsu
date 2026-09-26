@@ -1,9 +1,10 @@
 //! Staged input: the exact commands a performance will deliver.
 //!
-//! Until approved plan snapshots exist (Milestones 3, 4 and 8), a staged
-//! script is built from the built-in read-only demo or from commands the
-//! operator types themselves. Either way the engine treats it as fixed: it is
-//! validated once when the engine is created and never modified afterwards.
+//! Outside a plan, a staged script is built from the built-in read-only
+//! demo or from commands the operator types themselves; a plan run builds
+//! one per step from the approved snapshot. Either way the engine treats it
+//! as fixed: it is validated once when the engine is created and never
+//! modified afterwards.
 
 use serde::{Deserialize, Serialize};
 

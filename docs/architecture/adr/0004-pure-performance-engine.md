@@ -1,6 +1,6 @@
 # 0004: The performance engine is a pure state machine
 
-Status: accepted, Milestone 2.
+Status: accepted.
 
 ## Context
 
@@ -27,8 +27,8 @@ the table in `state.rs`.
 
 ## Consequences
 
-The engine suite (21 tests, under a millisecond) covers the Milestone 2
-acceptance case, every key class in every state that matters, and asserts
+The engine suite (21 tests, under a millisecond) covers the case the
+engine exists for (mashed keys deliver exactly the staged command), every key class in every state that matters, and asserts
 that every transition recorded was legal. Two deliberate mutations were run to
 confirm the tests can fail: letting Enter submit mid-command broke two tests;
 emitting the release before the final snapshot broke the real-shell disarm

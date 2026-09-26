@@ -1,4 +1,4 @@
-//! Session boundaries (§32): a restart, sign-out, shell or WSL restart
+//! Session boundaries: a restart, sign-out, shell or WSL restart
 //! between two phases of a plan.
 //!
 //! When a phase that ends at a boundary is done, execution stops and the

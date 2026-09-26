@@ -453,7 +453,7 @@ impl PerformanceEngine {
             }
             // A user-input line with a command is KeyJutsu's command and the
             // operator's answer: the command is written directly (never
-            // performed, §25), then the keys are the operator's until the
+            // performed), then the keys are the operator's until the
             // shell reports it finished. How a credential is asked for.
             ExecutionMode::UserInput => {
                 if !self.chars.is_empty() {

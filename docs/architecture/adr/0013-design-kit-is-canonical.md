@@ -19,26 +19,26 @@ colour brief, with the same colours but its own variable names.
   `scripts/design-tokens.mjs`, using the kit's own variable names. CI runs
   `pnpm tokens:check` and fails if the file is stale.
 - `styles.css` uses those variables and adds no colour, size, radius or
-  duration of its own (§28: "reuse existing tokens").
+  duration of its own: it reuses the existing tokens.
 - The app icon comes from the kit's icon set, including its multi-size
   `keyjutsu.ico` (16 to 256 px), rather than being generated from one master.
 - The README uses the kit's lockups directly.
 
-## What was applied now, and what waits
+## What was applied, and what was not
 
-Applied to the screens that exist: type scale, 4px spacing grid, 8px control
+Applied throughout: type scale, 4px spacing grid, 8px control
 radius, 36px controls and a 44px ARM button, the vermilion focus ring, hairline
-surfaces, and an operator overlay with the contents §19 lists (mode, current
-and next step, state, progress, Resume and Disarm).
+surfaces, and an operator overlay showing the mode, current and next step,
+state, progress, Resume and Disarm.
 
-Waiting for the milestones that build the screens they describe: the left rail
-(New Task, Sessions, Techniques, Agents, Settings), task intake (mockup 01), the
-plan workspace (02) and the critical-action gate (03). Adding a rail now would
-mean navigation to places that do nothing.
+The left rail, task intake (mockup 01), the plan workspace (02) and the
+critical-action gate (03) are built from the mockups. The rail has New task,
+Plan, Terminal, History and Techniques; the kit's Agents and Settings are left
+out until there is something to put on them, rather than leading to places
+that do nothing.
 
-Fluent System Icons, the kit's preferred icon set, are not added yet: the
-current screens use text glyphs, and adding the icon package is part of
-building the rail.
+Fluent System Icons, the kit's preferred icon set, are not used: the screens
+use text glyphs.
 
 ## Consequences
 

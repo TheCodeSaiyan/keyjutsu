@@ -1,4 +1,4 @@
-//! Drives the installed `keyjutsu demo` in Performance mode (Milestone 16):
+//! Drives the installed `keyjutsu demo` in Performance mode:
 //! mashes keys in a pseudo-console of its own, as someone at the keyboard
 //! would, until the demo has typed and run its last command, then disarms and
 //! leaves. For a clean machine such as Windows Sandbox.

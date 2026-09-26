@@ -1,6 +1,6 @@
 # 0008: Clear the inherited Ctrl+C-ignore flag before starting shells
 
-Status: accepted, Milestone 1.
+Status: accepted.
 
 ## Context
 
@@ -27,7 +27,7 @@ alone, with a safety comment.
 This matters outside tests too. CI agents, IDE task runners and some
 launchers start programs in a new process group; without this, Ctrl+C in a
 KeyJutsu terminal started from one of them would silently not work, and
-§20 says Ctrl+C is a genuine interrupt.
+Ctrl+C has to be a genuine interrupt.
 
 KeyJutsu's own process now handles Ctrl+C normally. The desktop app has no
 console, and the CLI reads keys in raw mode where Ctrl+C is a key rather than

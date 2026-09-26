@@ -1,10 +1,10 @@
 /* KeyJutsu's workspace, following the design kit in
    docs/brand/KeyJutsu-Design-Kit. Every colour, size, radius and duration here
    is a token from tokens.css, which is generated from the kit's
-   design-tokens.json; this file adds no values of its own (§28).
+   design-tokens.json; this file adds no values of its own.
 
    The terminal itself is styled from the user's Windows Terminal profile,
-   never from these tokens: once armed, KeyJutsu's branding disappears (§18). */
+   never from these tokens: once armed, KeyJutsu's branding disappears. */
 
 @import "./tokens.css";
 
@@ -45,7 +45,7 @@ input {
   box-shadow: var(--focus-ring);
 }
 
-/* Controls: Windows-native density, one-pixel borders (§8). */
+/* Controls: Windows-native density, one-pixel borders. */
 
 button,
 select {
@@ -69,7 +69,7 @@ button:disabled {
 }
 
 /* Vermilion only for deliberate, high-value actions: Arm KeyJutsu and the
-   first-run call to action (§7). */
+   first-run call to action. */
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -114,7 +114,7 @@ textarea {
   resize: vertical;
 }
 
-/* Type scale (§4). */
+/* Type scale. */
 
 h1 {
   font-size: var(--fs-heading1);
@@ -123,7 +123,7 @@ h1 {
   margin: 0 0 var(--sp-2);
 }
 
-/* Short structural labels: uppercase with 0.08em tracking (§4). */
+/* Short structural labels: uppercase with 0.08em tracking. */
 h2,
 .label-caps {
   font-size: var(--fs-compact);
@@ -240,11 +240,8 @@ label.choice {
 .checks [data-status="unavailable"] .check-glyph {
   color: var(--state-blocked);
 }
-.checks [data-status="not_yet_built"] {
-  color: var(--text-3);
-}
 
-/* Workspace: continuous surfaces separated by hairlines, not nested cards (§6). */
+/* Workspace: continuous surfaces separated by hairlines, not nested cards. */
 
 .app {
   display: flex;
@@ -347,7 +344,7 @@ button.arm {
   height: 100vh;
 }
 
-/* Operator overlay (§19): small, private, clear of the output. */
+/* Operator overlay: small, private, clear of the output. */
 
 .overlay {
   position: absolute;

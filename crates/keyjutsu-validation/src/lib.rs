@@ -1,6 +1,6 @@
 //! Validation: how much KeyJutsu can show about a plan before anything runs.
 //!
-//! For each step it gathers the strongest safe evidence available (§13):
+//! For each step it gathers the strongest safe evidence available:
 //! whether the shell exists and is the right version, whether every command
 //! line parses, whether every command resolves and every parameter exists,
 //! whether required tools are installed at the right versions, whether
@@ -43,7 +43,7 @@ use crate::powershell::{Analysis, analyse, what_if, what_if_blocker};
 pub struct Options {
     /// Run `-WhatIf` dry runs where they are trustworthy.
     pub dry_run: bool,
-    /// Whether the elevation broker can run Administrator steps (Milestone 10).
+    /// Whether the elevation broker can run Administrator steps.
     pub broker_available: bool,
 }
 

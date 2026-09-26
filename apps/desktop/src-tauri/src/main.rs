@@ -410,7 +410,7 @@ async fn workspace_validate(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceVie
     .map_err(|e| e.to_string())?
 }
 
-/// Download and pin every artifact the draft needs (§30). The source is
+/// Download and pin every artifact the draft needs. The source is
 /// contacted now, before approval, so that nothing is downloaded at run time.
 #[tauri::command]
 async fn workspace_stage(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
@@ -619,7 +619,7 @@ fn plan_run(
     };
     std::thread::spawn(move || {
         // Record the repositories the plan works in, to tell its changes
-        // from the operator's afterwards (§31).
+        // from the operator's afterwards.
         let git_dir = path.with_file_name("git");
         // Where the shell really is: a profile may have changed folder.
         let start = session.shell_location().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());

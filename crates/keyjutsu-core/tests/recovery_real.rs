@@ -1,4 +1,4 @@
-//! Milestone 11: a failed reversible task, recovered under the operator's
+//! A failed reversible task, recovered under the operator's
 //! control, on the real file system and registry. Registry work happens under
 //! a key of its own in HKCU, which each test removes when it finishes.
 

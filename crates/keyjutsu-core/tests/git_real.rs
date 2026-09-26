@@ -1,4 +1,4 @@
-//! Milestone 13: a plan run in a dirty repository, with KeyJutsu's changes
+//! A plan run in a dirty repository, with KeyJutsu's changes
 //! told apart from the operator's. Real git, real pwsh, a throwaway repo.
 
 #![cfg(windows)]

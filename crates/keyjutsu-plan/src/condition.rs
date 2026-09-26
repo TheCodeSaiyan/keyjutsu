@@ -27,7 +27,7 @@ pub enum StepResult {
     Skipped,
 }
 
-/// Where facts come from. Validation (Milestone 5) supplies real probes; tests
+/// Where facts come from. Validation supplies real probes; tests
 /// supply fixed values. `None` means "not known", never "false".
 pub trait Facts {
     fn step_result(&self, step: &str) -> Option<StepResult>;

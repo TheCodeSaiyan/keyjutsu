@@ -1,4 +1,4 @@
-//! Techniques (§37 to §39): a successful session made reusable.
+//! Techniques: a successful session made reusable.
 //!
 //! A Technique is a plan template with named parameters (`{{kj:service_name}}`
 //! in its text), the environments it is known to have worked on, and where it
@@ -338,7 +338,7 @@ pub fn revise(
     Ok(next)
 }
 
-/// For sharing (§39): no originating session and no environments of this
+/// For sharing: no originating session and no environments of this
 /// machine, which could say more about it than the operator means to share.
 pub fn export(t: &Technique) -> String {
     let mut shared = t.clone();

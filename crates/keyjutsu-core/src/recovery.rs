@@ -1,4 +1,4 @@
-//! Recovery (§29): capture what a step will change before it runs, and put
+//! Recovery: capture what a step will change before it runs, and put
 //! it back when the operator asks.
 //!
 //! Before a step that declares captures runs, its prior state is recorded in

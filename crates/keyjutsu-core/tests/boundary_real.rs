@@ -1,4 +1,4 @@
-//! Milestone 15: a plan in phases stops at a session boundary, and resumes
+//! A plan in phases stops at a session boundary, and resumes
 //! only once the boundary has really happened, the machine still matches,
 //! what the first phase achieved still holds, and the operator says so.
 //!

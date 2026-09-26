@@ -4,7 +4,7 @@
 TS_RS_EXPORT_DIR = { value = "packages/types/src/generated", relative = true }
 
 # A clean Windows has no Visual C++ runtime, so every KeyJutsu binary carries
-# its own (Milestone 16). Without this, the installed app and CLI would not
+# its own. Without this, the installed app and CLI would not
 # start on a machine that has never had Visual Studio or a game installed.
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
