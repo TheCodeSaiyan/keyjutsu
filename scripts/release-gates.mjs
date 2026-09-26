@@ -97,7 +97,7 @@ const gates = {
     "recursive_removal_is_critical_whatever_the_agent_says",
     "a_critical_step_is_only_sealed_with_its_typed_phrase",
     "a_critical_step_is_confirmed_again_just_before_it_runs",
-    "an_old_approval_of_a_critical_step_is_confirmed_again_before_the_run",
+    "an_old_approval_of_a_critical_step_is_confirmed_again_just_before_it_runs_in_the_cli",
     "a_failed_reversible_task_is_recovered_without_touching_anything_else",
     "a_failed_run_is_recovered_only_when_the_operator_confirms",
     "a_backup_changed_since_it_was_taken_is_not_used",

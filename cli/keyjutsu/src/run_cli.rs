@@ -186,38 +186,36 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         resume_gate = Some(gate);
     }
 
-    // Critical steps approved more than an hour ago are confirmed again,
-    // here on the plain console, before anything starts.
-    if keyjutsu_core::execute::needs_reconfirmation(snapshot.sealed_at(), fingerprint::now_secs()) {
-        let plan = snapshot.plan();
-        for id in snapshot.graph().topological_order() {
-            let Some(step) = plan.step(id) else { continue };
-            if !keyjutsu_core::plan::approval::is_critical(plan, step) {
-                continue;
-            }
-            let c = keyjutsu_core::execute::critical_confirmation(plan, step);
-            println!();
-            println!("CRITICAL ACTION  {}  (approved {})", c.title, snapshot.sealed_at());
-            for command in &c.commands {
-                println!("  runs:      {command}");
-            }
-            for target in &c.targets {
-                println!("  target:    {target}");
-            }
-            for i in &c.impact {
-                println!("  impact:    {i}");
-            }
-            println!("  recovery:  {}", c.recovery);
-            print!("Type {} to let it run: ", c.phrase);
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-            let mut line = String::new();
-            let _ = std::io::stdin().read_line(&mut line);
-            if line.trim() != c.phrase {
-                println!("Not confirmed. Nothing ran.");
-                return ExitCode::FAILURE;
-            }
+    // A critical step approved more than an hour before it is reached is
+    // confirmed again, in this console, just before it runs. While asked,
+    // keys go to the answer, never to the shell.
+    let asker = console::Asker::default();
+    let asking = asker.clone();
+    let sealed_at = snapshot.sealed_at().to_owned();
+    let critical_gate: keyjutsu_core::execute::CriticalGate = Arc::new(move |c| {
+        let mut text = format!("\n\nCRITICAL ACTION  {}  (approved {sealed_at})\n", c.title);
+        for command in &c.commands {
+            text.push_str(&format!("  runs:      {command}\n"));
         }
-    }
+        for target in &c.targets {
+            text.push_str(&format!("  target:    {target}\n"));
+        }
+        for i in &c.impact {
+            text.push_str(&format!("  impact:    {i}\n"));
+        }
+        text.push_str(&format!("  recovery:  {}\n", c.recovery));
+        text.push_str(&format!("Type {} to let it run, or Esc to stop here: ", c.phrase));
+        let typed = asking.ask(&text);
+        if typed.as_deref().map(str::trim) != Some(c.phrase.as_str()) {
+            let mut out = std::io::stdout();
+            let _ = std::io::Write::write_all(
+                &mut out,
+                b"Not confirmed: it will not run, and nothing after it will.\r\n",
+            );
+            let _ = std::io::Write::flush(&mut out);
+        }
+        typed
+    });
 
     let shell = match snapshot.plan().steps.iter().find_map(|s| s.shell.as_ref().map(|sh| sh.kind)) {
         Some(ShellName::WindowsPowershell) => ShellKind::WindowsPowershell,
@@ -314,6 +312,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         checkpoint: Some(cp_path.clone()),
         settled,
         resume_gate,
+        critical_gate: Some(critical_gate),
         elevated_runner,
         checkpoint_store: Some(store.clone()),
         ..ExecuteOptions::default()
@@ -387,7 +386,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         }
     });
 
-    if let Err(e) = console::run(options, None, Some(controller)) {
+    if let Err(e) = console::run(options, None, Some(controller), Some(asker)) {
         eprintln!("keyjutsu: {e}");
         return ExitCode::FAILURE;
     }
