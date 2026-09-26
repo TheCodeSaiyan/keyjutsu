@@ -9,7 +9,7 @@
 //!   ran. An agent cannot claim to be another.
 //! - A revision of one step may change that step and nothing else, and it
 //!   discards earlier validation results: the plan must be validated again.
-//! - Every accepted answer is recorded in provenance (§7).
+//! - Every accepted answer is recorded in provenance.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -77,7 +77,7 @@ pub enum AgentError {
     #[error("the agent failed: {0}")]
     Failed(String),
     /// The agent said it did not run in the read-only mode KeyJutsu asked
-    /// for, so its answer, if any, was discarded (§6).
+    /// for, so its answer, if any, was discarded.
     #[error("{0}")]
     NotReadOnly(String),
     #[error("no acceptable answer after {}; last problems: {}", keyjutsu_plan::count(*attempts, "attempt", "attempts"), problems.join("; "))]

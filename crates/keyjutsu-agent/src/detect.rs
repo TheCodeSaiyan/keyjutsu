@@ -4,7 +4,7 @@
 //! operator installed to run, not programs a plan names, so asking them their
 //! version is ordinary use. Whether an agent is signed in is judged only from
 //! whether its credential file exists: the file is never opened, because its
-//! contents are a secret (§2.5).
+//! contents are a secret.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -37,8 +37,10 @@ pub struct AgentInfo {
     pub sign_in: SignIn,
     pub capabilities: Capabilities,
     /// The installed version differs from the one the adapter was checked
-    /// against, so its flags should be re-checked (§5).
+    /// against, so its flags should be re-checked.
     pub needs_compatibility_check: bool,
+    /// Where to get it: the maker's own install page.
+    pub install_url: &'static str,
 }
 
 impl AgentInfo {
@@ -117,6 +119,7 @@ pub fn detect(kind: AgentKind) -> AgentInfo {
         sign_in: sign_in(kind),
         capabilities,
         needs_compatibility_check,
+        install_url: kind.install_url(),
     }
 }
 
@@ -154,6 +157,7 @@ mod tests {
             sign_in: SignIn::Unknown,
             capabilities: AgentKind::Cursor.capabilities(),
             needs_compatibility_check: false,
+            install_url: AgentKind::Cursor.install_url(),
         };
         assert!(!info.installed());
     }

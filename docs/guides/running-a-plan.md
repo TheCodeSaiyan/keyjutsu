@@ -28,7 +28,7 @@ keyjutsu run check-a-service.approved.json
 In the desktop app, once the plan is approved, **Arm KeyJutsu** takes its
 place and the terminal fills the window.
 
-Before anything is typed, KeyJutsu checks four things, and any one of them
+Before anything is typed, KeyJutsu checks three things, and any one of them
 stops the run with nothing done:
 
 - **This account approved this snapshot, on this machine.** The approval
@@ -39,14 +39,18 @@ stops the run with nothing done:
   plan relies on has changed version, KeyJutsu prints each change, before
   and after, and names the steps that depend on it; the run doesn't start
   until you validate and approve them again.
-
 - **Every step was READY when it was approved**, and every download it needs
   is staged and still matches its hash.
-- **A critical step approved more than an hour ago** is confirmed again with
-  its typed phrase, here, before the session starts. An approval shouldn't
-  outlive the moment you gave it; within the hour, the phrase you typed then
-  stands, because being asked twice in five minutes teaches you to type it
-  without reading.
+
+A critical step approved more than an hour before it's reached is confirmed
+again with its typed phrase, just before it runs: in the app's critical
+dialog, or in the run's own console, where the keys you type while it asks
+go to the answer and never to the shell. The hour counts to the moment the
+step comes up, so a long run can't carry an approval past it. Within the
+hour, the phrase you typed at approval stands, because being asked twice in
+five minutes teaches you to type it without reading. If people are watching,
+[When KeyJutsu needs you](../performing.md#when-keyjutsu-needs-you-mid-performance)
+has ways to be asked that keep the illusion.
 
 If the plan has Administrator steps, Windows asks once, now, to start
 KeyJutsu's elevation broker, so no UAC prompt can appear in the middle of the

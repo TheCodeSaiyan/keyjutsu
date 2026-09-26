@@ -1,4 +1,4 @@
-//! Milestone 8: approved snapshots executed through real pwsh sessions, in
+//! Approved snapshots executed through real pwsh sessions, in
 //! each mode, from the same snapshot. Plans are validated, approved and
 //! sealed exactly as the CLI does it; nothing here is mocked.
 
@@ -345,6 +345,9 @@ fn a_failed_step_carries_what_it_printed() {
             assert!(output.contains("the-widget-is-missing"), "{output:?}");
             assert!(!output.contains("from-the-first-step"), "only this step's output: {output:?}");
             assert!(!output.contains('\x1b'), "no colour codes: {output:?}");
+            // As the terminal showed it: the command once, at its prompt,
+            // however the line editor redrew it while it was typed.
+            assert_eq!(output.matches("Write-Output 'the-widget-is-missing'").count(), 1, "{output:?}");
         }
         other => panic!("expected Failed, got {other:?}"),
     }
@@ -779,7 +782,8 @@ fn a_critical_step_is_confirmed_again_just_before_it_runs() {
     let mut book = ApprovalBook::new();
     assert_eq!(book.approve_all_except_critical(&validated, AT), ["wipe"], "KeyJutsu rates it critical");
     book.approve(&validated, "wipe", AT, Some("REMOVE THE VICTIM FOLDER")).unwrap();
-    let snap = seal(&validated, &book, None, AT).unwrap();
+    // Sealed two hours before the run's clock (AT): past its hour.
+    let snap = seal(&validated, &book, None, "2026-09-25T02:00:00Z").unwrap();
 
     let asked: Arc<Mutex<Vec<CriticalConfirmation>>> = Arc::default();
     let with = |answer: Option<&'static str>| {
@@ -801,13 +805,31 @@ fn a_critical_step_is_confirmed_again_just_before_it_runs() {
         );
         assert!(victim.join("keep.txt").exists(), "{answer:?}: it ran without confirmation");
     }
+    // Past its hour with nothing to ask: stopped, not run.
+    std::fs::create_dir_all(&victim).unwrap();
+    std::fs::write(victim.join("keep.txt"), "x").unwrap();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    assert!(
+        matches!(&outcome, Outcome::Blocked { reason } if reason.contains("more than an hour ago")),
+        "{outcome:?}"
+    );
+    assert!(victim.join("keep.txt").exists(), "it ran with an old approval and no one asked");
+
     let (outcome, _, _) = run(&t, &snap, &with(Some("REMOVE THE VICTIM FOLDER")), None);
+    assert_eq!(outcome, Outcome::Complete);
+    assert!(!victim.exists());
+
+    // Sealed within the hour of the run's clock: the phrase typed at
+    // approval stands, and the gate is not asked.
+    let fresh = seal(&validated, &book, None, AT).unwrap();
+    std::fs::create_dir_all(&victim).unwrap();
+    let (outcome, _, _) = run(&t, &fresh, &with(None), None);
     assert_eq!(outcome, Outcome::Complete);
     assert!(!victim.exists());
     t.session.close();
 
     let asked = asked.lock().unwrap();
-    assert_eq!(asked.len(), 4);
+    assert_eq!(asked.len(), 4, "asked once per run past its hour, and not for the fresh one");
     assert_eq!(asked[0].phrase, "REMOVE THE VICTIM FOLDER");
     assert!(asked[0].commands[0].contains("Remove-Item -Recurse"));
     assert!(asked[0].recovery.contains("cannot undo"), "{:?}", asked[0].recovery);
@@ -843,6 +865,7 @@ impl keyjutsu_core::elevation::ElevatedRunner for RecordingBroker {
         Ok(keyjutsu_core::elevation::ElevatedRun {
             outcomes: vec![keyjutsu_core::execution::StepOutcome::Succeeded { exit_code: 0 }],
             output: "done elevated\n".into(),
+            captured: None,
         })
     }
 }
@@ -891,4 +914,72 @@ fn an_administrator_step_goes_to_the_broker_not_the_unelevated_shell() {
         )
     );
     assert!(!dir.join("typed-here.txt").exists(), "it was never typed into the unelevated shell");
+}
+
+/// Answers as the broker does for a step it captured before running.
+struct CapturingBroker;
+
+impl keyjutsu_core::elevation::ElevatedRunner for CapturingBroker {
+    fn run_step(
+        &self,
+        _: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<keyjutsu_core::elevation::ElevatedRun, String> {
+        Ok(keyjutsu_core::elevation::ElevatedRun {
+            outcomes: vec![keyjutsu_core::execution::StepOutcome::Succeeded { exit_code: 0 }],
+            output: String::new(),
+            captured: Some(keyjutsu_core::recovery::StepCapture {
+                step: step.to_owned(),
+                step_hash: step_hash.to_owned(),
+                captured_at: "by the broker".into(),
+                items: Vec::new(),
+            }),
+        })
+    }
+}
+
+/// An Administrator step's state is captured by the broker, not here: no
+/// capture is taken in the operator's profile, and the checkpoint keeps the
+/// broker's account of what it captured, to show in the recovery plan.
+#[test]
+fn an_administrator_steps_capture_is_the_brokers_not_the_profiles() {
+    if keyjutsu_core::elevation::is_elevated() {
+        eprintln!("skipped: this test process is elevated, so no broker is needed");
+        return;
+    }
+    let dir = scratch("admin-capture");
+    let target = fwd(&dir.join("setting.txt"));
+    std::fs::write(dir.join("setting.txt"), "before").unwrap();
+    let mut s = step("admin", "Get-Date");
+    s["privilege"] = json!("administrator");
+    s["reversibility"] = json!({"level": "full"});
+    s["recovery"] =
+        json!({"strategy": "restore_captured_state", "capture": [{"kind": "file", "target": target}]});
+    let draft = parse_plan(&plan(json!([s]), json!([])).to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    book.approve_all_except_critical(&validated, AT);
+    let snap = seal(&validated, &book, None, AT).unwrap();
+
+    let cp = dir.join("run.checkpoint.json");
+    let t = terminal();
+    let options = ExecuteOptions {
+        elevated_runner: Some(Arc::new(CapturingBroker)),
+        checkpoint: Some(cp.clone()),
+        ..mode(ExecutionMode::Direct)
+    };
+    let (outcome, checkpoint, events) = run(&t, &snap, &options, None);
+    t.session.close();
+    assert_eq!(outcome, Outcome::Complete, "{events:?}");
+    assert_eq!(checkpoint.captures.len(), 1);
+    assert_eq!(checkpoint.captures[0].captured_at, "by the broker");
+    let local = keyjutsu_core::recovery::recovery_dir(&cp);
+    assert!(
+        !local.exists() || std::fs::read_dir(&local).unwrap().next().is_none(),
+        "nothing was captured in the operator's profile"
+    );
 }

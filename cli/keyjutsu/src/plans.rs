@@ -335,7 +335,7 @@ pub fn diff(old: &Path, new: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `keyjutsu plan stage`: download, verify and keep each artifact (§30).
+/// `keyjutsu plan stage`: download, verify and keep each artifact.
 pub fn stage(file: &Path, pin_to: Option<&Path>) -> ExitCode {
     let plan = match load_plan(file) {
         Ok(p) => p,

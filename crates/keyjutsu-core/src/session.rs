@@ -132,44 +132,11 @@ struct Inner {
     control: Mutex<Control>,
     ready_signal: Condvar,
     tick_generation: AtomicU64,
-    /// What the shell printed lately, so a failed step can be shown to the
+    /// What the shell printed, rendered as the terminal shows it, so a
+    /// failed step's output can be read back: by the operator, and by the
     /// agent asked to fix it. A lock of its own: output arrives constantly
     /// and must not wait on the performance.
-    recent: Mutex<Recent>,
-}
-
-/// The last [`RECENT_LIMIT`] bytes of output, and how many were ever written,
-/// so a position taken earlier still means the same place.
-#[derive(Default)]
-struct Recent {
-    text: String,
-    written: u64,
-}
-
-const RECENT_LIMIT: usize = 64 * 1024;
-
-impl Recent {
-    fn push(&mut self, text: &str) {
-        self.text.push_str(text);
-        self.written += text.len() as u64;
-        if self.text.len() > RECENT_LIMIT {
-            let mut cut = self.text.len() - RECENT_LIMIT;
-            while !self.text.is_char_boundary(cut) {
-                cut += 1;
-            }
-            self.text.drain(..cut);
-        }
-    }
-
-    /// Everything since `mark`, or all that is kept if some has gone.
-    fn since(&self, mark: u64) -> &str {
-        let kept_from = self.written - self.text.len() as u64;
-        let mut start = usize::try_from(mark.saturating_sub(kept_from)).unwrap_or(0).min(self.text.len());
-        while !self.text.is_char_boundary(start) {
-            start += 1;
-        }
-        &self.text[start..]
-    }
+    recent: Mutex<crate::transcript::Transcript>,
 }
 
 /// A running shell session. Cheap to clone; all clones refer to one shell.
@@ -209,7 +176,7 @@ impl Session {
             }),
             ready_signal: Condvar::new(),
             tick_generation: AtomicU64::new(0),
-            recent: Mutex::new(Recent::default()),
+            recent: Mutex::new(crate::transcript::Transcript::new(options.size.rows, options.size.cols)),
         });
 
         let reading = inner.clone();
@@ -241,17 +208,15 @@ impl Session {
     }
 
     /// A position in the shell's output, to ask later what was printed since.
-    pub fn output_mark(&self) -> u64 {
-        self.inner.recent.lock().map(|r| r.written).unwrap_or(0)
+    pub fn output_mark(&self) -> usize {
+        self.inner.recent.lock().map(|mut r| r.mark()).unwrap_or(0)
     }
 
-    /// What the shell printed since `mark`, without colour or cursor codes,
-    /// and no more than the last `max_chars` characters of it.
-    pub fn output_since(&self, mark: u64, max_chars: usize) -> String {
-        let raw = self.inner.recent.lock().map(|r| r.since(mark).to_owned()).unwrap_or_default();
-        let plain = crate::headless::strip_ansi(&raw);
-        let skip = plain.chars().count().saturating_sub(max_chars);
-        plain.chars().skip(skip).collect()
+    /// What the shell printed since `mark`, as the terminal shows it: from
+    /// the line the cursor was on, with a line the shell redrew read once.
+    /// No more than the last `max_chars` characters of it.
+    pub fn output_since(&self, mark: usize, max_chars: usize) -> String {
+        self.inner.recent.lock().map(|mut r| r.since(mark, max_chars)).unwrap_or_default()
     }
 
     /// The shell's process id, which tells one shell from the next across a
@@ -390,7 +355,11 @@ impl Session {
     }
 
     pub fn resize(&self, size: TerminalSize) -> Result<(), CoreError> {
-        Ok(self.inner.pty.resize(size)?)
+        self.inner.pty.resize(size)?;
+        if let Ok(mut recent) = self.inner.recent.lock() {
+            recent.resize(size.rows, size.cols);
+        }
+        Ok(())
     }
 
     /// End the shell. Output already produced is still delivered.
@@ -515,7 +484,7 @@ impl Inner {
                 let text = decoder.decode(&bytes);
                 if !text.is_empty() {
                     if let Ok(mut recent) = self.recent.lock() {
-                        recent.push(&text);
+                        recent.feed(&text);
                     }
                     self.sink.output(&text);
                 }
@@ -595,27 +564,6 @@ pub fn is_terminal_report(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn recent_output_is_kept_from_a_mark_and_bounded() {
-        let mut r = Recent::default();
-        r.push("before ");
-        let mark = r.written;
-        r.push("after");
-        assert_eq!(r.since(mark), "after");
-        assert_eq!(r.since(0), "before after");
-
-        // Past the limit only the latest is kept, cut on a character boundary,
-        // and a mark from before the cut gets everything that is left.
-        let mut r = Recent::default();
-        r.push("é");
-        r.push(&"x".repeat(RECENT_LIMIT));
-        assert!(r.text.len() <= RECENT_LIMIT);
-        assert!(r.since(0).chars().all(|c| c == 'x'));
-        let mark = r.written;
-        r.push("tail");
-        assert_eq!(r.since(mark), "tail");
-    }
 
     #[test]
     fn recognises_renderer_replies_and_nothing_else() {

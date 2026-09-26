@@ -15,7 +15,7 @@ use std::time::Duration;
 
 #[cfg(windows)]
 fn main() -> ExitCode {
-    use keyjutsu_broker::{Broker, accept_launcher, exit, pipe::ServerPipe, run_in_shell, serve};
+    use keyjutsu_broker::{Broker, accept_launcher, exit, pipe::ServerPipe, runner, serve};
     use keyjutsu_core::plan::ApprovedSnapshot;
 
     let args: Vec<String> = std::env::args().collect();
@@ -44,7 +44,14 @@ fn main() -> ExitCode {
     if accept_launcher(&server, pid).is_err() {
         return ExitCode::from(exit::WRONG_CLIENT);
     }
-    let mut broker = Broker::new(snapshot, secret, Box::new(run_in_shell));
+    // Where the operator's artifacts are staged. Only copies that match the
+    // snapshot's pinned hashes are ever handed to a step.
+    let artifacts = arg("--artifacts").map(std::path::PathBuf::from);
+    // Captures kept past their time go, whenever the broker starts.
+    if let Ok(root) = keyjutsu_broker::captures::secured_root() {
+        keyjutsu_broker::captures::sweep(&root, keyjutsu_broker::captures::KEEP_FOR);
+    }
+    let mut broker = Broker::new(snapshot, secret, runner(artifacts));
     let mut server = server;
     match serve(&mut server, &mut broker) {
         Ok(()) => ExitCode::SUCCESS,

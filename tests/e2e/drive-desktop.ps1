@@ -127,4 +127,21 @@ switch ($Action) {
     [U.M]::mouse_event(2, 0, 0, 0, 0); [U.M]::mouse_event(4, 0, 0, 0, 0); "clicked $Arg"
   }
   "title" { (Get-Process -Id $proc.Id).MainWindowTitle }
+  "has" {
+    # Read-only: whether an element with this name is on screen now. Exits 0
+    # if it is and 3 if not; sends no input.
+    $cond = New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::NameProperty), $Arg
+    $found = $null
+    foreach ($try in 1..2) {
+      $found = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+      # A label styled in capitals is reported in capitals: match ignoring case.
+      if (-not $found) {
+        $found = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
+          Where-Object { $_.Current.Name -ieq $Arg }) | Select-Object -First 1
+      }
+      if ($found) { break }
+      Start-Sleep -Seconds 1
+    }
+    if ($found) { "present $Arg"; exit 0 } else { "absent $Arg"; exit 3 }
+  }
 }

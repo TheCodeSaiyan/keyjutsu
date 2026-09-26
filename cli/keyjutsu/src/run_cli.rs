@@ -3,7 +3,7 @@
 //! Before anything runs, the snapshot is re-checked (every hash), the
 //! preflight must pass (validated, every step READY, one shell), and this
 //! machine is compared with the one it was approved on: if anything a step
-//! depends on has changed since, nothing runs (§33).
+//! depends on has changed since, nothing runs.
 //!
 //! During the run, nothing is printed into the terminal: the performance is
 //! the shell's own output. Progress goes to the console title, and the
@@ -28,7 +28,7 @@ use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 use crate::console;
 use keyjutsu_core::git;
 
-/// Where the plan runs, relative to the operator's working tree (§31).
+/// Where the plan runs, relative to the operator's working tree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Isolation {
     /// A temporary worktree on a new local branch; the working tree is untouched.
@@ -45,8 +45,11 @@ pub struct RunArgs<'a> {
     pub resume: Option<PathBuf>,
     pub settle: &'a [String],
     pub isolate: Option<Isolation>,
-    /// Keep no record of the session (§35).
+    /// Keep no record of the session.
     pub ephemeral: bool,
+    /// Put nothing of KeyJutsu's in the console: questions and notices go
+    /// to the window title, and step titles do not.
+    pub discreet: bool,
 }
 
 /// Where a run keeps its Git record: next to the snapshot.
@@ -165,7 +168,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     };
 
     // Resuming past a session boundary needs the operator's word, typed
-    // here on the plain console before anything starts (§32).
+    // here on the plain console before anything starts.
     let mut resume_gate = None;
     if let Some(wait) = resume.as_ref().and_then(|c| c.boundary.as_ref()) {
         let what = keyjutsu_core::boundary::describe(wait.kind);
@@ -186,38 +189,48 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         resume_gate = Some(gate);
     }
 
-    // Critical steps approved more than an hour ago are confirmed again,
-    // here on the plain console, before anything starts (§28).
-    if keyjutsu_core::execute::needs_reconfirmation(snapshot.sealed_at(), fingerprint::now_secs()) {
-        let plan = snapshot.plan();
-        for id in snapshot.graph().topological_order() {
-            let Some(step) = plan.step(id) else { continue };
-            if !keyjutsu_core::plan::approval::is_critical(plan, step) {
-                continue;
+    // A critical step approved more than an hour before it is reached is
+    // confirmed again, in this console, just before it runs. While asked,
+    // keys go to the answer, never to the shell.
+    let asker = console::Asker::default();
+    let asking = asker.clone();
+    let sealed_at = snapshot.sealed_at().to_owned();
+    let discreet = args.discreet;
+    let critical_gate: keyjutsu_core::execute::CriticalGate = Arc::new(move |c| {
+        if discreet {
+            // Only the title bar says so, and the answer is not shown.
+            let typed = asking.ask_in_title(&format!(
+                "KeyJutsu is waiting: type {} and press Enter, or Esc to stop",
+                c.phrase
+            ));
+            if typed.as_deref().map(str::trim) != Some(c.phrase.as_str()) {
+                console::set_title("KeyJutsu: not confirmed, so nothing more runs");
             }
-            let c = keyjutsu_core::execute::critical_confirmation(plan, step);
-            println!();
-            println!("CRITICAL ACTION  {}  (approved {})", c.title, snapshot.sealed_at());
-            for command in &c.commands {
-                println!("  runs:      {command}");
-            }
-            for target in &c.targets {
-                println!("  target:    {target}");
-            }
-            for i in &c.impact {
-                println!("  impact:    {i}");
-            }
-            println!("  recovery:  {}", c.recovery);
-            print!("Type {} to let it run: ", c.phrase);
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-            let mut line = String::new();
-            let _ = std::io::stdin().read_line(&mut line);
-            if line.trim() != c.phrase {
-                println!("Not confirmed. Nothing ran.");
-                return ExitCode::FAILURE;
-            }
+            return typed;
         }
-    }
+        let mut text = format!("\n\nCRITICAL ACTION  {}  (approved {sealed_at})\n", c.title);
+        for command in &c.commands {
+            text.push_str(&format!("  runs:      {command}\n"));
+        }
+        for target in &c.targets {
+            text.push_str(&format!("  target:    {target}\n"));
+        }
+        for i in &c.impact {
+            text.push_str(&format!("  impact:    {i}\n"));
+        }
+        text.push_str(&format!("  recovery:  {}\n", c.recovery));
+        text.push_str(&format!("Type {} to let it run, or Esc to stop here: ", c.phrase));
+        let typed = asking.ask(&text);
+        if typed.as_deref().map(str::trim) != Some(c.phrase.as_str()) {
+            let mut out = std::io::stdout();
+            let _ = std::io::Write::write_all(
+                &mut out,
+                b"Not confirmed: it will not run, and nothing after it will.\r\n",
+            );
+            let _ = std::io::Write::flush(&mut out);
+        }
+        typed
+    });
 
     let shell = match snapshot.plan().steps.iter().find_map(|s| s.shell.as_ref().map(|sh| sh.kind)) {
         Some(ShellName::WindowsPowershell) => ShellKind::WindowsPowershell,
@@ -230,7 +243,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         options.profile = ProfileMode::Clean;
     }
 
-    // Git (§31): isolate if asked, then record every repository the plan
+    // Git: isolate if asked, then record every repository the plan
     // works in, so its changes can be told from the operator's afterwards.
     let mut start = std::env::current_dir().unwrap_or_default();
     if let Some(isolation) = args.isolate {
@@ -278,7 +291,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
 
     let result: Arc<Mutex<Option<(Outcome, Checkpoint)>>> = Arc::new(Mutex::new(None));
     let (snap, out, mode) = (snapshot.clone(), result.clone(), args.mode);
-    // Administrator steps (§26): one UAC prompt, now, before the performance,
+    // Administrator steps: one UAC prompt, now, before the performance,
     // for a broker pinned to this snapshot. Never in the middle of a run.
     let needs_admin = snapshot
         .plan()
@@ -296,7 +309,12 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         println!(
             "This plan has Administrator steps. Windows will ask once, now, to start KeyJutsu's broker."
         );
-        match keyjutsu_broker::launch(&exe, args.snapshot, snapshot.snapshot_hash()) {
+        match keyjutsu_broker::launch(
+            &exe,
+            args.snapshot,
+            snapshot.snapshot_hash(),
+            &keyjutsu_core::artifacts::default_store(),
+        ) {
             Ok(client) => elevated_runner = Some(Arc::new(client)),
             Err(e) => {
                 eprintln!("keyjutsu: the elevation broker did not start: {e}. Nothing ran.");
@@ -309,10 +327,12 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         checkpoint: Some(cp_path.clone()),
         settled,
         resume_gate,
+        critical_gate: Some(critical_gate),
         elevated_runner,
         checkpoint_store: Some(store.clone()),
         ..ExecuteOptions::default()
     };
+    let discreet_run = args.discreet;
     let (plan_for_git, git_dir_c, baseline_c, start_c) =
         (snapshot.plan().clone(), git_dir.clone(), baseline.clone(), start.clone());
     let controller: console::Controller = Box::new(move |session, events| {
@@ -354,7 +374,8 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::SetTitle(t));
         };
         let observe = |e: ExecutionEvent| match &e {
-            ExecutionEvent::StepStarting { title: t, .. } => title(t),
+            // Discreet: the title bar is kept for what needs the operator.
+            ExecutionEvent::StepStarting { title: t, .. } if !discreet_run => title(t),
             // Staged typing is off: the operator must stop mashing and answer
             // for real, in the shell's own masked prompt.
             ExecutionEvent::CredentialRequired { prompt, .. } => {
@@ -382,7 +403,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         }
     });
 
-    if let Err(e) = console::run(options, None, Some(controller)) {
+    if let Err(e) = console::run(options, None, Some(controller), Some(asker)) {
         eprintln!("keyjutsu: {e}");
         return ExitCode::FAILURE;
     }

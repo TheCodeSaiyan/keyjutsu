@@ -60,6 +60,51 @@ yet; the engine underneath already refuses any binding without Ctrl, Alt or
 the Windows key, because ordinary typing could trigger it. Esc isn't the
 disarm on purpose: people press it by reflex.
 
+## When KeyJutsu needs you mid-performance
+
+Sometimes KeyJutsu has to stop and ask: a critical step whose approval is
+more than an hour old, a plan continuing after a restart, a credential for
+you to type yourself. And a run ends. How that shows is your choice, because
+what suits a practice run spoils a demonstration.
+
+In the desktop app it's **When KeyJutsu needs you**, beside the shell and
+profile above the terminal. It's remembered.
+
+| Choice | What the room sees | What you do |
+| --- | --- | --- |
+| **Show it** | the question, over the terminal | answer it |
+| **Keep the illusion** | the terminal, paused, with a faint edge that reads as the window's own | press Ctrl+Shift+K; the question opens as a small card in the corner |
+| **Stage an error** | what looks like a command that failed, and a fresh prompt | read its wording, then press Ctrl+Shift+K |
+| **Out of view** | the terminal, paused, and nothing else | the taskbar button flashes, which a shared window doesn't show; press Ctrl+Shift+K |
+
+**Stage an error** shows a believable error in the shell's own style, then
+what looks like the prompt again. Its wording is the tell:
+
+- "The operation cannot continue until it is **confirmed**." A critical step
+  is waiting for its phrase.
+- "The operation cannot continue until the session is **resumed**." A plan
+  is waiting to continue after a restart.
+
+It's a layer laid over the terminal, in the terminal's own font and colours,
+with a blinking cursor after the staged prompt; nothing is written into the
+terminal, so the shell never sees it, and it isn't in the history or in
+anything an agent is shown. It goes the moment you answer. If there's no room
+for it below the prompt, you get the faint edge instead.
+
+With any choice but **Show it**, the end of a run stays on the terminal rather
+than jumping to the run's results, and keys go nowhere until you press
+Ctrl+Shift+K: otherwise the last few mashed keys would be typed into the
+real shell, in front of everyone. **Show it** also puts "credential required"
+over the terminal, so you know to stop typing.
+
+Whichever you choose, nothing more runs until you've answered: this changes
+how you're asked, never whether.
+
+In the CLI, `keyjutsu run --presentation discreet` does the same with the one
+place it has that isn't the console: the window's title bar. Step titles
+stay out of it; a question goes into it, and what you type in answer isn't
+shown.
+
 ## What can never reach the shell
 
 These hold in every mode, and each has a test that fails without it

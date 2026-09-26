@@ -1,10 +1,10 @@
 /* KeyJutsu's workspace, following the design kit in
    docs/brand/KeyJutsu-Design-Kit. Every colour, size, radius and duration here
    is a token from tokens.css, which is generated from the kit's
-   design-tokens.json; this file adds no values of its own (§28).
+   design-tokens.json; this file adds no values of its own.
 
    The terminal itself is styled from the user's Windows Terminal profile,
-   never from these tokens: once armed, KeyJutsu's branding disappears (§18). */
+   never from these tokens: once armed, KeyJutsu's branding disappears. */
 
 @import "./tokens.css";
 
@@ -45,7 +45,7 @@ input {
   box-shadow: var(--focus-ring);
 }
 
-/* Controls: Windows-native density, one-pixel borders (§8). */
+/* Controls: Windows-native density, one-pixel borders. */
 
 button,
 select {
@@ -69,7 +69,7 @@ button:disabled {
 }
 
 /* Vermilion only for deliberate, high-value actions: Arm KeyJutsu and the
-   first-run call to action (§7). */
+   first-run call to action. */
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -114,7 +114,7 @@ textarea {
   resize: vertical;
 }
 
-/* Type scale (§4). */
+/* Type scale. */
 
 h1 {
   font-size: var(--fs-heading1);
@@ -123,7 +123,7 @@ h1 {
   margin: 0 0 var(--sp-2);
 }
 
-/* Short structural labels: uppercase with 0.08em tracking (§4). */
+/* Short structural labels: uppercase with 0.08em tracking. */
 h2,
 .label-caps {
   font-size: var(--fs-compact);
@@ -176,6 +176,28 @@ label.choice {
 
 .error {
   color: var(--kj-error);
+}
+
+/* A link out: where to get something KeyJutsu relies on. Styled as text,
+   in the kit's information colour, not as a button. */
+button.link {
+  display: inline;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--kj-info);
+  font: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+button.link:hover:not(:disabled) {
+  background: none;
+  text-decoration-thickness: 2px;
 }
 
 .notice {
@@ -240,11 +262,8 @@ label.choice {
 .checks [data-status="unavailable"] .check-glyph {
   color: var(--state-blocked);
 }
-.checks [data-status="not_yet_built"] {
-  color: var(--text-3);
-}
 
-/* Workspace: continuous surfaces separated by hairlines, not nested cards (§6). */
+/* Workspace: continuous surfaces separated by hairlines, not nested cards. */
 
 .app {
   display: flex;
@@ -331,7 +350,76 @@ button.arm {
   display: flex;
 }
 
+/* KeyJutsu is waiting for the operator, and saying so faintly: an edge the
+   room reads as the window's own, which Ctrl+Shift+K answers. */
+.term-area[data-cue="waiting"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  opacity: 0.45;
+  animation: kj-waiting 2.4s ease-in-out infinite;
+}
+
+@keyframes kj-waiting {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/* A staged error: laid over the rows below the prompt, in the terminal's
+   own font and colours, never written into the terminal. */
+.staged-layer {
+  position: absolute;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.staged-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  vertical-align: text-bottom;
+}
+
+.staged-cursor[data-style="bar"] {
+  width: 2px;
+}
+
+.staged-cursor[data-style="underline"] {
+  height: 2px;
+  vertical-align: bottom;
+}
+
+.staged-cursor[data-blink] {
+  animation: kj-cursor 1.06s step-end infinite;
+}
+
+@keyframes kj-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Said over the terminal when the operator has asked to be told. */
+.term-banner {
+  position: absolute;
+  top: var(--sp-3);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(640px, 90%);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--kj-info);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-raised);
+  font-size: var(--fs-compact);
+}
+
 .terminal-frame {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -347,7 +435,7 @@ button.arm {
   height: 100vh;
 }
 
-/* Operator overlay (§19): small, private, clear of the output. */
+/* Operator overlay: small, private, clear of the output. */
 
 .overlay {
   position: absolute;
@@ -1026,6 +1114,24 @@ button.text-danger {
   place-items: center;
   background: var(--bg);
   z-index: 10;
+}
+
+/* Keeping the illusion: the question opens as a small card in a corner,
+   with the terminal still showing around it, not over a blank screen. */
+.scrim.discreet {
+  place-items: start end;
+  padding: var(--sp-4);
+  background: transparent;
+  pointer-events: none;
+}
+
+.scrim.discreet > .critical-dialog {
+  width: min(440px, 92vw);
+  max-height: calc(100vh - 2 * var(--sp-4));
+  overflow: auto;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  pointer-events: auto;
 }
 
 .critical-dialog {

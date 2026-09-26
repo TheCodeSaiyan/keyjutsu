@@ -1,4 +1,4 @@
-; KeyJutsu's additions to the Tauri NSIS installer (Milestone 16).
+; KeyJutsu's additions to the Tauri NSIS installer.
 ;
 ; After installing, two questions: put `keyjutsu` on the PATH, and add
 ; "Open KeyJutsu here" to Explorer's folder menus. A silent install (/S)
@@ -19,4 +19,13 @@
 !macro NSIS_HOOK_PREUNINSTALL
   nsExec::ExecToLog '"$INSTDIR\keyjutsu.exe" setup path remove'
   nsExec::ExecToLog '"$INSTDIR\keyjutsu.exe" setup explorer remove'
+!macroend
+
+; What the elevation broker captured before Administrator steps, kept in
+; %ProgramData%\KeyJutsu where only Administrators can write (ADR 0017).
+; It belongs to the installed program, not to anyone's history, so it goes
+; with it. With the all-users context, $APPDATA is ProgramData.
+!macro NSIS_HOOK_POSTUNINSTALL
+  SetShellVarContext all
+  RMDir /r "$APPDATA\KeyJutsu"
 !macroend

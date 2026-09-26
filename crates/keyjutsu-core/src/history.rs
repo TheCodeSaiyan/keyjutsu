@@ -1,4 +1,4 @@
-//! Session history (§36): what was asked, what was approved, what happened.
+//! Session history: what was asked, what was approved, what happened.
 //!
 //! A session is recorded when a plan run ends, unless the operator chose an
 //! ephemeral session. The record keeps the sealed snapshot itself, so what

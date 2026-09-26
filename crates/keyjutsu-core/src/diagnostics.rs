@@ -100,7 +100,6 @@ pub fn bundle(report: &ReadinessReport, agents: &[AgentInfo], kept: &Kept, scrub
             CheckStatus::Ok => "ok  ",
             CheckStatus::Warning => "warn",
             CheckStatus::Unavailable => "fail",
-            CheckStatus::NotYetBuilt => "----",
         };
         let _ = writeln!(t, "  [{mark}] {:<36} {}", c.name, c.detail);
     }
@@ -304,6 +303,7 @@ mod tests {
                 name: "Windows".into(),
                 status: CheckStatus::Ok,
                 detail: "running on ROBINS-DESK as robin.hale".into(),
+                get: None,
             }],
         }
     }

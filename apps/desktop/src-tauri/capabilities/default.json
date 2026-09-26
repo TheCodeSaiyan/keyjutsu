@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "The main window. KeyJutsu's own commands are registered in main.rs; no plugin that can reach the file system or start processes is enabled.",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-set-title"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "core:window:allow-request-user-attention"
+  ]
 }

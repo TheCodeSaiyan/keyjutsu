@@ -28,6 +28,8 @@ import type {
  */
 export const ipc = {
   readinessScan: () => invoke<ReadinessReport>("readiness_scan"),
+  /** Open one of KeyJutsu's own download links; Rust refuses any other. */
+  openLink: (url: string) => invoke<void>("open_link", { url }),
   /** The diagnostic bundle, in full, as it would be saved. */
   diagnosticsPreview: () => invoke<string>("diagnostics_preview"),
   /** Save the bundle last previewed; returns where. */

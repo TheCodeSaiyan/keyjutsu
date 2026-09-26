@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { agent, ReadinessReport } from "@keyjutsu/types";
+import { ipc } from "../ipc";
 
 interface Props {
   agents: agent.AgentInfo[] | null;
@@ -10,7 +11,7 @@ interface Props {
 }
 
 /**
- * The first thing on screen (§8): what to do, which agent, and optional
+ * The first thing on screen: what to do, which agent, and optional
  * context. Nothing is sent until "Plan task", and then only the task and the
  * pasted context, redacted by Rust before it leaves.
  */
@@ -114,6 +115,19 @@ export function NewTask({ agents, report, busy, onPlan, onOpen }: Props) {
               ? installed.map((a) => a.name).join(" · ")
               : "No agent CLI found. You can still open a plan file."}
           </p>
+          {installed.length === 0 && (agents ?? []).length > 0 && (
+            <p className="small">
+              Get one:{" "}
+              {(agents ?? []).map((a, i) => (
+                <span key={a.kind}>
+                  {i > 0 && " · "}
+                  <button className="link" onClick={() => void ipc.openLink(a.install_url)}>
+                    {a.name}
+                  </button>
+                </span>
+              ))}
+            </p>
+          )}
         </section>
         <section className="card">
           <h2>Terminal</h2>

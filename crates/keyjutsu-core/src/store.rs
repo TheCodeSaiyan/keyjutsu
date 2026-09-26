@@ -1,4 +1,4 @@
-//! KeyJutsu's local store (§35), encrypted at rest (ADR 0016).
+//! KeyJutsu's local store, encrypted at rest (ADR 0016).
 //!
 //! Each record is a JSON document encrypted with AES-256-GCM under a random
 //! 256-bit key. The key itself is kept only as DPAPI-protected bytes, so the
@@ -8,7 +8,7 @@
 //! read as the other. Records are whole files written through a temporary
 //! file and a rename, so a crash leaves the old record or the new one.
 //!
-//! Nothing secret goes in: credentials never reach the store (§25), only the
+//! Nothing secret goes in: credentials never reach the store, only the
 //! plans, outcomes and history around them.
 
 use std::path::{Path, PathBuf};

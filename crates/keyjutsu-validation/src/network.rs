@@ -1,4 +1,4 @@
-//! Which hosts a command line contacts (§30), read from its text alone.
+//! Which hosts a command line contacts, read from its text alone.
 //!
 //! This finds what a line names: URLs, UNC shares, `user@host:` addresses,
 //! `ssh`/`scp` targets and `-ComputerName`. It cannot see a host built at

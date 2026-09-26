@@ -183,6 +183,7 @@ or one with a step that wasn't READY.
 | `--settle STEP=succeeded\|failed` | settle a step left in doubt by a crash or a disarm |
 | `--isolate worktree\|branch` | work in a new worktree, or on a new branch, rather than your checkout |
 | `--ephemeral` | keep no record of the run in the history |
+| `--presentation standard\|discreet` | how KeyJutsu asks for you during the run: on screen, or only in the title bar, with the answer unseen |
 
 ### `keyjutsu recover SNAPSHOT`
 

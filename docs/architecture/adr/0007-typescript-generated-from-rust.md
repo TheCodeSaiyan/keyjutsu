@@ -1,6 +1,6 @@
 # 0007: TypeScript IPC types are generated from Rust
 
-Status: accepted, Milestone 0.
+Status: accepted.
 
 ## Decision
 
@@ -23,7 +23,7 @@ could be built first.
 - TypeScript is pinned to `~6.0.3`. TypeScript 7 is current, but
   typescript-eslint 8.70 supports only `<6.1`. Revisit when it does.
 
-## Addendum, Milestone 3: one folder per crate
+## Addendum: one folder per crate
 
 ts-rs names each file after the Rust type, so two crates exporting a type of
 the same name to the same folder overwrite each other, silently, and which
@@ -32,7 +32,7 @@ replaced the readiness `Check` the first time it was generated; the desktop's
 typecheck caught it. The plan crate's `ExecutionMode` also replaced the
 engine's, which nothing caught only because the two happen to be identical.
 
-From Milestone 3, a crate exports to a folder of its own
+Since then, a crate exports to a folder of its own
 (`#[ts(export, export_to = "plan/")]`), and each folder becomes a namespace in
 `@keyjutsu/types` (`import type { plan } from "@keyjutsu/types"`, then
 `plan.Check`). The crates written before this still export to the top level;

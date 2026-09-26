@@ -1,4 +1,4 @@
-//! Git-aware safety (§31): tell KeyJutsu's changes from the operator's.
+//! Git-aware safety: tell KeyJutsu's changes from the operator's.
 //!
 //! Before a run, the repository a plan works in is recorded: branch, HEAD,
 //! remotes, and every file that already differs from HEAD, with a hash of its
@@ -307,7 +307,7 @@ fn same(a: &Path, b: &Path) -> bool {
 }
 
 /// A temporary worktree on a new local branch, from HEAD, for a plan to run
-/// in apart from the operator's working tree (§31). The operator's
+/// in apart from the operator's working tree. The operator's
 /// uncommitted changes are not in it.
 pub fn create_worktree(root: &Path, branch: &str, dest: &Path) -> Result<PathBuf, String> {
     let out = git(root, &["worktree", "add", "-b", branch, &dest.display().to_string(), "HEAD"])?;

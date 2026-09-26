@@ -5,15 +5,14 @@
 //! on the session; when the shell reports them finished, KeyJutsu runs the
 //! step's internal checks, records the result, writes a checkpoint and asks
 //! the plan's walk what comes next. Branches are decided by KeyJutsu from real
-//! outcomes, never by the agent (§10).
+//! outcomes, never by the agent.
 //!
 //! What this refuses to do:
 //!
-//! - run a snapshot that was not validated, or whose steps are not all READY
-//!   (§12);
-//! - carry on past a failure (§2.3): the outcome says what was expected and
+//! - run a snapshot that was not validated, or whose steps are not all READY;
+//! - carry on past a failure: the outcome says what was expected and
 //!   what happened;
-//! - assume a step that was running when KeyJutsu stopped succeeded (§52):
+//! - assume a step that was running when KeyJutsu stopped succeeded:
 //!   the checkpoint marks it in doubt and the operator settles it;
 //! - reuse a result from an earlier run unless the step's hash is unchanged.
 
@@ -98,7 +97,7 @@ pub struct InProgress {
 }
 
 /// Written before and after every step, so a crash, power loss or restart
-/// leaves a record of exactly what is known (§52).
+/// leaves a record of exactly what is known.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export, export_to = "execute/")]
 pub struct Checkpoint {
@@ -107,8 +106,8 @@ pub struct Checkpoint {
     pub runs: Vec<StepRun>,
     /// A step that had started and not finished. Its effect is unknown.
     pub in_progress: Option<InProgress>,
-    /// What each step declared it would change, captured just before it ran
-    /// (§29). Latest last.
+    /// What each step declared it would change, captured just before it ran.
+    /// Latest last.
     #[serde(default)]
     pub captures: Vec<crate::recovery::StepCapture>,
     /// The plan stopped at this boundary and has not yet crossed it.
@@ -173,7 +172,7 @@ pub enum Outcome {
         expected: String,
         actual: String,
         /// The end of what the step printed, without colour codes, so the
-        /// agent asked to fix it can read the real error (§61). Redacted
+        /// agent asked to fix it can read the real error. Redacted
         /// before it is sent anywhere, like everything given to an agent.
         #[serde(default)]
         output: String,
@@ -187,8 +186,8 @@ pub enum Outcome {
     Blocked {
         reason: String,
     },
-    /// Phase `phase` is done and the plan waits for a session boundary
-    /// (§32). Resuming checks that it happened.
+    /// Phase `phase` is done and the plan waits for a session boundary.
+    /// Resuming checks that it happened.
     Boundary {
         phase: String,
         boundary: keyjutsu_plan::model::Boundary,
@@ -213,7 +212,7 @@ pub enum ExecutionEvent {
         step: String,
     },
     /// An Administrator step ran in the elevation broker's own shell; this
-    /// is what it printed (§26, ADR 0011).
+    /// is what it printed (ADR 0011).
     ElevatedOutput {
         step: String,
         text: String,
@@ -231,7 +230,7 @@ pub enum ExecutionEvent {
     },
 }
 
-/// What the operator is shown before a critical step runs (§28).
+/// What the operator is shown before a critical step runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[ts(export, export_to = "execute/")]
 pub struct CriticalConfirmation {
@@ -288,15 +287,16 @@ pub struct ExecuteOptions {
     pub settled: BTreeMap<String, bool>,
     /// How long to wait for the shell to return to its prompt between steps.
     pub prompt_timeout: Duration,
-    /// Asked just before each critical step (§28). Without one, the typed
-    /// confirmation given at approval is all there is.
+    /// Asked just before a critical step whose approval is more than an
+    /// hour old by then. Within the hour, the phrase typed at approval
+    /// stands; past it, a run with no gate stops at the step.
     pub critical_gate: Option<CriticalGate>,
-    /// Where staged artifacts are kept (§30).
+    /// Where staged artifacts are kept.
     pub artifact_store: PathBuf,
     /// What identifies the far side of a boundary; the real checks if `None`.
     pub boundary_probe: Option<crate::boundary::BoundaryProbe>,
     /// Asked before resuming after a boundary. Without one, a plan never
-    /// resumes past a boundary (§32: resume only after confirmation).
+    /// resumes past a boundary: never without the operator confirming.
     pub resume_gate: Option<crate::boundary::ResumeGate>,
     /// This machine's environment now; collected for real if `None`.
     pub fingerprint_now: Option<crate::boundary::FingerprintNow>,
@@ -391,6 +391,22 @@ fn engine_mode(m: ExecutionMode) -> EngineMode {
 /// The staged lines for one plan step: its commands, then its visible
 /// validation unless the plan hides it. Operator steps become one user-input
 /// line: the operator does what the step says and presses Enter.
+/// Put the line that hands a step its artifacts in front of its commands.
+/// It is written directly, never performed.
+pub fn hand_artifacts(script: &mut StagedScript, step: &Step, line: String) {
+    script.steps.insert(
+        0,
+        StagedStep {
+            id: format!("{}#artifacts", step.id),
+            title: step.title.clone(),
+            command: line,
+            mode: Some(EngineMode::Direct),
+            submit: None,
+            answers: None,
+        },
+    );
+}
+
 pub fn staged_for(step: &Step, show_validation: bool) -> StagedScript {
     if let (StepKind::Credential, Some(request)) = (step.kind, &step.credential) {
         return StagedScript {
@@ -473,7 +489,7 @@ pub(crate) fn ps_quote(text: &str) -> String {
     out
 }
 
-/// The command that asks for a credential (§25). The shell's own prompt
+/// The command that asks for a credential. The shell's own prompt
 /// masks what the operator types, keeps it out of history, and holds it as a
 /// SecureString or PSCredential; KeyJutsu passes the keys through and never
 /// holds the secret. The variable name is checked by the schema.
@@ -499,7 +515,7 @@ pub fn credential_answers(request: &CredentialRequest) -> u32 {
     }
 }
 
-/// Removes the credentials a run asked for from the shell (§25: ephemeral).
+/// Removes the credentials a run asked for from the shell: they last only as long as the run.
 pub fn forget_command(variables: &[String]) -> String {
     format!("Remove-Variable -Name {} -Scope Global -ErrorAction Ignore", variables.join(","))
 }
@@ -756,7 +772,7 @@ pub fn execute(
 ) -> (Outcome, Checkpoint) {
     let mut checkpoint = Checkpoint::new(snapshot.snapshot_hash());
     let finish = |outcome: Outcome, checkpoint: Checkpoint| {
-        // Anything short of completion hands the keyboard back (§2.3). A step
+        // Anything short of completion hands the keyboard back. A step
         // that failed only its checks left a performance that had completed,
         // and a completed performance keeps the keyboard until disarmed.
         if outcome != Outcome::Complete {
@@ -769,7 +785,7 @@ pub fn execute(
         return finish(Outcome::Blocked { reason }, checkpoint);
     }
     // Everything the plan downloads must be staged and verified before it
-    // arms (§30): nothing is fetched while it runs.
+    // arms: nothing is fetched while it runs.
     for a in crate::artifacts::artifacts(snapshot.plan()) {
         if let Err(reason) = crate::artifacts::verify(&options.artifact_store, a) {
             return finish(Outcome::Blocked { reason }, checkpoint);
@@ -848,7 +864,7 @@ pub fn execute(
     }
     save(&checkpoint);
 
-    // Boundaries (§32). One is behind the plan once any step after it ran.
+    // Boundaries. One is behind the plan once any step after it ran.
     let probe = options.boundary_probe.clone().unwrap_or_else(crate::boundary::real_probe);
     let phase_of = |id: &str| plan.phases.iter().position(|p| p.steps.iter().any(|s| s == id));
     let mut crossed: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
@@ -1040,10 +1056,24 @@ pub fn execute(
                 checkpoint,
             );
         }
-        // A critical step is confirmed again, just before it runs.
-        if let Some(gate) = &options.critical_gate
-            && keyjutsu_plan::approval::is_critical(plan, step)
+        // A critical step approved more than an hour ago is confirmed again,
+        // just before it runs: judged now, not when the run began, so a long
+        // run cannot carry an old approval past its hour.
+        let now_secs = crate::fingerprint::parse_rfc3339(&now()).unwrap_or(u64::MAX);
+        if keyjutsu_plan::approval::is_critical(plan, step)
+            && needs_reconfirmation(snapshot.sealed_at(), now_secs)
         {
+            let Some(gate) = &options.critical_gate else {
+                save(&checkpoint);
+                return finish(
+                    Outcome::Blocked {
+                        reason: format!(
+                            "critical step `{id}` was approved more than an hour ago and must be confirmed again before it runs, and nothing here can ask"
+                        ),
+                    },
+                    checkpoint,
+                );
+            };
             let ask = critical_confirmation(plan, step);
             let typed = gate(&ask);
             if typed.as_deref().map(str::trim) != Some(ask.phrase.as_str()) {
@@ -1059,8 +1089,14 @@ pub fn execute(
                 );
             }
         }
+        // An Administrator step, with KeyJutsu itself unelevated, goes to the
+        // elevation broker, which checks it against its own copy of the
+        // approved snapshot. It is never typed into the unelevated shell,
+        // and the broker captures what it declares itself (ADR 0017).
+        let needs_broker = step.privilege == Some(keyjutsu_plan::model::Privilege::Administrator)
+            && !crate::elevation::is_elevated();
         // Prepare the step's recovery before it runs, or do not run it.
-        if step.recovery.as_ref().is_some_and(|r| !r.capture.is_empty()) {
+        if !needs_broker && step.recovery.as_ref().is_some_and(|r| !r.capture.is_empty()) {
             let Some(dir) = options.checkpoint.as_deref().map(crate::recovery::recovery_dir) else {
                 return finish(
                     Outcome::Blocked {
@@ -1115,17 +1151,7 @@ pub fn execute(
         // Hand the step its staged artifacts, checked again just before it
         // runs; a copy that changed since staging stops the plan here.
         match crate::artifacts::assignment(&options.artifact_store, step) {
-            Ok(Some(line)) => script.steps.insert(
-                0,
-                StagedStep {
-                    id: format!("{id}#artifacts"),
-                    title: step.title.clone(),
-                    command: line,
-                    mode: Some(EngineMode::Direct),
-                    submit: None,
-                    answers: None,
-                },
-            ),
+            Ok(Some(line)) => hand_artifacts(&mut script, step, line),
             Ok(None) => {}
             Err(reason) => {
                 checkpoint.in_progress = None;
@@ -1134,11 +1160,6 @@ pub fn execute(
             }
         }
         let config = PerformanceConfig { mode: default_mode, ..options.base.clone() };
-        // An Administrator step, with KeyJutsu itself unelevated, goes to the
-        // elevation broker, which checks it against its own copy of the
-        // approved snapshot. It is never typed into the unelevated shell.
-        let needs_broker = step.privilege == Some(keyjutsu_plan::model::Privilege::Administrator)
-            && !crate::elevation::is_elevated();
         let performed = if needs_broker {
             let Some(runner) = &options.elevated_runner else {
                 checkpoint.in_progress = None;
@@ -1152,20 +1173,13 @@ pub fn execute(
                     checkpoint,
                 );
             };
-            if !step.artifacts.is_empty() {
-                checkpoint.in_progress = None;
-                save(&checkpoint);
-                return finish(
-                    Outcome::Blocked {
-                        reason: format!(
-                            "step `{id}` needs Administrator and artifacts; the broker cannot hand over artifacts yet"
-                        ),
-                    },
-                    checkpoint,
-                );
-            }
             match runner.run_step(snapshot.snapshot_hash(), &id, &step_hash) {
                 Ok(run) => {
+                    // The broker's account of what it captured, for the
+                    // recovery plan to show.
+                    if let Some(c) = run.captured {
+                        checkpoint.captures.push(c);
+                    }
                     elevated_output = Some(run.output.clone());
                     observe(ExecutionEvent::ElevatedOutput { step: id.clone(), text: run.output });
                     Performed::Finished(run.outcomes)

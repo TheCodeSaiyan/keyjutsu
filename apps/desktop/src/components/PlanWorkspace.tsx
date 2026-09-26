@@ -29,7 +29,7 @@ interface Props {
 }
 
 /**
- * The plan workspace (§8, §11). The plan is authoritative and in the middle;
+ * The plan workspace. The plan is authoritative and in the middle;
  * the agent's notes explain it on the left; the selected step is inspected
  * and edited on the right. Every change is a request to Rust, which re-reads
  * the whole plan and decides what needs validating again.

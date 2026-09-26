@@ -1,6 +1,6 @@
 # 0009: The clean profile turns off history predictions and saving
 
-Status: accepted, Milestone 1.
+Status: accepted.
 
 ## Context
 
@@ -29,5 +29,5 @@ point of the detected profile: the terminal should behave as their own does.
 ## Consequences
 
 The threat model records predictions in the detected profile as a known
-exposure. The compatibility profile (§16), when built, should offer
+exposure. The compatibility profile, when built, should offer
 predictions off while keeping the user's appearance.

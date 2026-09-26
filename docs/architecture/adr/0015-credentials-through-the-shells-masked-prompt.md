@@ -1,10 +1,10 @@
 # 0015: Credentials are typed into the shell's own masked prompt
 
-Status: accepted, Milestone 9.
+Status: accepted.
 
 ## Context
 
-§2.5 and §25: a secret must be real user input, never staged typing, and must
+A secret must be real user input, never staged typing, and must
 not appear in the plan, agent context, terminal replay, logs or telemetry. A
 plan still has to *use* the secret, for example to sign in to a registry.
 
@@ -23,7 +23,7 @@ A credential step says what it asks for, never the value:
 ```
 
 When the step comes up, KeyJutsu writes one command directly (it is never
-performed, since §25 turns staged typing off for credential flows):
+performed, since staged typing is off for credential flows):
 
 - `secret`: `$REGISTRY_TOKEN = Read-Host -AsSecureString -Prompt 'Token for ghcr.io'`
 - `username_and_password`: `$NAME = Get-Credential -Message '…'`, with
@@ -65,7 +65,7 @@ Around that:
   example `…Password` on its own line). That is a plan that does what it
   says; validation does not yet flag it.
 - Windows PowerShell 5.1's `Get-Credential` opens a Windows credential dialog
-  instead of prompting in the console. That is Windows-native (§25), but it is
+  instead of prompting in the console. That is Windows-native, but it is
   not exercised by a test here.
 - Windows Credential Manager, DPAPI-protected storage and SSPI are not used:
   nothing is stored, so there is nothing to protect. Storing a credential

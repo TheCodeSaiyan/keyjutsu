@@ -18,7 +18,7 @@ interface Props {
 
 /**
  * After a run: what happened, where the record is, and, after a failure,
- * the four choices of §29. Nothing is rolled back unless the operator
+ * the four choices it has. Nothing is rolled back unless the operator
  * reviews the recovery plan and then confirms it.
  */
 export function RunPanel({ done, busy, agents, onReview, onRecover, onFix, onBack }: Props) {

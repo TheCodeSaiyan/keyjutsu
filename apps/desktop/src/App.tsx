@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import type {
   agent,
   execute,
@@ -35,6 +35,15 @@ import { ResumeDialog } from "./components/ResumeDialog";
 import { HistoryView } from "./components/HistoryView";
 import { TechniquesView } from "./components/TechniquesView";
 import { boundaryName, confirmationFor } from "./plan";
+import { stagedError } from "./staging";
+import {
+  PRESENTATIONS,
+  isOperatorChord,
+  loadPresentation,
+  rules,
+  savePresentation,
+  type Presentation,
+} from "./presentation";
 import mark from "./assets/mark.png";
 
 const SHELL_NAMES: Record<ShellKind, string> = {
@@ -91,7 +100,7 @@ export function App() {
   const [view, setView] = useState<"first-run" | "workspace">(() =>
     readFlag(FIRST_RUN_KEY) ? "workspace" : "first-run",
   );
-  // Where the operator is: the task, the plan, or the terminal (§8).
+  // Where the operator is: the task, the plan, or the terminal.
   const [space, setSpace] = useState<"task" | "plan" | "terminal" | "history" | "techniques">(
     "task",
   );
@@ -103,6 +112,20 @@ export function App() {
   // before crossing it.
   const [waiting, setWaiting] = useState<WaitingRun | null>(null);
   const [resumeNotice, setResumeNotice] = useState<execute.BoundaryNotice | null>(null);
+  // How KeyJutsu asks for the operator mid-performance, and what it is
+  // waiting on: a question not yet opened (unless the choice is to show it
+  // at once), a credential to type, or the end of a run held on screen.
+  const [presentation, setPresentation] = useState<Presentation>(loadPresentation);
+  const [revealed, setRevealed] = useState(false);
+  const [credential, setCredential] = useState<string | null>(null);
+  const [holding, setHolding] = useState(false);
+  // A staged error is on screen; where it would not fit, the edge instead.
+  const [staged, setStaged] = useState<boolean | null>(null);
+  const presentationRef = useRef(presentation);
+  useEffect(() => {
+    presentationRef.current = presentation;
+    savePresentation(presentation);
+  }, [presentation]);
   const [running, setRunning] = useState(false);
   const [runDone, setRunDone] = useState<Extract<RunMessage, { kind: "done" }> | null>(null);
   const [critical, setCritical] = useState<{
@@ -209,6 +232,7 @@ export function App() {
         setOverlay(false);
         setPaused(false);
         setNotice(summarise(snapshotRef.current));
+        if (rules(presentationRef.current).holdAfterRun) setHolding(true);
         break;
       case "overlay_requested":
         // Opening the overlay pauses staged input. Closing it with the chord
@@ -354,14 +378,20 @@ export function App() {
         setRunning(false);
         setRunDone(m);
         setWaiting(null);
+        setCredential(null);
+        if (rules(presentationRef.current).holdAfterRun) setHolding(true);
         break;
       case "execution":
         // An Administrator step ran in the elevation broker's shell: show
         // what it printed in the terminal.
         if (m.event.kind === "elevated_output")
           term.current?.write(m.event.text.replace(/\r?\n/g, "\r\n"));
-        if (m.event.kind === "credential_required")
+        if (m.event.kind === "credential_required") {
           setNotice(`Credential required: ${m.event.prompt}. Stop typing, then press Enter.`);
+          setCredential(m.event.prompt);
+        }
+        if (m.event.kind === "step_finished" || m.event.kind === "step_starting")
+          setCredential(null);
         break;
     }
   }, []);
@@ -393,10 +423,51 @@ export function App() {
   );
   const onKey = useCallback(
     (chord: KeyChord) => {
+      if (holding) {
+        // The run is over but the stage is held: nothing reaches the real
+        // shell until the operator lets go with the chord.
+        if (isOperatorChord(chord)) setHolding(false);
+        return;
+      }
+      const unopened =
+        !revealed && ((critical && critical.purpose === "run") || resumeNotice !== null);
+      if (unopened && isOperatorChord(chord)) {
+        setRevealed(true);
+        return;
+      }
       if (sessionId !== null) void ipc.key(sessionId, chord);
     },
-    [sessionId],
+    [sessionId, holding, revealed, critical, resumeNotice],
   );
+  // A question arrived: with "Stage an error", show one. Taken away again,
+  // synchronously, before the answer lets anything more reach the terminal.
+  const waitingFor =
+    critical !== null && critical.purpose === "run" ? "confirm" : resumeNotice ? "resume" : null;
+  useEffect(() => {
+    if (!waitingFor || !rules(presentation).stagedError || staged !== null || !term.current) return;
+    const lines = stagedError(waitingFor, shell ?? "pwsh", term.current.promptText());
+    setStaged(term.current.stage(lines));
+  }, [waitingFor, presentation, staged, shell]);
+  const unstage = () => {
+    term.current?.unstage();
+    setStaged(null);
+  };
+
+  // KeyJutsu is waiting on the operator. Out of view, the taskbar button
+  // flashes, which a shared window does not show.
+  const waitingNow =
+    (critical !== null && critical.purpose === "run") ||
+    resumeNotice !== null ||
+    credential !== null ||
+    holding;
+  useEffect(() => {
+    if (waitingNow && rules(presentation).flashTaskbar) {
+      getCurrentWindow()
+        .requestUserAttention(UserAttentionType.Informational)
+        .catch(() => undefined);
+    }
+  }, [waitingNow, presentation]);
+
   const onResize = useCallback(
     (size: TerminalSize) => {
       if (sessionId !== null) void ipc.resize(sessionId, size);
@@ -451,17 +522,24 @@ export function App() {
   const canArm = sessionId !== null && ready && !exited && !armed;
   const modeHint = MODES.find((m) => m.value === mode)?.hint;
   // During a performance, and for the whole of a plan run, only the terminal
-  // is on screen (§18).
-  const fullTerminal = armed || running;
+  // is on screen.
+  const fullTerminal = armed || running || holding;
+  const r = rules(presentation);
+  // Shown at once when the operator asked for that, otherwise once opened.
+  const showQuestion = r.coverTerminal || revealed;
+  const waitingOnOperator = waitingNow;
 
-  const dialog = critical && (
+  const dialog = critical && (critical.purpose === "approve" || showQuestion) && (
     <CriticalDialog
+      discreet={critical.purpose === "run" && !r.coverTerminal}
       key={critical.confirmation.step + critical.purpose}
       confirmation={critical.confirmation}
       purpose={critical.purpose}
       onConfirm={(typed) => {
         if (critical.purpose === "run") {
+          unstage();
           setCritical(null);
+          setRevealed(false);
           void ipc.confirm(typed);
           term.current?.focus();
           return;
@@ -476,8 +554,12 @@ export function App() {
         }
       }}
       onCancel={() => {
-        if (critical.purpose === "run") void ipc.confirm(null);
+        if (critical.purpose === "run") {
+          unstage();
+          void ipc.confirm(null);
+        }
         setCritical(null);
+        setRevealed(false);
       }}
     />
   );
@@ -649,6 +731,19 @@ export function App() {
                   <option value="clean">Clean</option>
                 </select>
               </label>
+              <label title={PRESENTATIONS.find((p) => p.value === presentation)?.hint}>
+                When KeyJutsu needs you{" "}
+                <select
+                  value={presentation}
+                  onChange={(e) => setPresentation(e.target.value as Presentation)}
+                >
+                  {PRESENTATIONS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button onClick={() => restart(() => setGeneration((g) => g + 1))}>
                 New terminal
               </button>
@@ -763,7 +858,7 @@ export function App() {
                         />
                         <p className="muted small">
                           These run exactly as if you typed them. They are not validated or
-                          approved: plans and approval arrive in later milestones.
+                          approved: for that, get a plan from New task.
                         </p>
                       </>
                     )}
@@ -800,7 +895,14 @@ export function App() {
               </aside>
             )}
 
-            <section className="term-area">
+            <section
+              className="term-area"
+              data-cue={
+                waitingOnOperator && (r.edgeCue || (r.stagedError && staged === false))
+                  ? "waiting"
+                  : undefined
+              }
+            >
               <TerminalView
                 ref={term}
                 profile={profile}
@@ -810,6 +912,11 @@ export function App() {
                 onResize={onResize}
                 onTitle={(t) => (titleRef.current = t)}
               />
+              {credential && r.credentialBanner && (
+                <p className="term-banner" role="status">
+                  Credential required: {credential}. Stop typing, then press Enter.
+                </p>
+              )}
               {armed && overlay && (
                 <Overlay
                   snapshot={snapshot}
@@ -830,23 +937,30 @@ export function App() {
           </div>
 
           <div className="visually-hidden" aria-live="polite">
-            {armed && snapshot
-              ? `Armed. Step ${snapshot.step_index + 1} of ${snapshot.step_count}.`
-              : ""}
+            {waitingOnOperator && !r.coverTerminal
+              ? "KeyJutsu is waiting for you. Press Ctrl+Shift+K."
+              : armed && snapshot
+                ? `Armed. Step ${snapshot.step_index + 1} of ${snapshot.step_count}.`
+                : ""}
           </div>
         </div>
       </main>
       {dialog}
-      {resumeNotice && (
+      {resumeNotice && showQuestion && (
         <ResumeDialog
           notice={resumeNotice}
+          discreet={!r.coverTerminal}
           onConfirm={(typed) => {
+            unstage();
             setResumeNotice(null);
+            setRevealed(false);
             void ipc.confirm(typed);
             term.current?.focus();
           }}
           onCancel={() => {
+            unstage();
             setResumeNotice(null);
+            setRevealed(false);
             void ipc.confirm(null);
           }}
         />

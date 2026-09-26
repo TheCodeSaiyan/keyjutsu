@@ -62,7 +62,7 @@ fn assert_all_transitions_legal(e: &PerformanceEngine) {
     }
 }
 
-/// The Milestone 2 acceptance case: staged `Get-Service`, the user types
+/// The case the engine exists for: staged `Get-Service`, the user types
 /// `asdfghjkl`, and the shell receives exactly the staged characters.
 #[test]
 fn mashing_arbitrary_keys_delivers_exactly_the_staged_command() {
@@ -420,7 +420,7 @@ fn the_snapshot_names_the_next_step_for_the_overlay() {
     assert_eq!(e.snapshot().next_step_title, None, "the last step has nothing after it");
 }
 
-/// A credential step (§25): KeyJutsu's command asks, the operator answers.
+/// A credential step: KeyJutsu's command asks, the operator answers.
 fn asking(command: &str) -> PerformanceEngine {
     let mut s = script(&[command]);
     s.steps[0].mode = Some(ExecutionMode::UserInput);

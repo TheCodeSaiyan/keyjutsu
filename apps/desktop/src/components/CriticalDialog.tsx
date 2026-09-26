@@ -3,10 +3,12 @@ import type { execute } from "@keyjutsu/types";
 
 interface Props {
   confirmation: execute.CriticalConfirmation;
-  /** "approve" at approval; "run" just before the step runs (§28). */
+  /** "approve" at approval; "run" just before the step runs. */
   purpose: "approve" | "run";
   onConfirm(typed: string): void;
   onCancel(): void;
+  /** A corner card with the terminal still showing, not a full cover. */
+  discreet?: boolean;
 }
 
 /**
@@ -15,14 +17,14 @@ interface Props {
  * what validation found, and the phrase to type. The button only enables on
  * an exact match to save a round trip; Rust compares the phrase itself.
  */
-export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel }: Props) {
+export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, discreet }: Props) {
   const [typed, setTyped] = useState("");
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   const matches = typed.trim() === c.phrase;
 
   return (
-    <div className="scrim">
+    <div className={discreet ? "scrim discreet" : "scrim"}>
       <div
         className="critical-dialog"
         role="alertdialog"

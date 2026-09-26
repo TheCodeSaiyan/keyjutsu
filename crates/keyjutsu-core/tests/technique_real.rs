@@ -1,4 +1,4 @@
-//! Milestone 14: a successful session becomes a Technique, is reopened on a
+//! A successful session becomes a Technique, is reopened on a
 //! changed environment, and is held for revalidation or adaptation rather
 //! than run because it worked before. Real pwsh, real DPAPI, a store of its
 //! own in a scratch folder.

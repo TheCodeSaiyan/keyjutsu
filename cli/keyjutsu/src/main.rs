@@ -233,6 +233,10 @@ enum Command {
         /// Keep no record of this session in the encrypted history.
         #[arg(long)]
         ephemeral: bool,
+        /// How KeyJutsu asks for you during the run: on screen, or only in
+        /// the window's title bar, to keep the illusion.
+        #[arg(long, value_enum, default_value = "standard")]
+        presentation: PresentationChoice,
     },
     /// What the installer offers: `keyjutsu` on your PATH, and "Open KeyJutsu
     /// here" in Explorer. Each changes only your Windows account.
@@ -471,6 +475,16 @@ enum ShellChoice {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
+enum PresentationChoice {
+    /// KeyJutsu's questions and step titles appear on screen.
+    Standard,
+    /// Nothing of KeyJutsu's appears in the console: step titles stay out of
+    /// the window title, and a question is put in the title bar, with the
+    /// answer typed unseen.
+    Discreet,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
 enum ModeChoice {
     Performance,
     Assisted,
@@ -580,7 +594,7 @@ fn main() -> ExitCode {
         Command::Store(StoreCommand::Clear { history, techniques, artifacts }) => {
             history_cli::store_clear(history, techniques, artifacts)
         }
-        Command::Run { snapshot, mode, clean, resume, settle, isolate, ephemeral } => {
+        Command::Run { snapshot, mode, clean, resume, settle, isolate, ephemeral, presentation } => {
             run_cli::run(run_cli::RunArgs {
                 snapshot: &snapshot,
                 mode: mode.map(|m| match m {
@@ -597,6 +611,7 @@ fn main() -> ExitCode {
                     IsolateChoice::Branch => run_cli::Isolation::Branch,
                 }),
                 ephemeral,
+                discreet: matches!(presentation, PresentationChoice::Discreet),
             })
         }
         Command::Shell(shell) => session(shell.options(), None),
@@ -646,7 +661,7 @@ fn session(options: SessionOptions, performance: Option<console::Performance>) -
         .as_ref()
         .map(|p| p.script.steps.iter().map(|s| s.title.clone()).collect())
         .unwrap_or_default();
-    let summary = match console::run(options, performance, None) {
+    let summary = match console::run(options, performance, None, None) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("keyjutsu: {e}");
@@ -718,9 +733,11 @@ fn doctor(json: bool) -> ExitCode {
                 CheckStatus::Ok => "ok  ",
                 CheckStatus::Warning => "warn",
                 CheckStatus::Unavailable => "FAIL",
-                CheckStatus::NotYetBuilt => "--  ",
             };
             println!("  [{mark}] {:<32} {}", check.name, check.detail);
+            if let Some(get) = &check.get {
+                println!("         {:<32} {}: {}", "", get.label, get.url);
+            }
         }
         println!();
         for shell in &report.shells {

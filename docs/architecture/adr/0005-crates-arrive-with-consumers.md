@@ -1,22 +1,22 @@
-# 0005: Crates are created when a milestone gives them a consumer
+# 0005: Crates are created when something uses them
 
-Status: accepted, Milestone 0.
+Status: accepted.
 
 ## Context
 
-The specification suggests nine crates and also says not to build empty
-abstractions or artificial micro-crates (§4, §59). Creating all nine now would
-mean six crates with no code, each an invitation to put something in the wrong
-place.
+The planned layout had nine crates, and empty abstractions and artificial
+micro-crates were to be avoided. Creating all nine at the start would have
+meant six crates with no code, each an invitation to put something in the
+wrong place.
 
 ## Decision
 
-Milestones 0 to 2 create three crates, `keyjutsu-terminal`,
-`keyjutsu-execution` and `keyjutsu-core`, because those milestones have code
-for them. Each remaining crate is created by the milestone that first needs
-it. The [architecture overview](../overview.md) shows the crates that exist.
+The first three crates were `keyjutsu-terminal`, `keyjutsu-execution` and
+`keyjutsu-core`, because the first code needed them. Each later crate was
+created by the first change that needed it. The [architecture overview](../overview.md) shows the crates that exist.
 
 ## Consequences
 
-The layout in the specification is the target and the overview shows it. A
-reader of the tree today sees only what exists.
+A reader of the tree sees only what exists. Two of the planned crates never
+arrived: credential handling and the encrypted store turned out to belong in
+`keyjutsu-core`, beside the code that uses them.

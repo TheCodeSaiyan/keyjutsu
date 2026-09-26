@@ -1,4 +1,4 @@
-# Real elevation through KeyJutsu's broker (Milestone 10), in Windows Sandbox
+# Real elevation through KeyJutsu's broker, in Windows Sandbox
 # so that the Administrator step (a key under HKLM) lands on a disposable
 # machine.
 #
@@ -46,6 +46,9 @@ while (-not (Test-Path "$stage\work\all.done")) {
     if ((Get-Date) -gt $deadline) { throw "no result after 10 minutes; see $stage\work\trial.log" }
     Start-Sleep -Seconds 5
 }
+# The Sandbox is this script's own (it refuses to start beside another), and
+# left open it stops the next run from starting.
+Get-Process WindowsSandboxRemoteSession, WindowsSandboxServer -ErrorAction SilentlyContinue | Stop-Process -Force
 # The log mixes UTF-8 (Add-Content) and UTF-16 (the program's redirected
 # output); dropping NULs makes both readable and searchable.
 $log = ([IO.File]::ReadAllText("$stage\work\trial.log")) -replace "`0", ""

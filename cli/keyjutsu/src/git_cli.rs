@@ -1,4 +1,4 @@
-//! `keyjutsu git diff`: KeyJutsu's changes alone (§31).
+//! `keyjutsu git diff`: KeyJutsu's changes alone.
 
 use std::path::Path;
 use std::process::ExitCode;

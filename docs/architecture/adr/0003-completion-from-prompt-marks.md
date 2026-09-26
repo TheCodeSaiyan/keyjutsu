@@ -1,12 +1,12 @@
 # 0003: Command completion from nonce-stamped OSC 133 prompt marks
 
-Status: accepted, Milestone 1.
+Status: accepted.
 
 ## Context
 
 The engine must know when a command has finished, and whether it succeeded,
-without guessing from timers (§18) and without running commands somewhere
-other than the visible terminal (§15). A shell running inside ConPTY gives no
+without guessing from timers and without running commands somewhere
+other than the visible terminal. A shell running inside ConPTY gives no
 direct signal; its process is still alive between commands.
 
 ## Decision

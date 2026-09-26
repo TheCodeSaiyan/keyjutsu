@@ -74,7 +74,7 @@ Approving seals the plan into a snapshot: each step bound to a hash of what
 it runs and everything before it. Change a step and its approval, and every
 later step's, falls away. A critical step, KeyJutsu's own judgement rather
 than the agent's, needs its own typed phrase, both when it's approved and
-again before it runs if the approval is over an hour old.
+again just before it runs if, by then, the approval is over an hour old.
 
 The approval is also recorded in an encrypted store that only your Windows
 account on this machine can unlock, and `run` refuses a snapshot without that
@@ -124,7 +124,9 @@ and refused an altered one.
 A step can declare what it will change and how to undo it. Just before it
 runs, those files, registry values or service states are captured, with their
 hashes. After a failure, nothing is undone until you've seen the plan for
-undoing it and confirmed.
+undoing it and confirmed. An Administrator step is recovered through the
+elevation broker, which captures what it changes itself and keeps that where
+only Administrators can write.
 
 ```powershell
 keyjutsu recover spooler.approved.json
@@ -150,7 +152,9 @@ keyjutsu git diff fix.approved.json
 A plan that downloads something names it with a SHA-256. `plan stage` fetches
 and checks it before approval, and it's checked again just before the step,
 so a URL that starts serving something else after you approved is caught.
-Nothing is downloaded while a plan runs.
+Nothing is downloaded while a plan runs. An Administrator step is given a
+copy the broker checked, in a folder only Administrators can change, never
+the file in your profile.
 
 ## Plans that cross a restart
 

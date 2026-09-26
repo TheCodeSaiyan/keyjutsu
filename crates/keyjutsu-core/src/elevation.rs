@@ -1,4 +1,4 @@
-//! Administrator steps (§26). KeyJutsu itself runs unelevated; a step that
+//! Administrator steps. KeyJutsu itself runs unelevated; a step that
 //! needs Administrator goes to an elevation broker started once, before the
 //! run, which runs only approved steps bound to their hashes (ADR 0011).
 
@@ -12,6 +12,9 @@ pub struct ElevatedRun {
     pub outcomes: Vec<StepOutcome>,
     /// What the elevated shell printed, for showing in the terminal.
     pub output: String,
+    /// What the broker captured before the step, for the recovery plan to
+    /// show. Only the broker's own copy is ever restored.
+    pub captured: Option<crate::recovery::StepCapture>,
 }
 
 /// Runs an approved Administrator step elevated. There is deliberately no
@@ -19,6 +22,30 @@ pub struct ElevatedRun {
 /// which the runner checks against its own copy.
 pub trait ElevatedRunner: Send + Sync {
     fn run_step(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<ElevatedRun, String>;
+
+    /// Run an approved Administrator step's approved recovery commands, and
+    /// nothing else: the commands come from the runner's own copy of the
+    /// snapshot, never from the caller.
+    fn recover_step(
+        &self,
+        _snapshot_hash: &str,
+        step: &str,
+        _step_hash: &str,
+    ) -> Result<ElevatedRun, String> {
+        Err(format!("this runner cannot recover `{step}`"))
+    }
+
+    /// Put back what the runner itself captured before an approved
+    /// Administrator step ran. Nothing but the step is named: the runner
+    /// restores only its own capture of what the step declared.
+    fn restore_step(
+        &self,
+        _snapshot_hash: &str,
+        step: &str,
+        _step_hash: &str,
+    ) -> Result<Vec<crate::execute::CheckResult>, String> {
+        Err(format!("this runner cannot restore `{step}`"))
+    }
 }
 
 /// Whether this process is elevated (its token is the full Administrator

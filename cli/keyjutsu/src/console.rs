@@ -74,6 +74,95 @@ pub struct Performance {
 /// the session's events: how `keyjutsu run` executes a snapshot.
 pub type Controller = Box<dyn FnOnce(Session, Receiver<SessionEvent>) + Send>;
 
+/// A question put to the operator in this console while a controller drives
+/// the session: how a critical step is confirmed again, just before it runs.
+/// While one is open, keys go to the answer and nowhere else, never to the
+/// shell.
+#[derive(Clone, Default)]
+pub struct Asker(Arc<Mutex<Option<Open>>>);
+
+struct Open {
+    typed: String,
+    answer: Sender<Option<String>>,
+    /// Show what is typed. Off when the question is put in the title bar.
+    echo: bool,
+}
+
+/// Set the console window's title.
+pub fn set_title(text: &str) {
+    let _ = execute!(std::io::stdout(), terminal::SetTitle(text));
+}
+
+fn show(text: &str) {
+    let mut out = std::io::stdout();
+    let _ = out.write_all(text.replace('\n', "\r\n").as_bytes());
+    let _ = out.flush();
+}
+
+impl Asker {
+    /// Show `text` and wait for a line: what was typed on Enter, `None` on
+    /// Esc or Ctrl+C.
+    pub fn ask(&self, text: &str) -> Option<String> {
+        let (answer, reply) = channel();
+        // Open before it is shown: a key pressed the moment it appears
+        // belongs to the answer.
+        if let Ok(mut open) = self.0.lock() {
+            *open = Some(Open { typed: String::new(), answer, echo: true });
+        }
+        show(text);
+        reply.recv().ok().flatten()
+    }
+
+    /// As `ask`, with the question in the window's title bar and nothing in
+    /// the console: what is typed is not shown.
+    pub fn ask_in_title(&self, question: &str) -> Option<String> {
+        let (answer, reply) = channel();
+        if let Ok(mut open) = self.0.lock() {
+            *open = Some(Open { typed: String::new(), answer, echo: false });
+        }
+        set_title(question);
+        reply.recv().ok().flatten()
+    }
+
+    /// Take `key` for an open question. Returns whether it was taken.
+    fn key(&self, key: &KeyEvent) -> bool {
+        let Ok(mut guard) = self.0.lock() else { return false };
+        let Some(open) = guard.as_mut() else { return false };
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match key.code {
+            KeyCode::Enter => {
+                if open.echo {
+                    show("\n");
+                }
+                if let Some(o) = guard.take() {
+                    let _ = o.answer.send(Some(o.typed));
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('c') if key.code == KeyCode::Esc || ctrl => {
+                if open.echo {
+                    show("\n");
+                }
+                if let Some(o) = guard.take() {
+                    let _ = o.answer.send(None);
+                }
+            }
+            KeyCode::Backspace => {
+                if open.typed.pop().is_some() && open.echo {
+                    show("\u{8} \u{8}");
+                }
+            }
+            KeyCode::Char(c) if !ctrl => {
+                open.typed.push(c);
+                if open.echo {
+                    show(&c.to_string());
+                }
+            }
+            _ => {}
+        }
+        true
+    }
+}
+
 pub struct RunSummary {
     pub outcomes: Vec<(usize, StepOutcome)>,
     pub armed: Option<Result<(), String>>,
@@ -109,6 +198,7 @@ pub fn run(
     mut options: SessionOptions,
     performance: Option<Performance>,
     controller: Option<Controller>,
+    asker: Option<Asker>,
 ) -> Result<RunSummary, String> {
     let (cols, rows) = terminal::size().map_err(|e| e.to_string())?;
     options.size = TerminalSize { rows, cols };
@@ -139,6 +229,9 @@ pub fn run(
             std::thread::spawn(move || {
                 control(s, rx);
                 done.store(false, Ordering::SeqCst);
+                // Said only now that keys reach the shell again: said
+                // sooner, an answer typed straight away would be swallowed.
+                set_title("KeyJutsu: the run has ended. Type exit to leave.");
             });
         } else {
             session.close();
@@ -170,6 +263,9 @@ pub fn run(
         }
         match event::read() {
             Ok(Event::Key(key)) if key.kind != KeyEventKind::Release => {
+                if asker.as_ref().is_some_and(|a| a.key(&key)) {
+                    continue;
+                }
                 if controlling.load(Ordering::SeqCst) && session.snapshot().is_none() {
                     continue;
                 }

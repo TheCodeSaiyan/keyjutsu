@@ -1,4 +1,4 @@
-//! Recovery (§29): capture what a step will change before it runs, and put
+//! Recovery: capture what a step will change before it runs, and put
 //! it back when the operator asks.
 //!
 //! Before a step that declares captures runs, its prior state is recorded in
@@ -20,7 +20,7 @@ use keyjutsu_execution::{
 };
 use keyjutsu_plan::approval::ApprovedSnapshot;
 use keyjutsu_plan::hash::sha256_hex;
-use keyjutsu_plan::model::{Capture, CaptureKind, RecoveryStrategy, Step};
+use keyjutsu_plan::model::{Capture, CaptureKind, Privilege, RecoveryStrategy, Step};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -308,6 +308,9 @@ pub fn plan_recovery(
             ));
         }
         let item = match step.recovery.as_ref().map(|r| r.strategy) {
+            // For an Administrator step run through the broker, this is the
+            // broker's account of what it captured, shown here; the broker
+            // restores from its own copy.
             Some(RecoveryStrategy::RestoreCapturedState) => {
                 match checkpoint.captures.iter().rev().find(|c| &c.step == id && &c.step_hash == ran_hash) {
                     Some(c) => RecoveryItem::Restore {
@@ -341,6 +344,19 @@ pub fn plan_recovery(
         items.push(item);
     }
     Ok(items)
+}
+
+/// Whether carrying out `items` needs the elevation broker: recovering an
+/// Administrator step, with KeyJutsu itself unelevated.
+pub fn needs_broker(snapshot: &ApprovedSnapshot, items: &[RecoveryItem]) -> bool {
+    !crate::elevation::is_elevated()
+        && items.iter().any(|i| {
+            matches!(i, RecoveryItem::Commands { .. } | RecoveryItem::Restore { .. })
+                && snapshot
+                    .plan()
+                    .step(i.step())
+                    .is_some_and(|s| s.privilege == Some(Privilege::Administrator))
+        })
 }
 
 /// The result of recovering one step.
@@ -424,11 +440,20 @@ fn restore_one(c: &Captured, dir: &Path) -> CheckResult {
     }
 }
 
+/// Put back everything in one capture, checking each item.
+pub fn restore_capture(capture: &StepCapture, dir: &Path) -> Vec<CheckResult> {
+    capture.items.iter().map(|i| restore_one(i, dir)).collect()
+}
+
 /// Carry out a confirmed recovery plan, stopping at the first step whose
 /// recovery fails: recovery is execution too, and does not carry on past a
-/// failure.
+/// failure. An Administrator step's recovery commands go to `elevated`, the
+/// broker, when KeyJutsu itself is not elevated; they are never typed into
+/// the unelevated shell.
+#[allow(clippy::too_many_arguments)]
 pub fn recover(
     driver: Option<&Driver<'_>>,
+    elevated: Option<&dyn crate::elevation::ElevatedRunner>,
     snapshot: &ApprovedSnapshot,
     checkpoint: &Checkpoint,
     dir: &Path,
@@ -442,10 +467,47 @@ pub fn recover(
         let mut checks = Vec::new();
         match item {
             RecoveryItem::Cannot { .. } => continue,
+            // Captured by the broker, so restored by it, from its own copy.
+            RecoveryItem::Restore { step: id, .. }
+                if step.is_some_and(|s| s.privilege == Some(Privilege::Administrator))
+                    && !crate::elevation::is_elevated() =>
+            {
+                let hash = snapshot.step_hashes().get(id).cloned().unwrap_or_default();
+                match elevated.map(|r| r.restore_step(snapshot.snapshot_hash(), id, &hash)) {
+                    Some(Ok(done)) => checks.extend(done),
+                    Some(Err(e)) => checks.push(CheckResult {
+                        check: "restore".into(),
+                        passed: Some(false),
+                        detail: format!("the elevation broker: {e}"),
+                    }),
+                    None => checks.push(CheckResult {
+                        check: "restore".into(),
+                        passed: Some(false),
+                        detail: "it needs Administrator, and no elevation broker is running".into(),
+                    }),
+                }
+            }
             RecoveryItem::Restore { step: id, .. } => {
                 if let Some(c) = checkpoint.captures.iter().rev().find(|c| &c.step == id) {
                     checks.extend(c.items.iter().map(|i| restore_one(i, dir)));
                 }
+            }
+            RecoveryItem::Commands { step: id, .. }
+                if step.is_some_and(|s| s.privilege == Some(Privilege::Administrator))
+                    && !crate::elevation::is_elevated() =>
+            {
+                let hash = snapshot.step_hashes().get(id).cloned().unwrap_or_default();
+                let (ok, detail) = match elevated {
+                    None => (false, "they need Administrator, and no elevation broker is running".to_owned()),
+                    Some(runner) => match runner.recover_step(snapshot.snapshot_hash(), id, &hash) {
+                        Ok(run) if !run.outcomes.iter().any(|o| matches!(o, StepOutcome::Failed { .. })) => {
+                            (true, "ran as Administrator, through the elevation broker".to_owned())
+                        }
+                        Ok(_) => (false, "did not all succeed, through the elevation broker".to_owned()),
+                        Err(e) => (false, format!("the elevation broker: {e}")),
+                    },
+                };
+                checks.push(CheckResult { check: "recovery commands".into(), passed: Some(ok), detail });
             }
             RecoveryItem::Commands { step: id, commands } => {
                 let Some(driver) = driver else {

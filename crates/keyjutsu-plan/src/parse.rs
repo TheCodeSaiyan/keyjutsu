@@ -5,7 +5,7 @@
 //! 1. **Size and syntax.** Over 1 MiB, or not JSON, is refused.
 //! 2. **Version.** `schema_version` is read before anything else. A major or
 //!    minor version KeyJutsu does not know is refused outright: a future
-//!    format is never interpreted by guessing (§50).
+//!    format is never interpreted by guessing.
 //! 3. **Schema.** The document is checked against the JSON Schema compiled
 //!    into KeyJutsu (the proposal schema for agent output), not a copy fetched
 //!    from anywhere.

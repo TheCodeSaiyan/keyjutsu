@@ -1,11 +1,11 @@
-//! The plan workspace (§8, §11): the draft the operator inspects and edits
+//! The plan workspace: the draft the operator inspects and edits
 //! before anything runs.
 //!
 //! Every change goes through here and is re-read as a whole plan, so an edit
 //! the schema or the structure check would refuse never becomes the draft.
 //! A change keeps KeyJutsu's validation only for the steps it cannot have
 //! affected: the changed step and everything that follows it in the graph go
-//! back to "needs validation", which is §11's dependency-aware revalidation.
+//! back to "needs validation": revalidation follows the dependencies.
 //! Nothing here runs a plan; approval seals a snapshot that the executor runs.
 
 use std::collections::BTreeMap;
@@ -28,7 +28,7 @@ use keyjutsu_validation::{Options, validate};
 use serde::Serialize;
 
 /// Something said about the plan, shown beside it. The plan is authoritative;
-/// these explain how it got that way (§8: "chat assists").
+/// these explain how it got that way. Chat assists; it never decides.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[ts(export, export_to = "workspace/")]
 pub struct Note {
@@ -342,7 +342,7 @@ impl Workspace {
         self.adopt(next, Some((operator(), ProvenanceAction::Edited, Some("moved".into()))), at)
     }
 
-    /// Stage every artifact the draft needs (§30) and pin the hash of any
+    /// Stage every artifact the draft needs and pin the hash of any
     /// the plan left unpinned. Pinning is an edit: the step goes back to
     /// validation, and the operator reviews the hash like any other change.
     pub fn stage(
@@ -397,7 +397,7 @@ impl Workspace {
     }
 
     /// Ask the agent to redo one step with the operator's guidance and what
-    /// validation and review found about it (§11). The replacement carries
+    /// validation and review found about it. The replacement carries
     /// no approval and no validation.
     pub fn retry_step<R: Runner>(
         &mut self,

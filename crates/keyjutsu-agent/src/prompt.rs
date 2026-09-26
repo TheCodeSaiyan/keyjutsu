@@ -87,7 +87,7 @@ fn context_section(context: &PreparedContext) -> String {
 
 /// Everything the operator types that is sent to an agent passes through the
 /// same redaction as pasted context: the task, the guidance, and what
-/// validation found (§2.5: secrets never enter agent context).
+/// validation found: secrets never enter agent context.
 fn clean(text: &str) -> String {
     redact(text).0
 }

@@ -59,6 +59,14 @@ hash is checked before it's used, and a copy that changed since is refused
 rather than trusted. A step with no recovery says "cannot be recovered" and
 why. `--step` limits recovery to the steps you name.
 
+An Administrator step is recovered through the elevation broker, as the step
+itself ran: Windows asks once, when you confirm. The broker runs the step's
+recovery commands, or puts back what it captured itself before the step ran.
+It keeps those captures in `%ProgramData%\KeyJutsu`, where only
+Administrators can write, rather than in your profile, where anything
+running as you could change them; each is used once, and goes after 30 days
+or when KeyJutsu is uninstalled.
+
 ### 3. Roll back, if that's right
 
 ```powershell

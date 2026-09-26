@@ -1,4 +1,4 @@
-//! Milestone 11: a failed reversible task, recovered under the operator's
+//! A failed reversible task, recovered under the operator's
 //! control, on the real file system and registry. Registry work happens under
 //! a key of its own in HKCU, which each test removes when it finishes.
 
@@ -207,8 +207,16 @@ fn a_failed_reversible_task_is_recovered_without_touching_anything_else() {
     assert_eq!(order, ["verify", "new-registry", "new-file", "edit-registry", "edit-file"], "latest first");
     assert!(matches!(&items[0], RecoveryItem::Cannot { .. }), "the failing step declared no recovery");
 
-    let results =
-        recover(None, &snap, &saved, &recovery_dir(&cp), &items, &PerformanceConfig::default(), &|_| {});
+    let results = recover(
+        None,
+        None,
+        &snap,
+        &saved,
+        &recovery_dir(&cp),
+        &items,
+        &PerformanceConfig::default(),
+        &|_| {},
+    );
     assert_eq!(results.len(), 4);
     assert!(results.iter().all(|r| r.recovered), "{results:#?}");
     drop(checkpoint);
@@ -249,7 +257,16 @@ fn only_the_steps_the_operator_chooses_are_recovered() {
     assert_eq!(outcome, Outcome::Complete);
 
     let items = plan_recovery(&snap, &checkpoint, &["b".into()]).unwrap();
-    recover(None, &snap, &checkpoint, &recovery_dir(&cp), &items, &PerformanceConfig::default(), &|_| {});
+    recover(
+        None,
+        None,
+        &snap,
+        &checkpoint,
+        &recovery_dir(&cp),
+        &items,
+        &PerformanceConfig::default(),
+        &|_| {},
+    );
     assert_eq!(std::fs::read_to_string(&a).unwrap().trim(), "a1", "not chosen, not touched");
     assert_eq!(std::fs::read(&b).unwrap(), b"b0");
     assert!(plan_recovery(&snap, &checkpoint, &["nope".into()]).is_err());
@@ -272,8 +289,16 @@ fn a_backup_changed_since_it_was_taken_is_not_used() {
 
     std::fs::write(recovery_dir(&cp).join("edit-0.bak"), "something else").unwrap();
     let items = plan_recovery(&snap, &checkpoint, &[]).unwrap();
-    let results =
-        recover(None, &snap, &checkpoint, &recovery_dir(&cp), &items, &PerformanceConfig::default(), &|_| {});
+    let results = recover(
+        None,
+        None,
+        &snap,
+        &checkpoint,
+        &recovery_dir(&cp),
+        &items,
+        &PerformanceConfig::default(),
+        &|_| {},
+    );
     assert!(!results[0].recovered);
     assert!(results[0].checks[0].detail.contains("changed since it was taken"), "{results:?}");
     assert_eq!(std::fs::read_to_string(&f).unwrap().trim(), "after", "the file was left as it is");
@@ -323,6 +348,7 @@ fn recovery_commands_run_in_the_terminal_and_are_validated() {
     let driver = Driver { session: &t.session, events: &t.events };
     let results = recover(
         Some(&driver),
+        None,
         &snap,
         &checkpoint,
         &recovery_dir(&cp),
@@ -333,4 +359,145 @@ fn recovery_commands_run_in_the_terminal_and_are_validated() {
     t.session.close();
     assert!(results[0].recovered, "{results:?}");
     assert!(!marker.exists());
+}
+
+/// Approved as a machine with the elevation broker installed approves it.
+fn approve_with_broker(v: &Value) -> ApprovedSnapshot {
+    let draft = parse_plan(&v.to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    assert!(book.approve_all_except_critical(&validated, AT).is_empty());
+    seal(&validated, &book, None, AT).unwrap()
+}
+
+/// Records what it was asked to recover or restore, and does nothing.
+#[derive(Default)]
+struct RecordingBroker(Mutex<Vec<(String, String, String)>>);
+
+impl keyjutsu_core::elevation::ElevatedRunner for RecordingBroker {
+    fn run_step(
+        &self,
+        _: &str,
+        step: &str,
+        _: &str,
+    ) -> Result<keyjutsu_core::elevation::ElevatedRun, String> {
+        Err(format!("not asked to run `{step}`"))
+    }
+    fn recover_step(
+        &self,
+        _: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<keyjutsu_core::elevation::ElevatedRun, String> {
+        self.0.lock().unwrap().push(("recover".into(), step.to_owned(), step_hash.to_owned()));
+        Ok(keyjutsu_core::elevation::ElevatedRun {
+            outcomes: vec![keyjutsu_core::execution::StepOutcome::Succeeded { exit_code: 0 }],
+            output: String::new(),
+            captured: None,
+        })
+    }
+    fn restore_step(
+        &self,
+        _: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<Vec<keyjutsu_core::execute::CheckResult>, String> {
+        self.0.lock().unwrap().push(("restore".into(), step.to_owned(), step_hash.to_owned()));
+        Ok(vec![keyjutsu_core::execute::CheckResult {
+            check: "registry value".into(),
+            passed: Some(true),
+            detail: "restored by the broker, from its own capture".into(),
+        }])
+    }
+}
+
+fn ran(snap: &ApprovedSnapshot, ids: &[&str]) -> Checkpoint {
+    let mut cp = Checkpoint::new(snap.snapshot_hash());
+    for id in ids {
+        cp.runs.push(keyjutsu_core::execute::StepRun {
+            step: (*id).into(),
+            step_hash: snap.step_hashes()[*id].clone(),
+            succeeded: true,
+            exit_code: Some(0),
+            checks: Vec::new(),
+            started_at: AT.into(),
+            finished_at: AT.into(),
+        });
+    }
+    cp
+}
+
+/// An Administrator step is recovered through the elevation broker, named by
+/// step and hash only: its recovery commands, and what it captured, which
+/// the broker restores from its own copy. The checkpoint's account of the
+/// capture is only shown; nothing in it is written back.
+#[test]
+fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_profile() {
+    if keyjutsu_core::elevation::is_elevated() {
+        return; // Elevated, KeyJutsu recovers directly: nothing to show here.
+    }
+    let dir = scratch("admin");
+    let mut undo = step("undo", "Get-Date");
+    undo["privilege"] = json!("administrator");
+    undo["reversibility"] = json!({"level": "full"});
+    undo["recovery"] = json!({"strategy": "commands", "commands": [{"text": "Get-Location"}]});
+    let mut restore = reversible(
+        "restore",
+        "Get-Date",
+        json!([{"kind": "registry_value", "target": r"HKLM:\SOFTWARE\KeyJutsu-Tests\Value"}]),
+    );
+    restore["privilege"] = json!("administrator");
+    let snap = approve_with_broker(&plan(json!([undo, restore])));
+    let mut checkpoint = ran(&snap, &["undo", "restore"]);
+    // The broker's account of what it captured, as the checkpoint keeps it,
+    // with a value planted in it: were it restored from here, the planted
+    // value would be written as Administrator.
+    checkpoint.captures.push(keyjutsu_core::recovery::StepCapture {
+        step: "restore".into(),
+        step_hash: snap.step_hashes()["restore"].clone(),
+        captured_at: AT.into(),
+        items: vec![keyjutsu_core::recovery::Captured::RegistryValue {
+            target: r"HKLM:\SOFTWARE\KeyJutsu-Tests\Value".into(),
+            existed: true,
+            value_kind: Some("String".into()),
+            value_json: Some("\"planted\"".into()),
+        }],
+    });
+
+    let items = plan_recovery(&snap, &checkpoint, &[]).unwrap();
+    assert!(matches!(&items[0], RecoveryItem::Restore { step, .. } if step == "restore"), "{items:?}");
+    assert!(matches!(&items[1], RecoveryItem::Commands { step, .. } if step == "undo"), "{items:?}");
+    assert!(keyjutsu_core::recovery::needs_broker(&snap, &items));
+
+    // With the broker: it is asked, by step and hash, and the checks are its own.
+    let broker = RecordingBroker::default();
+    let results = recover(
+        None,
+        Some(&broker),
+        &snap,
+        &checkpoint,
+        &dir,
+        &items,
+        &PerformanceConfig::default(),
+        &|_| {},
+    );
+    assert!(results.iter().all(|r| r.recovered), "{results:?}");
+    assert_eq!(results[0].checks[0].detail, "restored by the broker, from its own capture");
+    let asked = broker.0.lock().unwrap().clone();
+    assert_eq!(
+        asked,
+        [
+            ("restore".to_owned(), "restore".to_owned(), snap.step_hashes()["restore"].clone()),
+            ("recover".to_owned(), "undo".to_owned(), snap.step_hashes()["undo"].clone()),
+        ]
+    );
+
+    // Without it: refused, and said why, before anything is written.
+    let results =
+        recover(None, None, &snap, &checkpoint, &dir, &items, &PerformanceConfig::default(), &|_| {});
+    assert!(!results[0].recovered);
+    assert!(results[0].checks[0].detail.contains("no elevation broker"), "{results:?}");
 }

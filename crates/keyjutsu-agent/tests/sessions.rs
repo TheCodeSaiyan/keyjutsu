@@ -1,7 +1,7 @@
-//! Agent sessions against a fake runner that replays recorded answers, as
-//! §56 prescribes for CI: a vendor CLI update must not break the
-//! deterministic suite. The shapes of the recorded output follow each CLI's
-//! documented format (see `extract.rs`).
+//! Agent sessions against a fake runner that replays recorded answers, so
+//! that a vendor CLI update cannot break the deterministic suite CI runs. The
+//! shapes of the recorded output follow each CLI's documented format (see
+//! `extract.rs`).
 
 #![allow(clippy::unwrap_used)] // Helpers outside #[test] functions may unwrap too.
 

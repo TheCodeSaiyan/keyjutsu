@@ -222,10 +222,13 @@ jobs:
           ./scripts/portable.ps1 -From $dir -Version $version -Out portable
           $path = [Environment]::GetEnvironmentVariable('Path', 'User')
           if (-not ($path -split ';' -contains $dir)) { throw 'the install folder is not on the PATH' }
+          # What the broker keeps in ProgramData goes with the program.
+          New-Item -ItemType Directory -Force "$env:ProgramData\KeyJutsu\captures\verify" | Out-Null
           $u = Start-Process "$dir\uninstall.exe" -ArgumentList '/S' -Wait -PassThru
           Start-Sleep -Seconds 5
           if ($u.ExitCode -ne 0) { throw "uninstaller exited $($u.ExitCode)" }
           if (Test-Path "$dir\keyjutsu.exe") { throw 'files left after uninstalling' }
+          if (Test-Path "$env:ProgramData\KeyJutsu") { throw 'broker captures left after uninstalling' }
           $path = [Environment]::GetEnvironmentVariable('Path', 'User')
           if ($path -split ';' -contains $dir) { throw 'PATH entry left after uninstalling' }
           "Installed $said, ran doctor, and uninstalled cleanly."

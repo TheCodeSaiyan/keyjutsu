@@ -410,7 +410,7 @@ async fn workspace_validate(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceVie
     .map_err(|e| e.to_string())?
 }
 
-/// Download and pin every artifact the draft needs (§30). The source is
+/// Download and pin every artifact the draft needs. The source is
 /// contacted now, before approval, so that nothing is downloaded at run time.
 #[tauri::command]
 async fn workspace_stage(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
@@ -599,7 +599,12 @@ fn plan_run(
     if needs_admin && !keyjutsu_core::elevation::is_elevated() {
         let exe =
             keyjutsu_broker::broker_path().ok_or("keyjutsu-broker.exe is not installed next to KeyJutsu")?;
-        elevated_runner = Some(Arc::new(keyjutsu_broker::launch(&exe, &path, snapshot.snapshot_hash())?));
+        elevated_runner = Some(Arc::new(keyjutsu_broker::launch(
+            &exe,
+            &path,
+            snapshot.snapshot_hash(),
+            &keyjutsu_core::artifacts::default_store(),
+        )?));
     }
     let options = ExecuteOptions {
         elevated_runner,
@@ -607,19 +612,16 @@ fn plan_run(
         mode: Some(config.mode),
         base: config,
         checkpoint: Some(checkpoint.clone()),
-        // Approved in this window within the hour: the phrase typed at approval
-        // stands. Older than that, it is asked for again before the step runs.
-        critical_gate: keyjutsu_core::execute::needs_reconfirmation(
-            snapshot.sealed_at(),
-            fingerprint::now_secs(),
-        )
-        .then_some(gate),
+        // A critical step approved more than an hour before it is reached is
+        // asked for again, just before it runs; within the hour, the phrase
+        // typed at approval stands. The executor judges the hour, step by step.
+        critical_gate: Some(gate),
         resume_gate,
         ..ExecuteOptions::default()
     };
     std::thread::spawn(move || {
         // Record the repositories the plan works in, to tell its changes
-        // from the operator's afterwards (§31).
+        // from the operator's afterwards.
         let git_dir = path.with_file_name("git");
         // Where the shell really is: a profile may have changed folder.
         let start = session.shell_location().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
@@ -689,6 +691,17 @@ fn plan_run(
         });
     });
     Ok(())
+}
+
+/// Open one of KeyJutsu's own download links in the default browser. The
+/// window can only ask: anything not on KeyJutsu's list is refused, so a
+/// compromised page cannot open an address of its choosing.
+#[tauri::command]
+fn open_link(url: String) -> Result<(), String> {
+    if !keyjutsu_core::links::is_known(&url) {
+        return Err("that is not a link KeyJutsu offers".into());
+    }
+    std::process::Command::new("explorer.exe").arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// What the operator types to cross a session boundary.
@@ -841,14 +854,30 @@ async fn recovery_run(
     plans: State<'_, Arc<Plans>>,
 ) -> Result<Vec<RecoveryResult>, String> {
     let (snapshot, checkpoint, path) = last_run(&plans)?;
+    let snapshot_file = locked(&plans.sealed).clone().map(|(_, p)| p).ok_or("no plan has run")?;
     let (session, sink) = sessions.get(id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let items = plan_recovery(&snapshot, &checkpoint, &[])?;
+        // An Administrator step's recovery commands run in the elevation
+        // broker, started now with one UAC prompt, never in this terminal.
+        let broker = if keyjutsu_core::recovery::needs_broker(&snapshot, &items) {
+            let exe = keyjutsu_broker::broker_path()
+                .ok_or("keyjutsu-broker.exe is not installed next to KeyJutsu")?;
+            Some(keyjutsu_broker::launch(
+                &exe,
+                &snapshot_file,
+                snapshot.snapshot_hash(),
+                &keyjutsu_core::artifacts::default_store(),
+            )?)
+        } else {
+            None
+        };
         let (tx, rx) = channel();
         *locked(&sink.forward) = Some(tx);
         let driver = Driver { session: &session, events: &rx };
         let results = recover(
             Some(&driver),
+            broker.as_ref().map(|b| b as &dyn keyjutsu_core::elevation::ElevatedRunner),
             &snapshot,
             &checkpoint,
             &recovery_dir(&path),
@@ -898,6 +927,7 @@ fn main() {
         .manage(Arc::new(Diagnostics::default()))
         .invoke_handler(tauri::generate_handler![
             readiness_scan,
+            open_link,
             run_waiting,
             run_waiting_open,
             diagnostics_preview,

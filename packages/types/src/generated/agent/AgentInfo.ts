@@ -6,6 +6,10 @@ import type { SignIn } from "./SignIn";
 export type AgentInfo = { kind: AgentKind, name: string, path: string | null, version: string | null, sign_in: SignIn, capabilities: Capabilities, 
 /**
  * The installed version differs from the one the adapter was checked
- * against, so its flags should be re-checked (§5).
+ * against, so its flags should be re-checked.
  */
-needs_compatibility_check: boolean, };
+needs_compatibility_check: boolean, 
+/**
+ * Where to get it: the maker's own install page.
+ */
+install_url: string, };

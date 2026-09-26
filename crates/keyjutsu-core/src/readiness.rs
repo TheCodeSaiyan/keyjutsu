@@ -5,9 +5,6 @@
 //! ConPTY works, that KeyJutsu's prompt marks survive the user's profile and
 //! that staged typing reaches the input line intact. The probe command only
 //! prints a word.
-//!
-//! Items that later milestones deliver are reported as not yet built rather
-//! than left out, so the scan never implies a check it did not make.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -29,8 +26,6 @@ pub enum CheckStatus {
     Ok,
     Warning,
     Unavailable,
-    /// Belongs to a milestone that has not been built yet.
-    NotYetBuilt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
@@ -39,6 +34,18 @@ pub struct Check {
     pub name: String,
     pub status: CheckStatus,
     pub detail: String,
+    /// Where to get it, when something KeyJutsu relies on is missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub get: Option<GetIt>,
+}
+
+/// A download page for something missing: one of [`crate::links`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct GetIt {
+    pub label: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
@@ -113,6 +120,78 @@ fn parse_windows_info(reg_output: &str) -> WindowsInfo {
             None => b.to_string(),
         }),
     }
+}
+
+/// What KeyJutsu relies on but does not install, and where to get whatever
+/// is missing. Windows PowerShell 5.1 comes with Windows, so PowerShell 7 is
+/// reported only when it is missing.
+pub fn component_checks(pwsh: bool, git: Option<&str>, webview2: Option<&str>) -> Vec<Check> {
+    let get = |label: &str, url: &str| Some(GetIt { label: label.into(), url: url.into() });
+    let mut checks = Vec::new();
+    if !pwsh {
+        checks.push(Check {
+            name: "PowerShell 7".into(),
+            status: CheckStatus::Warning,
+            detail: "not installed: Windows PowerShell 5.1 is used instead, and a plan written for PowerShell 7 cannot run"
+                .into(),
+            get: get("Get PowerShell 7", crate::links::POWERSHELL),
+        });
+    }
+    checks.push(match git {
+        Some(v) => Check { name: "Git".into(), status: CheckStatus::Ok, detail: v.into(), get: None },
+        None => Check {
+            name: "Git".into(),
+            status: CheckStatus::Warning,
+            detail:
+                "not installed: a run in a Git repository cannot tell its changes from yours, or run isolated"
+                    .into(),
+            get: get("Get Git for Windows", crate::links::GIT),
+        },
+    });
+    checks.push(match webview2 {
+        Some(v) => Check {
+            name: "WebView2".into(),
+            status: CheckStatus::Ok,
+            detail: format!("{v}: what the desktop app draws its window with"),
+            get: None,
+        },
+        None => Check {
+            name: "WebView2".into(),
+            status: CheckStatus::Warning,
+            detail: "not installed: the desktop app needs it to open; the CLI does not".into(),
+            get: get("Get WebView2", crate::links::WEBVIEW2),
+        },
+    });
+    checks
+}
+
+/// `git version 2.47.1.windows.1`, if Git is on the `PATH`.
+fn git_version() -> Option<String> {
+    let mut c = std::process::Command::new("git");
+    c.arg("--version");
+    let out = keyjutsu_validation::process::run(c, "", Duration::from_secs(10)).ok()?;
+    let text = out.stdout.trim().to_owned();
+    (out.success && !text.is_empty()).then_some(text)
+}
+
+/// The WebView2 runtime's version, where its installer records it: for
+/// every user, or for this one.
+fn webview2_version() -> Option<String> {
+    const CLIENT: &str = r"Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    [format!(r"HKLM\SOFTWARE\WOW6432Node\{CLIENT}"), format!(r"HKCU\Software\{CLIENT}")].iter().find_map(
+        |key| {
+            let out = std::process::Command::new("reg").args(["query", key, "/v", "pv"]).output().ok()?;
+            parse_reg_value(&String::from_utf8_lossy(&out.stdout), "pv").filter(|v| v != "0.0.0.0")
+        },
+    )
+}
+
+/// One value from `reg query` output.
+fn parse_reg_value(reg_output: &str, name: &str) -> Option<String> {
+    reg_output.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        (parts.next() == Some(name)).then(|| parts.skip(1).collect::<Vec<_>>().join(" "))
+    })
 }
 
 pub fn architecture() -> String {
@@ -250,12 +329,14 @@ pub fn scan() -> ReadinessReport {
         } else {
             format!("{}: KeyJutsu V1 supports Windows 11 x64 only", windows.product)
         },
+        get: None,
     });
     let arch = architecture();
     checks.push(Check {
         name: "Architecture".into(),
         status: if arch == "x64" { CheckStatus::Ok } else { CheckStatus::Warning },
         detail: arch.clone(),
+        get: None,
     });
     let conpty_ok = probes.iter().any(|p| p.ready);
     checks.push(Check {
@@ -266,12 +347,14 @@ pub fn scan() -> ReadinessReport {
         } else {
             "no shell could be started in a pseudo-console".into()
         },
+        get: None,
     });
     for probe in &probes {
         checks.push(Check {
             name: format!("{} staged input", probe.kind.display_name()),
             status: if probe.staged_typing { CheckStatus::Ok } else { CheckStatus::Warning },
             detail: probe.detail.clone(),
+            get: None,
         });
     }
     if let Some(report) = &powershell_profile
@@ -294,12 +377,19 @@ pub fn scan() -> ReadinessReport {
                 "uses {}; if a performance misbehaves, arm with the clean profile",
                 tools.join(", ")
             ),
+            get: None,
         });
     }
+    checks.extend(component_checks(
+        shells.iter().any(|s| s.kind == ShellKind::Pwsh),
+        git_version().as_deref(),
+        webview2_version().as_deref(),
+    ));
     checks.push(Check {
         name: "Telemetry".into(),
         status: CheckStatus::Ok,
         detail: "off: KeyJutsu has no telemetry, crash reporting or remote diagnostics".into(),
+        get: None,
     });
     let agents: Vec<&'static str> =
         keyjutsu_agent::detect_all().into_iter().filter(|a| a.installed()).map(|a| a.name).collect();
@@ -307,10 +397,11 @@ pub fn scan() -> ReadinessReport {
         Check {
             name: "AI agents".into(),
             status: CheckStatus::Warning,
-            detail: "none installed: plans can still be opened from files".into(),
+            detail: "none installed: plans can still be opened from files, and `keyjutsu agents` says where to get each".into(),
+            get: None,
         }
     } else {
-        Check { name: "AI agents".into(), status: CheckStatus::Ok, detail: agents.join(", ") }
+        Check { name: "AI agents".into(), status: CheckStatus::Ok, detail: agents.join(", "), get: None }
     });
     let broker = std::env::current_exe().ok().map(|e| e.with_file_name("keyjutsu-broker.exe"));
     checks.push(match broker {
@@ -319,11 +410,13 @@ pub fn scan() -> ReadinessReport {
             status: CheckStatus::Ok,
             detail: "installed: Administrator steps run through it, after one UAC prompt before the run"
                 .into(),
+            get: None,
         },
         _ => Check {
             name: "Elevation broker".into(),
             status: CheckStatus::Warning,
             detail: "keyjutsu-broker.exe is not next to KeyJutsu, so Administrator steps cannot run".into(),
+            get: None,
         },
     });
     let sample = b"keyjutsu readiness";
@@ -337,6 +430,7 @@ pub fn scan() -> ReadinessReport {
         } else {
             "Windows would not protect a key for this account, so history cannot be kept".into()
         },
+        get: None,
     });
 
     ReadinessReport {
@@ -368,6 +462,28 @@ mod tests {
     fn leaves_windows_10_alone_on_a_windows_10_build() {
         let reg = "    ProductName    REG_SZ    Windows 10 Pro\r\n    CurrentBuild    REG_SZ    19045\r\n";
         assert_eq!(parse_windows_info(reg).product, "Windows 10 Pro");
+    }
+
+    #[test]
+    fn whatever_is_missing_comes_with_where_to_get_it() {
+        let missing = component_checks(false, None, None);
+        assert_eq!(missing.len(), 3);
+        for c in &missing {
+            assert_eq!(c.status, CheckStatus::Warning, "{c:?}");
+            let get = c.get.as_ref().unwrap_or_else(|| panic!("no link for {}", c.name));
+            assert!(crate::links::is_known(&get.url), "{} links to an unknown page", c.name);
+        }
+        // Present, nothing to get; PowerShell 7 not mentioned at all.
+        let present = component_checks(true, Some("git version 2.47.1"), Some("140.0.1"));
+        assert!(present.iter().all(|c| c.status == CheckStatus::Ok && c.get.is_none()), "{present:?}");
+        assert!(!present.iter().any(|c| c.name == "PowerShell 7"));
+    }
+
+    #[test]
+    fn reads_the_webview2_version_from_reg_output() {
+        let out = "\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}\r\n    pv    REG_SZ    140.0.3485.54\r\n";
+        assert_eq!(parse_reg_value(out, "pv").as_deref(), Some("140.0.3485.54"));
+        assert_eq!(parse_reg_value("", "pv"), None);
     }
 
     #[test]

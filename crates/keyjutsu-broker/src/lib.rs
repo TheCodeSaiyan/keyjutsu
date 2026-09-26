@@ -1,4 +1,4 @@
-//! KeyJutsu's elevation broker (§26, ADR 0011).
+//! KeyJutsu's elevation broker (ADR 0011).
 //!
 //! The broker is started elevated, once, before a plan runs, pinned to one
 //! approved snapshot by its hash. It accepts exactly one kind of work: *run
@@ -20,37 +20,81 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use keyjutsu_core::elevation::{ElevatedRun, ElevatedRunner};
-use keyjutsu_core::execute::{ForwardingSink, Performed, perform, staged_for};
+use keyjutsu_core::execute::CheckResult;
+use keyjutsu_core::execute::{ForwardingSink, Performed, hand_artifacts, perform, staged_for};
+use keyjutsu_core::execution::StagedScript;
 use keyjutsu_core::execution::{ExecutionMode, PerformanceConfig, StepOutcome};
 use keyjutsu_core::headless::Collector;
 use keyjutsu_core::plan::ApprovedSnapshot;
-use keyjutsu_core::plan::model::{Privilege, ShellName, Step, ValidationDisplay};
+use keyjutsu_core::plan::model::{Privilege, RecoveryStrategy, ShellName, Step, ValidationDisplay};
+use keyjutsu_core::recovery::StepCapture;
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 use keyjutsu_core::{Session, SessionOptions};
 use serde::{Deserialize, Serialize};
 
 #[cfg(windows)]
+pub mod captures;
+#[cfg(windows)]
 pub mod pipe;
+#[cfg(windows)]
+pub mod protected;
 
-/// Both ends must speak exactly this version.
-pub const PROTOCOL: u32 = 1;
+/// Both ends must speak exactly this version. 2 added `RecoverStep`; 3
+/// added `RestoreStep` and the broker's own captures.
+pub const PROTOCOL: u32 = 3;
 /// No message is larger than this.
 const MAX_FRAME: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Request {
-    Hello { protocol: u32, secret: String },
-    RunStep { snapshot_hash: String, step: String, step_hash: String },
+    Hello {
+        protocol: u32,
+        secret: String,
+    },
+    RunStep {
+        snapshot_hash: String,
+        step: String,
+        step_hash: String,
+    },
+    /// Run approved step X's approved recovery commands. Like `RunStep`, it
+    /// names the step and carries no command.
+    RecoverStep {
+        snapshot_hash: String,
+        step: String,
+        step_hash: String,
+    },
+    /// Put back what the broker itself captured before approved step X
+    /// ran. It names the step and carries no path and no value.
+    RestoreStep {
+        snapshot_hash: String,
+        step: String,
+        step_hash: String,
+    },
     Goodbye,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Response {
-    Welcome { protocol: u32, snapshot_hash: String, elevated: bool },
-    Refused { reason: String },
-    StepDone { outcomes: Vec<StepOutcome>, output: String },
+    Welcome {
+        protocol: u32,
+        snapshot_hash: String,
+        elevated: bool,
+    },
+    Refused {
+        reason: String,
+    },
+    StepDone {
+        outcomes: Vec<StepOutcome>,
+        output: String,
+        /// What the broker captured before the step, for display.
+        #[serde(default)]
+        captured: Option<StepCapture>,
+    },
+    Restored {
+        checks: Vec<CheckResult>,
+    },
     Bye,
 }
 
@@ -87,7 +131,25 @@ fn same_secret(a: &str, b: &str) -> bool {
 }
 
 /// Runs a step, elevated in the real broker, plainly in tests.
-pub type StepRunner = Box<dyn FnMut(&ApprovedSnapshot, &Step) -> Result<ElevatedRun, String> + Send>;
+/// What the broker is asked to do with an approved step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Work {
+    /// Run its commands.
+    Step,
+    /// Run its approved recovery commands.
+    Recovery,
+    /// Put back what the broker captured before it ran.
+    Restore,
+}
+
+/// What the broker did.
+#[derive(Debug)]
+pub enum Done {
+    Ran(ElevatedRun),
+    Restored(Vec<CheckResult>),
+}
+
+pub type StepRunner = Box<dyn FnMut(&ApprovedSnapshot, &Step, Work) -> Result<Done, String> + Send>;
 
 pub struct Broker {
     snapshot: ApprovedSnapshot,
@@ -133,41 +195,216 @@ impl Broker {
                 }
             }
             Request::Goodbye => Response::Bye,
-            Request::RunStep { .. } if !self.authenticated => refuse("not authenticated".into()),
+            Request::RunStep { .. } | Request::RecoverStep { .. } | Request::RestoreStep { .. }
+                if !self.authenticated =>
+            {
+                refuse("not authenticated".into())
+            }
             Request::RunStep { snapshot_hash, step, step_hash } => {
-                if snapshot_hash != self.snapshot.snapshot_hash() {
-                    return refuse(format!(
-                        "unknown plan {snapshot_hash}: this broker was started for {}",
-                        self.snapshot.snapshot_hash()
-                    ));
+                match self.approved(&snapshot_hash, &step, &step_hash) {
+                    Ok(s) => self.work(&s, Work::Step),
+                    Err(reason) => refuse(reason),
                 }
-                let Some(s) = self.snapshot.plan().step(&step).cloned() else {
-                    return refuse(format!("there is no step `{step}` in the approved plan"));
+            }
+            Request::RecoverStep { snapshot_hash, step, step_hash } => {
+                let s = match self.approved(&snapshot_hash, &step, &step_hash) {
+                    Ok(s) => s,
+                    Err(reason) => return refuse(reason),
                 };
-                if s.privilege != Some(Privilege::Administrator) {
-                    return refuse(format!(
-                        "step `{step}` does not need Administrator, and the broker runs only steps that do"
-                    ));
+                let commands = s.recovery.as_ref().filter(|r| r.strategy == RecoveryStrategy::Commands);
+                if commands.is_none_or(|r| r.commands.is_empty()) {
+                    return refuse(format!("step `{step}` has no approved recovery commands"));
                 }
-                let approved = self.snapshot.step_hashes().get(&step).cloned().unwrap_or_default();
-                if step_hash != approved {
-                    return refuse(format!(
-                        "step `{step}` is not the approved version: its hash differs, so its command or what it depends on was altered"
-                    ));
+                self.work(&s, Work::Recovery)
+            }
+            Request::RestoreStep { snapshot_hash, step, step_hash } => {
+                let s = match self.approved(&snapshot_hash, &step, &step_hash) {
+                    Ok(s) => s,
+                    Err(reason) => return refuse(reason),
+                };
+                let restores = s.recovery.as_ref().is_some_and(|r| {
+                    r.strategy == RecoveryStrategy::RestoreCapturedState && !r.capture.is_empty()
+                });
+                if !restores {
+                    return refuse(format!("step `{step}` declares nothing to capture and restore"));
                 }
-                match (self.run)(&self.snapshot, &s) {
-                    Ok(run) => Response::StepDone { outcomes: run.outcomes, output: run.output },
-                    Err(e) => refuse(format!("step `{step}` could not be run: {e}")),
-                }
+                self.work(&s, Work::Restore)
             }
         }
     }
+
+    /// The approved Administrator step `step`, if the request names it
+    /// exactly as it was approved.
+    fn approved(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<Step, String> {
+        if snapshot_hash != self.snapshot.snapshot_hash() {
+            return Err(format!(
+                "unknown plan {snapshot_hash}: this broker was started for {}",
+                self.snapshot.snapshot_hash()
+            ));
+        }
+        let Some(s) = self.snapshot.plan().step(step).cloned() else {
+            return Err(format!("there is no step `{step}` in the approved plan"));
+        };
+        if s.privilege != Some(Privilege::Administrator) {
+            return Err(format!(
+                "step `{step}` does not need Administrator, and the broker runs only steps that do"
+            ));
+        }
+        let approved = self.snapshot.step_hashes().get(step).cloned().unwrap_or_default();
+        if step_hash != approved {
+            return Err(format!(
+                "step `{step}` is not the approved version: its hash differs, so its command or what it depends on was altered"
+            ));
+        }
+        Ok(s)
+    }
+
+    fn work(&mut self, s: &Step, work: Work) -> Response {
+        match (self.run)(&self.snapshot, s, work) {
+            Ok(Done::Ran(run)) => {
+                Response::StepDone { outcomes: run.outcomes, output: run.output, captured: run.captured }
+            }
+            Ok(Done::Restored(checks)) => Response::Restored { checks },
+            Err(e) => Response::Refused { reason: format!("step `{}` could not be run: {e}", s.id) },
+        }
+    }
+}
+
+/// Copy a step's artifacts from the operator's store `from` into `into`,
+/// laid out as a store, and return the line that hands them to the step.
+/// Each copy is checked against the hash pinned in the approved snapshot
+/// after it is made, so a staged file changed before or during the copy is
+/// refused: only what is in `into` is ever handed over.
+pub fn hand_over(step: &Step, from: &Path, into: &Path) -> Result<Option<String>, String> {
+    for a in &step.artifacts {
+        let Some(sha) = &a.sha256 else {
+            return Err(format!("artifact `{}` is not pinned to a hash", a.name));
+        };
+        let source = keyjutsu_core::artifacts::staged_path(from, sha, &a.name);
+        let copy = keyjutsu_core::artifacts::staged_path(into, sha, &a.name);
+        if let Some(parent) = copy.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::copy(&source, &copy)
+            .map_err(|_| format!("artifact `{}` is not staged: run `keyjutsu plan stage`", a.name))?;
+    }
+    keyjutsu_core::artifacts::assignment(into, step)
 }
 
 /// Run a step's lines in a fresh shell of its own, directly (no typing
 /// performance), and report each line's outcome and what was printed.
 /// In the broker this shell is elevated because the broker is.
 pub fn run_in_shell(snapshot: &ApprovedSnapshot, step: &Step) -> Result<ElevatedRun, String> {
+    run_step(snapshot, step, None)
+}
+
+/// As `run_in_shell`, handing the step its artifacts from the operator's
+/// store `artifacts`. They are copied into a folder only Administrators can
+/// write to, checked there, and removed after the step.
+pub fn run_step(
+    snapshot: &ApprovedSnapshot,
+    step: &Step,
+    artifacts: Option<&Path>,
+) -> Result<ElevatedRun, String> {
+    let show = snapshot.plan().execution_preferences.as_ref().and_then(|p| p.show_validation)
+        != Some(ValidationDisplay::None);
+    let mut script = staged_for(step, show);
+    if step.artifacts.is_empty() {
+        return run_script(step, script);
+    }
+    #[cfg(windows)]
+    {
+        let store =
+            artifacts.ok_or("this step has artifacts, and the broker was not told where they are staged")?;
+        let dir = protected::ProtectedDir::create()?;
+        if let Some(line) = hand_over(step, store, dir.path())? {
+            hand_artifacts(&mut script, step, line);
+        }
+        // `dir` lives until the step is done, then is removed.
+        run_script(step, script)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (artifacts, script);
+        Err("artifacts need Windows".into())
+    }
+}
+
+/// Run an approved step's approved recovery commands, elevated, directly.
+pub fn run_recovery(step: &Step) -> Result<ElevatedRun, String> {
+    let commands: Vec<String> =
+        step.recovery.iter().flat_map(|r| r.commands.iter().map(|c| c.text.clone())).collect();
+    let script = StagedScript {
+        steps: commands
+            .into_iter()
+            .enumerate()
+            .map(|(i, command)| keyjutsu_core::execution::StagedStep {
+                id: format!("{}#r{i}", step.id),
+                title: format!("Recover {}", step.id),
+                command,
+                mode: Some(ExecutionMode::Direct),
+                submit: None,
+                answers: None,
+            })
+            .collect(),
+    };
+    run_script(step, script)
+}
+
+/// The broker's runner: a step's commands, with what it declares captured
+/// first; its recovery commands; or putting back what was captured.
+pub fn runner(artifacts: Option<std::path::PathBuf>) -> StepRunner {
+    Box::new(move |snapshot, step, work| match work {
+        Work::Step => {
+            let captured = captured_first(snapshot, step)?;
+            let mut run = run_step(snapshot, step, artifacts.as_deref())?;
+            run.captured = captured;
+            Ok(Done::Ran(run))
+        }
+        Work::Recovery => run_recovery(step).map(Done::Ran),
+        Work::Restore => restore(snapshot, step).map(Done::Restored),
+    })
+}
+
+/// Capture what `step` declares, before it runs, where only Administrators
+/// can write (ADR 0017). A capture that cannot be made stops the step.
+fn captured_first(snapshot: &ApprovedSnapshot, step: &Step) -> Result<Option<StepCapture>, String> {
+    let captures = step
+        .recovery
+        .as_ref()
+        .is_some_and(|r| r.strategy == RecoveryStrategy::RestoreCapturedState && !r.capture.is_empty());
+    if !captures {
+        return Ok(None);
+    }
+    #[cfg(windows)]
+    {
+        let root = captures::secured_root()?;
+        let at = keyjutsu_core::fingerprint::now_rfc3339();
+        captures::capture(&root, snapshot, step, at)
+            .map(Some)
+            .map_err(|e| format!("could not prepare recovery, so the step did not run: {e}"))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = snapshot;
+        Err("captures need Windows".into())
+    }
+}
+
+fn restore(snapshot: &ApprovedSnapshot, step: &Step) -> Result<Vec<CheckResult>, String> {
+    #[cfg(windows)]
+    {
+        captures::restore(&captures::secured_root()?, snapshot, step)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (snapshot, step);
+        Err("captures need Windows".into())
+    }
+}
+
+/// A script in a fresh shell of the step's kind, directly.
+fn run_script(step: &Step, script: StagedScript) -> Result<ElevatedRun, String> {
     let kind = match step.shell.as_ref().map(|s| s.kind) {
         Some(ShellName::WindowsPowershell) => ShellKind::WindowsPowershell,
         Some(ShellName::Cmd) => ShellKind::Cmd,
@@ -184,18 +421,17 @@ pub fn run_in_shell(snapshot: &ApprovedSnapshot, step: &Step) -> Result<Elevated
         session.close();
         return Err("the elevated shell never showed a prompt".into());
     }
-    let show = snapshot.plan().execution_preferences.as_ref().and_then(|p| p.show_validation)
-        != Some(ValidationDisplay::None);
-    let before = out.plain_output().len();
+    let mark = session.output_mark();
     let config = PerformanceConfig { mode: ExecutionMode::Direct, ..PerformanceConfig::default() };
     let driver = keyjutsu_core::execute::Driver { session: &session, events: &events };
-    let performed = perform(&driver, staged_for(step, show), config);
+    let performed = perform(&driver, script, config);
     let _ = session.wait_for_prompt(Duration::from_secs(10));
-    let text = out.plain_output();
+    // As the terminal showed it: the command at its prompt, then what it
+    // printed, with the line editor's redraws read once.
+    let output = session.output_since(mark, 1_000_000);
     session.close();
-    let output = text.get(before..).unwrap_or("").to_owned();
     match performed {
-        Performed::Finished(outcomes) => Ok(ElevatedRun { outcomes, output }),
+        Performed::Finished(outcomes) => Ok(ElevatedRun { outcomes, output, captured: None }),
         Performed::Refused(r) => Err(r),
         Performed::Unfinished { .. } => Err("the elevated shell ended before the step finished".into()),
     }
@@ -287,14 +523,47 @@ impl BrokerClient {
     }
 }
 
+impl BrokerClient {
+    fn done(&self, request: &Request) -> Result<ElevatedRun, String> {
+        match self.ask(request)? {
+            Response::StepDone { outcomes, output, captured } => {
+                Ok(ElevatedRun { outcomes, output, captured })
+            }
+            Response::Refused { reason } => Err(reason),
+            other => Err(format!("unexpected answer: {other:?}")),
+        }
+    }
+}
+
 impl ElevatedRunner for BrokerClient {
     fn run_step(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<ElevatedRun, String> {
-        match self.ask(&Request::RunStep {
+        self.done(&Request::RunStep {
+            snapshot_hash: snapshot_hash.to_owned(),
+            step: step.to_owned(),
+            step_hash: step_hash.to_owned(),
+        })
+    }
+
+    fn recover_step(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<ElevatedRun, String> {
+        self.done(&Request::RecoverStep {
+            snapshot_hash: snapshot_hash.to_owned(),
+            step: step.to_owned(),
+            step_hash: step_hash.to_owned(),
+        })
+    }
+
+    fn restore_step(
+        &self,
+        snapshot_hash: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<Vec<CheckResult>, String> {
+        match self.ask(&Request::RestoreStep {
             snapshot_hash: snapshot_hash.to_owned(),
             step: step.to_owned(),
             step_hash: step_hash.to_owned(),
         })? {
-            Response::StepDone { outcomes, output } => Ok(ElevatedRun { outcomes, output }),
+            Response::Restored { checks } => Ok(checks),
             Response::Refused { reason } => Err(reason),
             other => Err(format!("unexpected answer: {other:?}")),
         }
@@ -315,7 +584,14 @@ pub fn random_hex() -> String {
 }
 
 /// Start the broker elevated (one UAC prompt) for `snapshot`, and connect.
-pub fn launch(broker_exe: &Path, snapshot_file: &Path, snapshot_hash: &str) -> Result<BrokerClient, String> {
+/// `artifacts` is the operator's artifact store; the broker trusts nothing
+/// in it but what matches the approved snapshot's pinned hashes.
+pub fn launch(
+    broker_exe: &Path,
+    snapshot_file: &Path,
+    snapshot_hash: &str,
+    artifacts: &Path,
+) -> Result<BrokerClient, String> {
     let name = format!("keyjutsu-broker-{}", &random_hex()[..32]);
     let secret = random_hex();
     let args = [
@@ -329,6 +605,8 @@ pub fn launch(broker_exe: &Path, snapshot_file: &Path, snapshot_hash: &str) -> R
         snapshot_hash.to_owned(),
         "--secret".into(),
         secret.clone(),
+        "--artifacts".into(),
+        artifacts.display().to_string(),
     ];
     let quoted: Vec<String> = args.iter().map(|a| format!("'{}'", a.replace('\'', "''"))).collect();
     let script = format!(

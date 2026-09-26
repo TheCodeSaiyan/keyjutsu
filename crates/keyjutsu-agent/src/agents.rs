@@ -2,8 +2,8 @@
 //! each is kept to investigating rather than changing anything.
 //!
 //! Every flag here was read from the agent's own `--help` on a real machine;
-//! `verified_with` records which version. Agent CLIs change between versions
-//! (§5), so detection compares the installed version with that and says when
+//! `verified_with` records which version. Agent CLIs change between versions,
+//! so detection compares the installed version with that and says when
 //! they differ.
 
 use std::path::{Path, PathBuf};
@@ -40,6 +40,19 @@ impl AgentKind {
             AgentKind::Gemini => "Gemini CLI",
             AgentKind::GithubCopilot => "GitHub Copilot CLI",
             AgentKind::Cursor => "Cursor CLI",
+        }
+    }
+
+    /// Where to get it: the maker's own install page.
+    pub fn install_url(self) -> &'static str {
+        match self {
+            AgentKind::Codex => "https://github.com/openai/codex",
+            AgentKind::ClaudeCode => "https://code.claude.com/docs/en/setup",
+            AgentKind::Gemini => "https://github.com/google-gemini/gemini-cli",
+            AgentKind::GithubCopilot => {
+                "https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli"
+            }
+            AgentKind::Cursor => "https://cursor.com/cli",
         }
     }
 

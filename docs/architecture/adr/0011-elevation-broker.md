@@ -1,7 +1,7 @@
 # 0011: A separate, narrowly scoped elevation broker
 
-Status: accepted, Milestone 10. First recorded at Milestone 0 as a proposal,
-so nothing built before then would make it harder.
+Status: accepted. First recorded as a proposal before any code, so nothing
+built before it would make it harder.
 
 ## Decision
 
@@ -37,7 +37,7 @@ so nothing built before then would make it harder.
 
 ## The open question, answered
 
-§15 wants the visible terminal and the real execution to correspond. An
+The visible terminal and the real execution should correspond. An
 Administrator step cannot be typed into the operator's unelevated shell and
 run elevated, so it runs in the broker's shell and its output is shown in the
 terminal, marked as the broker's. It is not performed keystroke by keystroke.
@@ -54,6 +54,12 @@ terminal, marked as the broker's. It is not performed keystroke by keystroke.
 - The launch pins the snapshot hash the operator's KeyJutsu checked, which
   is what UAC is then asked about. KeyJutsu checks it against the approval
   recorded in its encrypted store before launching.
+- An Administrator step that uses a download gets a copy the broker made
+  and checked, in a folder only Administrators and SYSTEM can write to, never
+  the staged file in the operator's profile, which anything running as the
+  operator can change. The launcher says where the store is; that path is not
+  trusted, because only a copy matching the snapshot's pinned hash is handed
+  over.
 - The pipe's DACL and the launching-process check are enforced by Windows;
   the tests cover the process check and the name squatting, not an attempt
   from another account.

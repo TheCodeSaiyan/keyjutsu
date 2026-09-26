@@ -3,7 +3,7 @@
 //! Nothing is sent to an agent without `--send`. Without it, KeyJutsu prints
 //! what would go (the context manifest, with redactions and any
 //! secret-looking files in a folder) and stops, so the operator always sees
-//! the scope of what leaves the machine first (§9).
+//! the scope of what leaves the machine first.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -41,6 +41,9 @@ pub fn list(json: bool) -> ExitCode {
             SignIn::Unknown => "sign-in unknown",
         };
         println!("  {:<20} {:<28} {}", a.name, status, if a.installed() { sign_in } else { "" });
+        if !a.installed() {
+            println!("      get it: {}", a.install_url);
+        }
         if a.installed() {
             println!("      read-only: {}", a.capabilities.read_only);
             if a.needs_compatibility_check {
@@ -229,7 +232,7 @@ pub fn revise(args: Revise<'_>) -> ExitCode {
     };
     let task = task.map(str::to_owned).or_else(|| plan.title.clone()).unwrap_or_else(|| plan.task_id.clone());
     // What validation says about the step now, so the agent revises against
-    // evidence rather than only the operator's words (§11).
+    // evidence rather than only the operator's words.
     let findings: Vec<String> = match keyjutsu_core::plan::ValidPlan::revalidate(plan.clone(), false) {
         Ok(valid) => validation::validate(&valid, Options { dry_run: false, ..Options::default() })
             .steps
@@ -331,7 +334,7 @@ pub fn review(file: &Path, task: Option<&str>, agent: &str, send: bool, record: 
     }
 }
 
-/// The live compatibility check (§56): a tiny request to each installed
+/// The live compatibility check: a tiny request to each installed
 /// agent, to confirm its adapter still works with the installed version.
 pub fn check(live: bool) -> ExitCode {
     if !live {

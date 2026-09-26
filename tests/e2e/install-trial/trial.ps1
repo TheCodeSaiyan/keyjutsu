@@ -1,5 +1,5 @@
-# Runs inside Windows Sandbox only: KeyJutsu on a clean Windows 11
-# (Milestone 16). Install silently, check what the installer did, run the
+# Runs inside Windows Sandbox only: KeyJutsu on a clean Windows 11.
+# Install silently, check what the installer did, run the
 # readiness scan and agent detection, drive the safe demo in Performance
 # mode, uninstall, and check it all went.
 $kj = 'C:\kj'
@@ -79,11 +79,14 @@ log "--- safe demo"
 & "$kj\bin\demo_trial.exe" $cli *>> "$w\trial.log"
 check "demo trial ($LASTEXITCODE)" ($LASTEXITCODE -eq 0)
 
-# Uninstall, silently, and check it all went.
+# Uninstall, silently, and check it all went, including what the broker
+# keeps in ProgramData (made here as it would be, since no plan has run).
+New-Item -ItemType Directory -Force "$env:ProgramData\KeyJutsu\captures\trial" | Out-Null
 $u = Start-Process -FilePath "$dir\uninstall.exe" -ArgumentList '/S' -Wait -PassThru
 Start-Sleep -Seconds 5
 check "uninstaller exited 0 ($($u.ExitCode))" ($u.ExitCode -eq 0)
 check "program files removed" (-not (Test-Path "$dir\keyjutsu.exe"))
+check "broker captures removed" (-not (Test-Path "$env:ProgramData\KeyJutsu"))
 $userPath = (Get-Item 'HKCU:\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
 check "install folder off PATH" (-not ($userPath -split ';' -contains $dir))
 check "Explorer menus removed" (-not (Test-Path 'HKCU:\Software\Classes\Directory\shell\KeyJutsu') -and -not (Test-Path 'HKCU:\Software\Classes\Directory\Background\shell\KeyJutsu'))

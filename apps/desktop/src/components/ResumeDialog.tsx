@@ -6,6 +6,8 @@ interface Props {
   notice: execute.BoundaryNotice;
   onConfirm(typed: string): void;
   onCancel(): void;
+  /** A corner card with the terminal still showing, not a full cover. */
+  discreet?: boolean;
 }
 
 const WORD = "RESUME";
@@ -15,14 +17,14 @@ const WORD = "RESUME";
  * checked on this side of it, and the word to type to go on. The button
  * only enables on a match to save a round trip; Rust compares the word.
  */
-export function ResumeDialog({ notice: n, onConfirm, onCancel }: Props) {
+export function ResumeDialog({ notice: n, onConfirm, onCancel, discreet }: Props) {
   const [typed, setTyped] = useState("");
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   const what = boundaryName(n.kind);
 
   return (
-    <div className="scrim">
+    <div className={discreet ? "scrim discreet" : "scrim"}>
       <div
         className="critical-dialog"
         role="alertdialog"
