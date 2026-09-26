@@ -7,6 +7,7 @@
 //
 //   node scripts/release-gates.mjs
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const gates = {
   "Broker security": [
@@ -36,6 +37,7 @@ const gates = {
     "an_edited_snapshot_fails_verification",
     "an_edited_checkpoint_is_refused",
     "a_changed_step_runs_again_even_though_it_succeeded_before",
+    "a_machine_that_changed_since_approval_runs_nothing_whichever_front_end_starts_it",
     "a_shared_technique_arrives_as_an_untrusted_draft",
     "an_imported_technique_cannot_claim_trust_or_hide_what_it_runs",
     "parameter_values_are_data_not_code",
@@ -71,6 +73,8 @@ const gates = {
     "an_unfinished_sequence_cannot_swallow_the_prompts_mark",
     "raw_input_is_refused_while_a_performance_owns_the_keyboard",
     "arming_is_refused_on_a_dirty_or_busy_line",
+    "a_second_run_is_refused_while_one_changes_the_machine",
+    "one_run_at_a_time_and_the_next_once_it_ends",
   ],
   "Schema validation": [
     "valid_fixtures_parse_as_proposals_and_as_plans",
@@ -116,6 +120,30 @@ const gates = {
 };
 
 const names = [...new Set(Object.values(gates).flat())];
+
+// THREAT_MODEL.md says how many tests each gate holds, and docs/features.md
+// how many there are in all; a count that no longer matches these lists is a
+// promise the document no longer keeps.
+const read = (file) =>
+  readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+const model = read("THREAT_MODEL.md");
+const stale = Object.entries(gates).flatMap(([gate, tests]) => {
+  const said = model.match(new RegExp(`${gate.toLowerCase()} \\((\\d+)`))?.[1];
+  return said === String(tests.length)
+    ? []
+    : [`${gate}: ${tests.length} here, ${said ?? "none"} in THREAT_MODEL.md`];
+});
+const all = read("docs/features.md").match(/named lists of tests, (\d+) in all/)?.[1];
+if (all !== String(names.length)) {
+  stale.push(`in all: ${names.length} here, ${all ?? "none"} in docs/features.md`);
+}
+if (stale.length) {
+  for (const s of stale) console.log(`STALE  ${s}`);
+  console.log("The documents' release gate counts do not match; update them.");
+  process.exit(1);
+}
 // The default members hold every gate's tests. The desktop crate is left out
 // because building it needs the installer's staged binaries beside it.
 const run = spawnSync("cargo", ["test", "--no-fail-fast", "--", ...names], {

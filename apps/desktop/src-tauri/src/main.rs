@@ -595,8 +595,23 @@ fn plan_run(
         .steps
         .iter()
         .any(|s| s.privilege == Some(keyjutsu_core::plan::model::Privilege::Administrator));
+    // One run changes this machine at a time, and this one is refused before
+    // Windows is asked to start a broker for it. Held until the run ends.
+    let held = keyjutsu_core::runlock::RunLock::take()?;
     let mut elevated_runner: Option<Arc<dyn keyjutsu_core::elevation::ElevatedRunner>> = None;
+    let mut fingerprint_now: Option<keyjutsu_core::boundary::FingerprintNow> = None;
     if needs_admin && !keyjutsu_core::elevation::is_elevated() {
+        // A machine that changed since approval is refused before Windows
+        // asks to start the broker, not after. The executor checks again,
+        // with this reading.
+        let now = fingerprint::collect(Some(snapshot.plan()));
+        if resume.as_ref().is_none_or(|c| c.boundary.is_none()) {
+            let done = resume.clone().unwrap_or_else(|| Checkpoint::new(snapshot.snapshot_hash()));
+            if let Some(reason) = keyjutsu_core::execute::changed_since_approval(&snapshot, &now, &done) {
+                return Err(reason);
+            }
+        }
+        fingerprint_now = Some(Arc::new(move |_| now.clone()));
         let exe =
             keyjutsu_broker::broker_path().ok_or("keyjutsu-broker.exe is not installed next to KeyJutsu")?;
         elevated_runner = Some(Arc::new(keyjutsu_broker::launch(
@@ -617,6 +632,7 @@ fn plan_run(
         // typed at approval stands. The executor judges the hour, step by step.
         critical_gate: Some(gate),
         resume_gate,
+        fingerprint_now,
         ..ExecuteOptions::default()
     };
     std::thread::spawn(move || {
@@ -637,6 +653,7 @@ fn plan_run(
         *locked(&sink.forward) = Some(tx);
         let started = fingerprint::now_rfc3339();
         let (outcome, finished_checkpoint) = execute(
+            &held,
             &Driver { session: &session, events: &rx },
             &snapshot,
             resume,
@@ -682,6 +699,9 @@ fn plan_run(
             .and_then(|s| keyjutsu_core::history::save(&s, &record))
             .map(|()| record.id.clone())
             .ok();
+        // Free before the window hears the run is over, so a run started at
+        // once from there is not refused.
+        drop(held);
         let _ = on_event.send(RunMessage::Done {
             outcome,
             snapshot: path.display().to_string(),
@@ -858,6 +878,9 @@ async fn recovery_run(
     let (session, sink) = sessions.get(id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let items = plan_recovery(&snapshot, &checkpoint, &[])?;
+        // Recovery changes the machine too: one run or recovery at a time,
+        // refused before Windows is asked to start a broker for it.
+        let held = keyjutsu_core::runlock::RunLock::take()?;
         // An Administrator step's recovery commands run in the elevation
         // broker, started now with one UAC prompt, never in this terminal.
         let broker = if keyjutsu_core::recovery::needs_broker(&snapshot, &items) {
@@ -876,6 +899,7 @@ async fn recovery_run(
         *locked(&sink.forward) = Some(tx);
         let driver = Driver { session: &session, events: &rx };
         let results = recover(
+            &held,
             Some(&driver),
             broker.as_ref().map(|b| b as &dyn keyjutsu_core::elevation::ElevatedRunner),
             &snapshot,

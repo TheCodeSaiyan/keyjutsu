@@ -130,6 +130,7 @@ fn run(t: &Terminal, snap: &ApprovedSnapshot, checkpoint: &Path) -> (Outcome, Ch
         ..ExecuteOptions::default()
     };
     execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &t.session, events: &t.events },
         snap,
         None,
@@ -208,6 +209,7 @@ fn a_failed_reversible_task_is_recovered_without_touching_anything_else() {
     assert!(matches!(&items[0], RecoveryItem::Cannot { .. }), "the failing step declared no recovery");
 
     let results = recover(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         None,
         None,
         &snap,
@@ -258,6 +260,7 @@ fn only_the_steps_the_operator_chooses_are_recovered() {
 
     let items = plan_recovery(&snap, &checkpoint, &["b".into()]).unwrap();
     recover(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         None,
         None,
         &snap,
@@ -290,6 +293,7 @@ fn a_backup_changed_since_it_was_taken_is_not_used() {
     std::fs::write(recovery_dir(&cp).join("edit-0.bak"), "something else").unwrap();
     let items = plan_recovery(&snap, &checkpoint, &[]).unwrap();
     let results = recover(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         None,
         None,
         &snap,
@@ -347,6 +351,7 @@ fn recovery_commands_run_in_the_terminal_and_are_validated() {
     assert!(matches!(&items[0], RecoveryItem::Commands { .. }));
     let driver = Driver { session: &t.session, events: &t.events };
     let results = recover(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         Some(&driver),
         None,
         &snap,
@@ -475,6 +480,7 @@ fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_prof
     // With the broker: it is asked, by step and hash, and the checks are its own.
     let broker = RecordingBroker::default();
     let results = recover(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         None,
         Some(&broker),
         &snap,
@@ -496,8 +502,17 @@ fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_prof
     );
 
     // Without it: refused, and said why, before anything is written.
-    let results =
-        recover(None, None, &snap, &checkpoint, &dir, &items, &PerformanceConfig::default(), &|_| {});
+    let results = recover(
+        &keyjutsu_core::runlock::RunLock::unshared(),
+        None,
+        None,
+        &snap,
+        &checkpoint,
+        &dir,
+        &items,
+        &PerformanceConfig::default(),
+        &|_| {},
+    );
     assert!(!results[0].recovered);
     assert!(results[0].checks[0].detail.contains("no elevation broker"), "{results:?}");
 }

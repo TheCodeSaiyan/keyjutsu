@@ -449,9 +449,11 @@ pub fn restore_capture(capture: &StepCapture, dir: &Path) -> Vec<CheckResult> {
 /// recovery fails: recovery is execution too, and does not carry on past a
 /// failure. An Administrator step's recovery commands go to `elevated`, the
 /// broker, when KeyJutsu itself is not elevated; they are never typed into
-/// the unelevated shell.
+/// the unelevated shell. Recovery changes the machine, so the caller holds
+/// the run lock, as for a run.
 #[allow(clippy::too_many_arguments)]
 pub fn recover(
+    _held: &crate::runlock::RunLock,
     driver: Option<&Driver<'_>>,
     elevated: Option<&dyn crate::elevation::ElevatedRunner>,
     snapshot: &ApprovedSnapshot,

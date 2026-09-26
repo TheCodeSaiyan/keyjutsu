@@ -22,6 +22,26 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, 
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   const matches = typed.trim() === c.phrase;
+  const why = c.impact.length > 0 && (
+    <>
+      <dt>Impact</dt>
+      <dd>
+        {/* The agent's sentence, then KeyJutsu's reasons, which are
+            fragments: joined with spaces they ran together. */}
+        <ul className="plain">
+          {c.impact.map((i) => (
+            <li key={i}>{i}</li>
+          ))}
+        </ul>
+      </dd>
+    </>
+  );
+  const evidence = c.evidence.length > 0 && (
+    <>
+      <dt>Validation</dt>
+      <dd>{c.evidence.join(" · ")}</dd>
+    </>
+  );
 
   return (
     <div className={discreet ? "scrim discreet" : "scrim"}>
@@ -66,20 +86,7 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, 
           <dd>
             <pre className="code">{c.commands.join("\n")}</pre>
           </dd>
-          {c.impact.length > 0 && (
-            <>
-              <dt>Impact</dt>
-              <dd>
-                {/* The agent's sentence, then KeyJutsu's reasons, which are
-                    fragments: joined with spaces they ran together. */}
-                <ul className="plain">
-                  {c.impact.map((i) => (
-                    <li key={i}>{i}</li>
-                  ))}
-                </ul>
-              </dd>
-            </>
-          )}
+          {!discreet && why}
           <dt>Recovery</dt>
           <dd
             className={
@@ -88,13 +95,20 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, 
           >
             {c.recovery}
           </dd>
-          {c.evidence.length > 0 && (
-            <>
-              <dt>Validation</dt>
-              <dd>{c.evidence.join(" · ")}</dd>
-            </>
-          )}
+          {!discreet && evidence}
         </dl>
+        {/* In a corner card, what it acts on, what runs, whether it can be
+            undone and the phrase stay in view; why it is critical, and the
+            validation behind that, are a click away. */}
+        {discreet && (why || evidence) && (
+          <details className="why">
+            <summary className="small">Why it&apos;s critical</summary>
+            <dl>
+              {why}
+              {evidence}
+            </dl>
+          </details>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();

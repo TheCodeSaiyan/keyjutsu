@@ -51,11 +51,20 @@ impl Screen {
     }
 }
 
+/// A run lock of its own for each KeyJutsu started here: the tests run side
+/// by side, and must not wait on each other or on a real run.
+fn own_lock() -> String {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!(r"Local\keyjutsu-cli-test-{}-{n}", std::process::id())
+}
+
 /// The CLI with the tests' own encrypted store, where the plans they approve
 /// are recorded and their runs checked against, apart from the operator's.
 fn test_command() -> std::process::Command {
     let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"));
-    c.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
+    c.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env("KEYJUTSU_RUN_LOCK", own_lock());
     c
 }
 
@@ -198,6 +207,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
         .unwrap();
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_keyjutsu"));
     cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
+    cmd.env("KEYJUTSU_RUN_LOCK", own_lock());
     cmd.args(["run", snap.to_str().unwrap(), "--mode", "performance", "--clean"]);
     let mut child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);
@@ -255,6 +265,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     let listed = test_command()
         .args(["history", "list"])
         .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env("KEYJUTSU_RUN_LOCK", own_lock())
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&listed.stdout);
@@ -316,6 +327,7 @@ fn launch_in(
     }
     // Sessions these tests run go to a history of their own, not the operator's.
     cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
+    cmd.env("KEYJUTSU_RUN_LOCK", own_lock());
     let child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);
     let mut reader = pair.master.try_clone_reader().unwrap();
@@ -624,7 +636,7 @@ fn an_old_approval_of_a_critical_step_is_confirmed_again_just_before_it_runs_in_
     assert!(screen.wait_for("Not confirmed: it will not run"), "{}", screen.plain());
     assert!(victim.join("keep.txt").exists());
     // The shell is handed back, and says so in the window's title.
-    assert!(screen.wait_for_raw("the run has ended"), "{}", screen.plain());
+    assert!(screen.wait_for_raw("the run has ended. Type exit to leave."), "{}", screen.plain());
     writer.lock().unwrap().write_all(b"exit\r").unwrap();
     let status = wait_exit(&mut child, &screen);
     assert!(!status.success());
@@ -687,7 +699,7 @@ fn a_discreet_run_asks_in_the_title_bar_and_shows_nothing_in_the_console() {
         assert!(Instant::now() < deadline, "the step never ran:\n{}", screen.plain());
         std::thread::sleep(Duration::from_millis(100));
     }
-    assert!(screen.wait_for_raw("the run has ended"), "{}", screen.plain());
+    assert!(screen.wait_for_raw("Ctrl+Alt+Shift+K gives you the keyboard back"), "{}", screen.plain());
     let seen = screen.plain();
     assert!(!seen.contains("CRITICAL ACTION"), "{seen}");
     assert!(!seen.contains("REMOVE THE VICTIM"), "the answer was shown: {seen}");

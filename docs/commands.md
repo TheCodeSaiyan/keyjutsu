@@ -173,7 +173,9 @@ to validation.
 
 Runs an approved snapshot in this console. Refuses a snapshot this Windows
 account didn't approve on this machine, one whose machine has changed since,
-or one with a step that wasn't READY.
+or one with a step that wasn't READY. One run or recovery changes the machine
+at a time, from the CLI or the app: while one is going, another is refused
+before it starts anything.
 
 | Option | |
 | --- | --- |

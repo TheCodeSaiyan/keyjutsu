@@ -105,6 +105,7 @@ fn run_in(dir: &Path, snap: &ApprovedSnapshot) -> Outcome {
     assert!(session.wait_ready(Duration::from_secs(30)));
     let options = ExecuteOptions { mode: Some(ExecutionMode::Direct), ..ExecuteOptions::default() };
     let (outcome, _) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &session, events: &events },
         snap,
         None,

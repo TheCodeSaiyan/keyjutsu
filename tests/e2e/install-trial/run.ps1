@@ -42,7 +42,8 @@ Copy-Item "$PSScriptRoot\trial.ps1" "$stage\"
 </Configuration>
 "@ | Set-Content -LiteralPath "$stage\trial.wsb"
 
-Start-Process "$stage\trial.wsb"
+. "$PSScriptRoot\..\sandbox.ps1"
+Start-SandboxTrial -Wsb "$stage\trial.wsb" -Watch "$stage\work"
 $deadline = (Get-Date).AddMinutes(20)
 while (-not (Test-Path "$stage\work\all.done")) {
     if ((Get-Date) -gt $deadline) { throw "no result after 20 minutes; see $stage\work\trial.log" }

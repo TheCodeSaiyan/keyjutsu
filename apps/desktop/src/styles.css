@@ -1142,6 +1142,20 @@ button.text-danger {
   box-shadow: var(--shadow-dialog);
 }
 
+/* Folded reasons in a corner card: the same layout as the dialog's own list. */
+.critical-dialog details.why {
+  padding: 0 var(--sp-4) var(--sp-2);
+}
+
+.critical-dialog details.why summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+
+.critical-dialog details.why dl {
+  padding: var(--sp-2) 0 0;
+}
+
 .critical-dialog header {
   display: flex;
   gap: var(--sp-3);

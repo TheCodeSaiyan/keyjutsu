@@ -28,6 +28,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # A release does not ship unless every gate's named tests pass, run here
+  # on the tagged commit itself: CI passing on some other commit proves
+  # nothing about this one. Runs beside the installer build, and publishing
+  # waits for both.
+  gates:
+    name: Release gates
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/release-gates.mjs
+
   installer:
     name: Build and sign the installer
     runs-on: windows-latest
@@ -71,14 +88,17 @@ jobs:
           fi
 
       # A tag that disagrees with the version in the code would publish an
-      # installer whose name and whose `keyjutsu --version` differ.
-      - name: The version in the code is the version being released
+      # installer whose name and whose `keyjutsu --version` differ. A build
+      # from the Actions page is held to the same rule: asked for another
+      # version, it used to build the code's and fail half an hour later,
+      # looking for an installer of the version asked for.
+      - name: The version in the code is the version being built
         shell: bash
         run: |
           node scripts/version.mjs
           code=$(node -e "console.log(require('./apps/desktop/src-tauri/tauri.conf.json').version)")
-          if [ "${{ github.ref_type }}" = "tag" ] && [ "$code" != "${{ steps.version.outputs.value }}" ]; then
-            echo "::error::Tag ${{ github.ref_name }} but the code says $code. Run 'node scripts/version.mjs set ${{ steps.version.outputs.value }}' and commit it first."
+          if [ "$code" != "${{ steps.version.outputs.value }}" ]; then
+            echo "::error::Asked for ${{ steps.version.outputs.value }} (${{ github.ref_name }}) but the code says $code. Run 'node scripts/version.mjs set ${{ steps.version.outputs.value }}' and commit it first."
             exit 1
           fi
 
@@ -272,7 +292,7 @@ jobs:
     name: Publish the release
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [installer, verify]
+    needs: [gates, installer, verify]
     if: github.ref_type == 'tag'
     permissions:
       contents: write

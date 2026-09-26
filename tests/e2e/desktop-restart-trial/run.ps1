@@ -35,7 +35,8 @@ Copy-Item "$repo\tests\e2e\drive-desktop.ps1", "$PSScriptRoot\trial.ps1", "$PSSc
 </Configuration>
 "@ | Set-Content -LiteralPath "$stage\trial.wsb"
 
-Start-Process "$stage\trial.wsb"
+. "$PSScriptRoot\..\sandbox.ps1"
+Start-SandboxTrial -Wsb "$stage\trial.wsb" -Watch "$stage\work"
 $deadline = (Get-Date).AddMinutes(30)
 while (-not (Test-Path "$stage\work\all.done")) {
     if ((Get-Date) -gt $deadline) { throw "no result after 30 minutes; see $stage\work\trial.log" }

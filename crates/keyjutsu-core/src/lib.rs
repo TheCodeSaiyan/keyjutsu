@@ -21,6 +21,7 @@ pub mod ipc;
 pub mod links;
 pub mod readiness;
 pub mod recovery;
+pub mod runlock;
 pub mod session;
 pub mod store;
 pub mod technique;

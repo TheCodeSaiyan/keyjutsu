@@ -722,6 +722,50 @@ pub fn perform(driver: &Driver<'_>, script: StagedScript, config: PerformanceCon
     Performed::Finished(outcomes)
 }
 
+/// Why `snapshot` may not run on this machine as it is `now`, if a step
+/// not yet run in `done` depends on something that changed since approval.
+/// Front ends ask before starting anything (a broker's UAC prompt, say);
+/// the executor asks again, so no front end can skip it.
+pub fn changed_since_approval(
+    snapshot: &ApprovedSnapshot,
+    now: &keyjutsu_plan::hash::EnvironmentFingerprint,
+    done: &Checkpoint,
+) -> Option<String> {
+    let drifts = snapshot.fingerprint()?.drift(now);
+    let affected = still_to_run(
+        keyjutsu_plan::hash::affected_by_drift(snapshot.plan(), snapshot.graph(), &drifts),
+        done,
+    );
+    (!affected.is_empty()).then(|| {
+        format!(
+            "this machine has changed since the plan was approved ({}); steps {} require revalidation",
+            describe_drift(&drifts),
+            affected.join(", ")
+        )
+    })
+}
+
+/// The steps in `affected` that have not already run.
+fn still_to_run(affected: Vec<String>, checkpoint: &Checkpoint) -> Vec<String> {
+    affected.into_iter().filter(|s| !checkpoint.runs.iter().any(|r| &r.step == s)).collect()
+}
+
+/// What changed, as `what before -> after; …`.
+fn describe_drift(drifts: &[keyjutsu_plan::hash::Drift]) -> String {
+    drifts
+        .iter()
+        .map(|d| {
+            format!(
+                "{} {} -> {}",
+                d.what,
+                d.before.as_deref().unwrap_or("absent"),
+                d.after.as_deref().unwrap_or("absent")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 /// Why a snapshot may not be executed at all.
 pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
     let Some(state) = &snapshot.plan().keyjutsu else {
@@ -762,7 +806,9 @@ pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
 
 /// Execute `snapshot` on the session. Blocks until the plan completes, fails,
 /// is disarmed or cannot continue; `observe` hears every step as it goes.
+/// Only one run changes the machine at a time: the caller holds the lock.
 pub fn execute(
+    _held: &crate::runlock::RunLock,
     driver: &Driver<'_>,
     snapshot: &ApprovedSnapshot,
     resume: Option<Checkpoint>,
@@ -862,6 +908,18 @@ pub fn execute(
             observe(ExecutionEvent::StepCarried { step: run.step.clone() });
         }
     }
+    // The machine is compared with the one the plan was approved on before
+    // anything runs, whichever front end started the run. Across a
+    // boundary the comparison comes below, once the boundary is confirmed.
+    if pending.is_none() && snapshot.fingerprint().is_some() {
+        let now_fp = match &options.fingerprint_now {
+            Some(f) => f(plan),
+            None => crate::fingerprint::collect(Some(plan)),
+        };
+        if let Some(reason) = changed_since_approval(snapshot, &now_fp, &checkpoint) {
+            return finish(Outcome::Blocked { reason }, checkpoint);
+        }
+    }
     save(&checkpoint);
 
     // Boundaries. One is behind the plan once any step after it ran.
@@ -904,28 +962,15 @@ pub fn execute(
             None => crate::fingerprint::collect(Some(plan)),
         };
         let drifts = snapshot.fingerprint().map(|then| then.drift(&now_fp)).unwrap_or_default();
-        let done: std::collections::BTreeSet<&str> =
-            checkpoint.runs.iter().map(|r| r.step.as_str()).collect();
-        let affected: Vec<String> = keyjutsu_plan::hash::affected_by_drift(plan, snapshot.graph(), &drifts)
-            .into_iter()
-            .filter(|s| !done.contains(s.as_str()))
-            .collect();
+        let affected = still_to_run(
+            keyjutsu_plan::hash::affected_by_drift(plan, snapshot.graph(), &drifts),
+            &checkpoint,
+        );
         if !affected.is_empty() {
-            let changed: Vec<String> = drifts
-                .iter()
-                .map(|d| {
-                    format!(
-                        "{} {} -> {}",
-                        d.what,
-                        d.before.as_deref().unwrap_or("absent"),
-                        d.after.as_deref().unwrap_or("absent")
-                    )
-                })
-                .collect();
             return block(
                 format!(
                     "after the {what}, this machine differs from the one the plan was approved on ({}); steps {} require revalidation",
-                    changed.join("; "),
+                    describe_drift(&drifts),
                     affected.join(", ")
                 ),
                 checkpoint,

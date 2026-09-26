@@ -115,6 +115,15 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
     }
 
     let dir = recovery_dir(&cp_path);
+    // Recovery changes the machine too: one run or recovery at a time,
+    // refused before Windows is asked to start a broker for it.
+    let held = match keyjutsu_core::runlock::RunLock::take() {
+        Ok(l) => l,
+        Err(reason) => {
+            eprintln!("keyjutsu: will not recover: {reason}. Nothing was changed.");
+            return ExitCode::FAILURE;
+        }
+    };
     // An Administrator step's recovery commands run in the elevation broker,
     // started now, with one UAC prompt, and never typed into this console.
     let broker = if keyjutsu_core::recovery::needs_broker(&snapshot, &items) {
@@ -153,6 +162,7 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
             let driver = Driver { session: &session, events: &events };
             let runner = elevated.as_deref().map(|b| b as &dyn ElevatedRunner);
             let r = recover(
+                &held,
                 Some(&driver),
                 runner,
                 &snap,
@@ -174,7 +184,17 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
         }
         out.lock().map(|r| r.clone()).unwrap_or_default()
     } else {
-        recover(None, None, &snapshot, &checkpoint, &dir, &items, &PerformanceConfig::default(), &|_| {})
+        recover(
+            &held,
+            None,
+            None,
+            &snapshot,
+            &checkpoint,
+            &dir,
+            &items,
+            &PerformanceConfig::default(),
+            &|_| {},
+        )
     };
     println!();
     if print_results(&results) {

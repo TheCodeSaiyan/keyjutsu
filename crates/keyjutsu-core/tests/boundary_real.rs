@@ -98,6 +98,7 @@ fn run(
     resume: Option<Checkpoint>,
 ) -> (Outcome, Checkpoint) {
     execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &s.session, events: &s.events },
         snap,
         resume,
@@ -180,6 +181,29 @@ fn what_phase_one_achieved_is_checked_again_after_the_boundary() {
     assert!(!dir.join("result.txt").exists(), "phase 2 did not run on a broken assumption");
     assert_eq!(asked.load(Ordering::SeqCst), 0, "the operator is not asked to approve a broken state");
     assert!(kept.boundary.is_some(), "still waiting at the boundary");
+}
+
+#[test]
+fn a_machine_that_changed_since_approval_runs_nothing_whichever_front_end_starts_it() {
+    let dir = scratch("drifted");
+    let snap = phased(&dir, "shell_restart");
+    let mut changed = fingerprint::collect(Some(snap.plan()));
+    for sh in &mut changed.shells {
+        if sh.name == "pwsh" {
+            sh.version = Some("7.0.0".into());
+        }
+    }
+    let fp: FingerprintNow = Arc::new(move |_| changed.clone());
+    let s = shell();
+    let (outcome, checkpoint) =
+        run(&s, &snap, &ExecuteOptions { fingerprint_now: Some(fp), ..options(None) }, None);
+    s.session.close();
+    assert!(
+        matches!(&outcome, Outcome::Blocked { reason }
+            if reason.contains("changed since the plan was approved") && reason.contains("prepare")),
+        "{outcome:?}"
+    );
+    assert!(checkpoint.runs.is_empty() && !dir.join("marker.txt").exists(), "nothing ran");
 }
 
 #[test]

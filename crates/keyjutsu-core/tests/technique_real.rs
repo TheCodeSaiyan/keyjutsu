@@ -76,6 +76,7 @@ fn successful_session(store: &Store) -> SessionRecord {
     assert!(session.wait_ready(Duration::from_secs(30)));
     let options = ExecuteOptions { mode: Some(ExecutionMode::Direct), ..ExecuteOptions::default() };
     let (outcome, checkpoint) = execute(
+        &keyjutsu_core::runlock::RunLock::unshared(),
         &Driver { session: &session, events: &events },
         &snap,
         None,
