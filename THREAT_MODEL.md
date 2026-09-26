@@ -102,7 +102,7 @@ it is, and the row says which part is not.
 | Validation from before a revision is taken to still apply. | Revisions discard validation results. | Held (same test). |
 | An agent is run with its safeguards off. | No invocation passes bypass, auto-approve or full-access options. | Held (`no_invocation_ever_bypasses_the_agents_own_safeguards`). |
 | An agent investigating a folder reads secrets there. | The manifest names secret-looking files and nothing is sent without `--send`. | **Partial**: the agent's read-only mode still lets it read. |
-| A plan runs on a machine that is no longer the one it was approved for. | `keyjutsu run` re-collects the environment fingerprint and refuses to start if anything an approved step depends on has changed. | Held for what the fingerprint covers (shells, tool versions, OS); see [ADR 0010](docs/architecture/adr/0010-plan-hashing.md). |
+| A plan runs on a machine that is no longer the one it was approved for. | The executor re-collects the environment fingerprint and refuses to start if anything a step still to run depends on has changed, whichever front end started the run; both check first as well, the desktop before the broker's UAC prompt. | Held for what the fingerprint covers (shells, tool versions, OS) (`a_machine_that_changed_since_approval_runs_nothing_whichever_front_end_starts_it`); see [ADR 0010](docs/architecture/adr/0010-plan-hashing.md). A Store PowerShell reached through its package folder or its alias is the same shell. |
 | A step is counted as done when it never finished. | A step succeeds only when its performance completed with a result for every line and its checks passed; a shell that exits mid-step aborts the run and leaves the step in doubt. | Held (`a_shell_that_exits_mid_step_is_never_a_success`, which caught the executor counting it as a success). |
 | After a crash, a step whose effect is unknown is assumed to have worked, or run twice. | It is recorded as in doubt; a resumed run refuses to start until the operator settles it. | Held (`a_step_left_in_doubt_blocks_until_the_operator_settles_it`). |
 | A resumed run skips a step that changed since it last succeeded. | Earlier results count only where the step's hash in the new snapshot is the same. | Held (`a_changed_step_runs_again_even_though_it_succeeded_before`). |
@@ -157,7 +157,7 @@ There are eight gates. Each is a list of named tests in
 `scripts/release-gates.mjs`, run by `pnpm release:gates` and in CI after the
 full suite. A test that is missing fails its gate, so renaming or deleting one
 cannot quietly take it out. All eight pass: broker security
-(14 tests), plan integrity (13), secret handling (12), the execution state
+(14 tests), plan integrity (14), secret handling (12), the execution state
 machine (16), schema validation (7), supported-shell compatibility (8),
 critical rollback (12) and the credential boundary (6).
 

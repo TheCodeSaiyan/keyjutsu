@@ -596,7 +596,19 @@ fn plan_run(
         .iter()
         .any(|s| s.privilege == Some(keyjutsu_core::plan::model::Privilege::Administrator));
     let mut elevated_runner: Option<Arc<dyn keyjutsu_core::elevation::ElevatedRunner>> = None;
+    let mut fingerprint_now: Option<keyjutsu_core::boundary::FingerprintNow> = None;
     if needs_admin && !keyjutsu_core::elevation::is_elevated() {
+        // A machine that changed since approval is refused before Windows
+        // asks to start the broker, not after. The executor checks again,
+        // with this reading.
+        let now = fingerprint::collect(Some(snapshot.plan()));
+        if resume.as_ref().is_none_or(|c| c.boundary.is_none()) {
+            let done = resume.clone().unwrap_or_else(|| Checkpoint::new(snapshot.snapshot_hash()));
+            if let Some(reason) = keyjutsu_core::execute::changed_since_approval(&snapshot, &now, &done) {
+                return Err(reason);
+            }
+        }
+        fingerprint_now = Some(Arc::new(move |_| now.clone()));
         let exe =
             keyjutsu_broker::broker_path().ok_or("keyjutsu-broker.exe is not installed next to KeyJutsu")?;
         elevated_runner = Some(Arc::new(keyjutsu_broker::launch(
@@ -617,6 +629,7 @@ fn plan_run(
         // typed at approval stands. The executor judges the hour, step by step.
         critical_gate: Some(gate),
         resume_gate,
+        fingerprint_now,
         ..ExecuteOptions::default()
     };
     std::thread::spawn(move || {

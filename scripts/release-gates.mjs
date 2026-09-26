@@ -37,6 +37,7 @@ const gates = {
     "an_edited_snapshot_fails_verification",
     "an_edited_checkpoint_is_refused",
     "a_changed_step_runs_again_even_though_it_succeeded_before",
+    "a_machine_that_changed_since_approval_runs_nothing_whichever_front_end_starts_it",
     "a_shared_technique_arrives_as_an_untrusted_draft",
     "an_imported_technique_cannot_claim_trust_or_hide_what_it_runs",
     "parameter_values_are_data_not_code",

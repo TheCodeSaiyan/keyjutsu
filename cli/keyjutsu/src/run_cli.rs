@@ -21,7 +21,6 @@ use keyjutsu_core::execute::{
 use keyjutsu_core::execution::ExecutionMode;
 use keyjutsu_core::fingerprint;
 use keyjutsu_core::plan::ApprovedSnapshot;
-use keyjutsu_core::plan::hash::affected_by_drift;
 use keyjutsu_core::plan::model::ShellName;
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 
@@ -121,24 +120,6 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         eprintln!("keyjutsu: will not run: {reason}");
         return ExitCode::FAILURE;
     }
-    if let Some(then) = snapshot.fingerprint() {
-        let now = fingerprint::collect(Some(snapshot.plan()));
-        let drifts = then.drift(&now);
-        let affected = affected_by_drift(snapshot.plan(), snapshot.graph(), &drifts);
-        if !affected.is_empty() {
-            eprintln!("keyjutsu: will not run: this machine has changed since the plan was approved.");
-            for d in &drifts {
-                eprintln!(
-                    "  {}: {} -> {}",
-                    d.what,
-                    d.before.as_deref().unwrap_or("absent"),
-                    d.after.as_deref().unwrap_or("absent")
-                );
-            }
-            eprintln!("  steps that require revalidation: {}", affected.join(", "));
-            return ExitCode::FAILURE;
-        }
-    }
 
     let mut settled = BTreeMap::new();
     for s in args.settle {
@@ -166,6 +147,18 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         },
         None => None,
     };
+    // A machine that changed since approval is refused before anything
+    // starts; the executor checks again, with this reading. Across a
+    // boundary, the executor compares once the boundary is confirmed.
+    let now = fingerprint::collect(Some(snapshot.plan()));
+    if resume.as_ref().is_none_or(|c| c.boundary.is_none()) {
+        let done = resume.clone().unwrap_or_else(|| Checkpoint::new(snapshot.snapshot_hash()));
+        if let Some(reason) = keyjutsu_core::execute::changed_since_approval(&snapshot, &now, &done) {
+            eprintln!("keyjutsu: will not run: {reason}");
+            return ExitCode::FAILURE;
+        }
+    }
+    let fingerprint_now: keyjutsu_core::boundary::FingerprintNow = Arc::new(move |_| now.clone());
 
     // Resuming past a session boundary needs the operator's word, typed
     // here on the plain console before anything starts.
@@ -330,6 +323,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         critical_gate: Some(critical_gate),
         elevated_runner,
         checkpoint_store: Some(store.clone()),
+        fingerprint_now: Some(fingerprint_now),
         ..ExecuteOptions::default()
     };
     let discreet_run = args.discreet;
