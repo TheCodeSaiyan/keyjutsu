@@ -68,9 +68,14 @@ keyjutsu doctor
 You should see a list. Each line starts with `[ok  ]`, `[warn]` or `[FAIL]`.
 
 - `[ok  ]` means that part is ready.
-- `[warn]` next to **AI agents** is normal if you haven't installed one. You
-  can still try the demo.
-- `[FAIL]` means something is missing. The line says what.
+- `[warn]` means something useful is missing. On a new computer that's
+  normal for **PowerShell 7**, **Git** and **AI agents**. KeyJutsu works
+  without them, and you can still try the demo.
+- `[FAIL]` means something KeyJutsu needs isn't working. The line says what.
+
+When something is missing, the line below it says where to get it: a web
+address on the maker's own site. In the KeyJutsu app, the same line has a
+link you can click.
 
 ## If it goes wrong
 

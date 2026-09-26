@@ -178,6 +178,28 @@ label.choice {
   color: var(--kj-error);
 }
 
+/* A link out: where to get something KeyJutsu relies on. Styled as text,
+   in the kit's information colour, not as a button. */
+button.link {
+  display: inline;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--kj-info);
+  font: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+button.link:hover:not(:disabled) {
+  background: none;
+  text-decoration-thickness: 2px;
+}
+
 .notice {
   border-left: 3px solid var(--kj-info);
   padding-left: var(--sp-2);

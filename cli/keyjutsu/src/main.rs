@@ -735,6 +735,9 @@ fn doctor(json: bool) -> ExitCode {
                 CheckStatus::Unavailable => "FAIL",
             };
             println!("  [{mark}] {:<32} {}", check.name, check.detail);
+            if let Some(get) = &check.get {
+                println!("         {:<32} {}: {}", "", get.label, get.url);
+            }
         }
         println!();
         for shell in &report.shells {

@@ -39,6 +39,8 @@ pub struct AgentInfo {
     /// The installed version differs from the one the adapter was checked
     /// against, so its flags should be re-checked.
     pub needs_compatibility_check: bool,
+    /// Where to get it: the maker's own install page.
+    pub install_url: &'static str,
 }
 
 impl AgentInfo {
@@ -117,6 +119,7 @@ pub fn detect(kind: AgentKind) -> AgentInfo {
         sign_in: sign_in(kind),
         capabilities,
         needs_compatibility_check,
+        install_url: kind.install_url(),
     }
 }
 
@@ -154,6 +157,7 @@ mod tests {
             sign_in: SignIn::Unknown,
             capabilities: AgentKind::Cursor.capabilities(),
             needs_compatibility_check: false,
+            install_url: AgentKind::Cursor.install_url(),
         };
         assert!(!info.installed());
     }

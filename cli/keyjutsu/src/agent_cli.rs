@@ -41,6 +41,9 @@ pub fn list(json: bool) -> ExitCode {
             SignIn::Unknown => "sign-in unknown",
         };
         println!("  {:<20} {:<28} {}", a.name, status, if a.installed() { sign_in } else { "" });
+        if !a.installed() {
+            println!("      get it: {}", a.install_url);
+        }
         if a.installed() {
             println!("      read-only: {}", a.capabilities.read_only);
             if a.needs_compatibility_check {

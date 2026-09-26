@@ -9,6 +9,7 @@ export type { ColorScheme } from "./generated/ColorScheme";
 export type { CursorShape } from "./generated/CursorShape";
 export type { ExecutionMode } from "./generated/ExecutionMode";
 export type { ExecutionState } from "./generated/ExecutionState";
+export type { GetIt } from "./generated/GetIt";
 export type { KeyChord } from "./generated/KeyChord";
 export type { KeyClass } from "./generated/KeyClass";
 export type { KeyName } from "./generated/KeyName";

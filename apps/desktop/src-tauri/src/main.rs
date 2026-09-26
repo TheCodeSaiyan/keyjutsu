@@ -693,6 +693,17 @@ fn plan_run(
     Ok(())
 }
 
+/// Open one of KeyJutsu's own download links in the default browser. The
+/// window can only ask: anything not on KeyJutsu's list is refused, so a
+/// compromised page cannot open an address of its choosing.
+#[tauri::command]
+fn open_link(url: String) -> Result<(), String> {
+    if !keyjutsu_core::links::is_known(&url) {
+        return Err("that is not a link KeyJutsu offers".into());
+    }
+    std::process::Command::new("explorer.exe").arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 /// What the operator types to cross a session boundary.
 const RESUME_WORD: &str = "RESUME";
 
@@ -916,6 +927,7 @@ fn main() {
         .manage(Arc::new(Diagnostics::default()))
         .invoke_handler(tauri::generate_handler![
             readiness_scan,
+            open_link,
             run_waiting,
             run_waiting_open,
             diagnostics_preview,
