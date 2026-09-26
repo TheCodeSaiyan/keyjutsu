@@ -44,4 +44,7 @@ while (-not (Test-Path "$stage\out\all.done")) {
     Start-Sleep -Seconds 5
 }
 Get-Content "$stage\out\capture.log"
+# The Sandbox is this script's own (it refuses to start beside another), and
+# left open it stops the next run from starting.
+Get-Process WindowsSandboxRemoteSession, WindowsSandboxServer -ErrorAction SilentlyContinue | Stop-Process -Force
 "Results in $stage\out"

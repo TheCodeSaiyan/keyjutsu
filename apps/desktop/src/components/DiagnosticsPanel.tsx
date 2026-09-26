@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ipc } from "../ipc";
 
 /**
@@ -10,6 +10,13 @@ export function DiagnosticsPanel() {
   const [saved, setSaved] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shown = useRef<HTMLPreElement>(null);
+
+  // The panel is usually scrolled so the buttons are at its foot: bring the
+  // bundle into view, or the preview looks as if it did nothing.
+  useEffect(() => {
+    if (text !== null) shown.current?.scrollIntoView({ block: "nearest" });
+  }, [text]);
 
   const act = async (f: () => Promise<void>) => {
     setError(null);
@@ -64,7 +71,7 @@ export function DiagnosticsPanel() {
         </p>
       )}
       {text !== null && (
-        <pre className="code bundle" tabIndex={0} aria-label="The diagnostic bundle">
+        <pre ref={shown} className="code bundle" tabIndex={0} aria-label="The diagnostic bundle">
           {text}
         </pre>
       )}

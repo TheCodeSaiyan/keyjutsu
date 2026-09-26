@@ -102,7 +102,7 @@ Start-Sleep -Seconds 2
 d chord '^+k'                     # operator controls
 Start-Sleep -Seconds 2
 d capture '' 'performance'
-d chord '^%+k'                    # disarm
+d click 'Disarm'                  # from the operator controls
 Start-Sleep -Seconds 2
 
 # The diagnostic bundle: previewed, then saved, and the saved file kept to
