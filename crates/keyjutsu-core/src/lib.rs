@@ -23,6 +23,7 @@ pub mod recovery;
 pub mod session;
 pub mod store;
 pub mod technique;
+pub mod transcript;
 pub mod workspace;
 
 pub use keyjutsu_agent as agent;

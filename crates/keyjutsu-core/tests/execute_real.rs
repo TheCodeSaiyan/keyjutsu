@@ -345,6 +345,9 @@ fn a_failed_step_carries_what_it_printed() {
             assert!(output.contains("the-widget-is-missing"), "{output:?}");
             assert!(!output.contains("from-the-first-step"), "only this step's output: {output:?}");
             assert!(!output.contains('\x1b'), "no colour codes: {output:?}");
+            // As the terminal showed it: the command once, at its prompt,
+            // however the line editor redrew it while it was typed.
+            assert_eq!(output.matches("Write-Output 'the-widget-is-missing'").count(), 1, "{output:?}");
         }
         other => panic!("expected Failed, got {other:?}"),
     }

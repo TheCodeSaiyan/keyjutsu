@@ -421,14 +421,15 @@ fn run_script(step: &Step, script: StagedScript) -> Result<ElevatedRun, String> 
         session.close();
         return Err("the elevated shell never showed a prompt".into());
     }
-    let before = out.plain_output().len();
+    let mark = session.output_mark();
     let config = PerformanceConfig { mode: ExecutionMode::Direct, ..PerformanceConfig::default() };
     let driver = keyjutsu_core::execute::Driver { session: &session, events: &events };
     let performed = perform(&driver, script, config);
     let _ = session.wait_for_prompt(Duration::from_secs(10));
-    let text = out.plain_output();
+    // As the terminal showed it: the command at its prompt, then what it
+    // printed, with the line editor's redraws read once.
+    let output = session.output_since(mark, 1_000_000);
     session.close();
-    let output = text.get(before..).unwrap_or("").to_owned();
     match performed {
         Performed::Finished(outcomes) => Ok(ElevatedRun { outcomes, output, captured: None }),
         Performed::Refused(r) => Err(r),
