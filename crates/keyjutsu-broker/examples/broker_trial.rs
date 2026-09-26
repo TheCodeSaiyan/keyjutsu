@@ -244,7 +244,8 @@ fn main() -> ExitCode {
     let links_held = file_run.is_ok()
         && junction.status.success()
         && through.as_ref().is_ok_and(|c| {
-            !c.is_empty() && c.iter().all(|c| c.passed == Some(false) && c.detail.contains("link or junction"))
+            !c.is_empty()
+                && c.iter().all(|c| c.passed == Some(false) && c.detail.contains("link or junction"))
         })
         && protected_after.as_deref().is_ok_and(|t| t == "precious")
         && back.as_ref().is_ok_and(|c| !c.is_empty() && c.iter().all(|c| c.passed == Some(true)))
