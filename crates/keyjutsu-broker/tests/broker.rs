@@ -73,7 +73,7 @@ fn start(
     let secret = secret.to_owned();
     let handle = std::thread::spawn(move || {
         keyjutsu_broker::accept_launcher(&server, expected_pid)?;
-        let mut broker = Broker::new(snap, secret, Box::new(run_in_shell));
+        let mut broker = Broker::new(snap, secret, Box::new(|s, step, _| run_in_shell(s, step)));
         let mut server = server;
         serve(&mut server, &mut broker).map_err(|e| e.to_string())
     });
@@ -144,7 +144,8 @@ fn another_protocol_version_is_refused_not_negotiated() {
     write_frame(&mut pipe, &hello).unwrap();
     let answer: Response = serde_json::from_slice(&read_frame(&mut pipe).unwrap().unwrap()).unwrap();
     assert!(
-        matches!(&answer, Response::Refused { reason } if reason.contains("protocol version 2")),
+        matches!(&answer, Response::Refused { reason }
+            if reason.contains(&format!("protocol version {} ", PROTOCOL + 1))),
         "{answer:?}"
     );
 

@@ -124,7 +124,9 @@ and refused an altered one.
 A step can declare what it will change and how to undo it. Just before it
 runs, those files, registry values or service states are captured, with their
 hashes. After a failure, nothing is undone until you've seen the plan for
-undoing it and confirmed.
+undoing it and confirmed. An Administrator step's recovery commands run
+through the elevation broker; restoring what it captured needs KeyJutsu run
+as Administrator, because the captures are kept in your profile.
 
 ```powershell
 keyjutsu recover spooler.approved.json

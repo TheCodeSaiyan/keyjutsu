@@ -19,6 +19,18 @@ pub struct ElevatedRun {
 /// which the runner checks against its own copy.
 pub trait ElevatedRunner: Send + Sync {
     fn run_step(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<ElevatedRun, String>;
+
+    /// Run an approved Administrator step's approved recovery commands, and
+    /// nothing else: the commands come from the runner's own copy of the
+    /// snapshot, never from the caller.
+    fn recover_step(
+        &self,
+        _snapshot_hash: &str,
+        step: &str,
+        _step_hash: &str,
+    ) -> Result<ElevatedRun, String> {
+        Err(format!("this runner cannot recover `{step}`"))
+    }
 }
 
 /// Whether this process is elevated (its token is the full Administrator
