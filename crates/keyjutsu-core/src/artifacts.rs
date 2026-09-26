@@ -52,7 +52,17 @@ fn file_name(name: &str) -> String {
         .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '_' })
         .collect();
     let clean = clean.trim_matches('.').to_owned();
-    if clean.is_empty() { "artifact".into() } else { clean }
+    if clean.is_empty() {
+        return "artifact".into();
+    }
+    // Not the record kept beside it, which would overwrite the artifact, and
+    // not a device name (`NUL`, `COM1.zip`), which Windows reads as a device.
+    let stem = clean.split('.').next().unwrap_or_default().to_ascii_uppercase();
+    let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit());
+    if device || clean.eq_ignore_ascii_case("provenance.json") { format!("_{clean}") } else { clean }
 }
 
 pub fn staged_path(store: &Path, sha256: &str, name: &str) -> PathBuf {
@@ -189,4 +199,25 @@ pub fn pin(plan: &Plan, staged: &[StagedArtifact]) -> Plan {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::file_name;
+
+    #[test]
+    fn an_artifact_name_can_neither_climb_out_nor_be_mistaken_for_something_else() {
+        assert_eq!(file_name("tool-1.2.zip"), "tool-1.2.zip");
+        assert_eq!(file_name(r"..\..\evil.exe"), "_.._evil.exe");
+        assert_eq!(file_name("C:x.exe"), "C_x.exe");
+        assert_eq!(file_name("..."), "artifact");
+        // The provenance record beside it, and Windows device names.
+        assert_eq!(file_name("provenance.json"), "_provenance.json");
+        assert_eq!(file_name("PROVENANCE.JSON"), "_PROVENANCE.JSON");
+        assert_eq!(file_name("nul"), "_nul");
+        assert_eq!(file_name("COM1.zip"), "_COM1.zip");
+        assert_eq!(file_name("lpt9.txt"), "_lpt9.txt");
+        assert_eq!(file_name("console.txt"), "console.txt");
+        assert_eq!(file_name("COMMON.zip"), "COMMON.zip");
+    }
 }

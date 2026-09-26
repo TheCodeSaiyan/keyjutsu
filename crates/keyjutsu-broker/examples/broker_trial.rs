@@ -40,6 +40,11 @@ fn key_exists() -> bool {
 
 const PAYLOAD: &[u8] = b"approved payload";
 
+/// A folder any user can write to, where an Administrator step's file is.
+const USER_DIR: &str = r"C:\Users\Public\KeyJutsuTrial";
+/// A folder only Administrators can write to.
+const PROTECTED: &str = r"C:\Program Files\KeyJutsuTrialProtected";
+
 /// A value under the trial's HKLM key, as the unelevated trial reads it.
 fn reg_value(name: &str) -> Option<String> {
     let out = std::process::Command::new("powershell.exe")
@@ -78,6 +83,16 @@ fn plan(value: &str) -> String {
                         Set-ItemProperty -Path '{KEY}' -Name RootOwner -Value (Get-Acl -LiteralPath $d).Owner; \
                         Set-ItemProperty -Path '{KEY}' -Name RootAccess -Value (Get-Acl -LiteralPath $d).AccessToString; \
                         Set-ItemProperty -Path '{KEY}' -Name Captured -Value changed")}]},
+                  {"id": "admin-file", "title": "Change a file the broker captured",
+                   "objective": "Needs Administrator, and is put back from the broker's capture.",
+                   "kind": "command", "shell": {"kind": "windows_powershell"}, "privilege": "administrator",
+                   "reversibility": {"level": "full"},
+                   "recovery": {"strategy": "restore_captured_state",
+                                "capture": [{"kind": "file", "target": format!("{USER_DIR}\\app\\config.txt")}]},
+                   "commands": [{"text": format!(
+                       "New-Item -ItemType Directory -Force -Path '{PROTECTED}' | Out-Null; \
+                        Set-Content -LiteralPath '{PROTECTED}\\config.txt' -Value precious -NoNewline; \
+                        Set-Content -LiteralPath '{USER_DIR}\\app\\config.txt' -Value changed -NoNewline")}]},
                   {"id": "use-artifact", "title": "Record a download under HKLM",
                    "objective": "Needs Administrator and a staged file.",
                    "kind": "command", "shell": {"kind": "windows_powershell"}, "privilege": "administrator",
@@ -196,6 +211,52 @@ fn main() -> ExitCode {
             "FAILED"
         }
     );
+
+    // A file the broker captured, in a folder anyone can write to. Between
+    // the step and the restore, the unelevated side swaps that folder for a
+    // junction into Program Files: the broker, as Administrator, must not
+    // write through it. Then, with the folder put back, it restores as normal.
+    let app = std::path::Path::new(USER_DIR).join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("config.txt"), "original").unwrap();
+    let file_hash = snap.step_hashes()["admin-file"].clone();
+    let file_run = client.run_step(snap.snapshot_hash(), "admin-file", &file_hash);
+    println!("file step: {:?}", file_run.as_ref().map(|r| &r.captured));
+    let moved = std::path::Path::new(USER_DIR).join("app-moved");
+    std::fs::rename(&app, &moved).unwrap();
+    let junction = std::process::Command::new("cmd")
+        .args(["/d", "/c", "mklink", "/J"])
+        .arg(&app)
+        .arg(PROTECTED)
+        .output()
+        .unwrap();
+    println!("junction to {PROTECTED} made by this unelevated account: {}", junction.status.success());
+    let through = client.restore_step(snap.snapshot_hash(), "admin-file", &file_hash);
+    println!("restore through the junction: {through:?}");
+    let protected_after = std::fs::read_to_string(std::path::Path::new(PROTECTED).join("config.txt"));
+    println!("{PROTECTED}\\config.txt after: {protected_after:?}");
+    std::fs::remove_dir(&app).unwrap(); // The junction itself, not its target.
+    std::fs::rename(&moved, &app).unwrap();
+    let back = client.restore_step(snap.snapshot_hash(), "admin-file", &file_hash);
+    println!("restore with the folder put back: {back:?}");
+    let file_after = std::fs::read_to_string(app.join("config.txt"));
+    println!("file after: {file_after:?}");
+    let links_held = file_run.is_ok()
+        && junction.status.success()
+        && through.as_ref().is_ok_and(|c| {
+            !c.is_empty() && c.iter().all(|c| c.passed == Some(false) && c.detail.contains("link or junction"))
+        })
+        && protected_after.as_deref().is_ok_and(|t| t == "precious")
+        && back.as_ref().is_ok_and(|c| !c.is_empty() && c.iter().all(|c| c.passed == Some(true)))
+        && file_after.as_deref().is_ok_and(|t| t == "original");
+    println!(
+        "links: {}",
+        if links_held {
+            "the broker would not write through a junction planted after its capture, and restored once it was gone"
+        } else {
+            "FAILED"
+        }
+    );
     drop(client);
     let exists = key_exists();
     println!("HKLM key after: {exists}");
@@ -258,9 +319,9 @@ fn main() -> ExitCode {
         && removed
         && not_staged_copy
         && tampered.as_ref().is_err_and(|e| e.contains("changed since it was staged"));
-    if first && captures_held && second {
+    if first && captures_held && links_held && second {
         println!(
-            "PASS: the broker ran the approved Administrator steps elevated, refused the altered one, undid one with its approved recovery command, restored another from its own capture after refusing a squatted folder, handed over a checked copy of the artifact from a folder only Administrators could write to, and refused a changed one"
+            "PASS: the broker ran the approved Administrator steps elevated, refused the altered one, undid one with its approved recovery command, restored another from its own capture after refusing a squatted folder, would not restore a file through a planted junction, handed over a checked copy of the artifact from a folder only Administrators could write to, and refused a changed one"
         );
         ExitCode::SUCCESS
     } else {

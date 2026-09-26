@@ -227,8 +227,36 @@ fn tracked(root: &Path, path: &str) -> bool {
     git(root, &["ls-files", "--error-unmatch", "--", path]).is_ok_and(|o| o.success)
 }
 
+/// Whether `before` could have been written by [`record`]. `keyjutsu git
+/// diff` reads it back from a file beside the snapshot, which anything
+/// running as the user can edit: a HEAD of `--output=…` would become a git
+/// option that writes a file, and a hash of `..\..\x` would diff a file
+/// outside the copies. So HEAD and hashes must be hex, and paths must stay
+/// inside the repository.
+pub fn check_recorded(before: &RepoState) -> Result<(), String> {
+    let hex = |s: &str, lens: &[usize]| lens.contains(&s.len()) && s.bytes().all(|b| b.is_ascii_hexdigit());
+    if let Some(head) = &before.head
+        && !hex(head, &[40, 64])
+    {
+        return Err("the recorded HEAD is not a commit id; the record has been edited".into());
+    }
+    for d in &before.dirty {
+        if d.sha256.as_deref().is_some_and(|s| !hex(s, &[64])) {
+            return Err(format!("the recorded hash of {} is not a hash; the record has been edited", d.path));
+        }
+        let escapes = Path::new(&d.path).is_absolute()
+            || d.path.contains(':')
+            || d.path.split(['/', '\\']).any(|part| part == "..");
+        if escapes {
+            return Err(format!("{} is not inside the repository; the record has been edited", d.path));
+        }
+    }
+    Ok(())
+}
+
 /// Compare the repository now with `before`, recorded just before the run.
 pub fn report(before: &RepoState, copies: &Path) -> Result<RepoReport, String> {
+    check_recorded(before)?;
     let root = PathBuf::from(&before.root);
     let after = record(&root, None)?;
     let earlier: BTreeMap<&str, &Dirty> = before.dirty.iter().map(|d| (d.path.as_str(), d)).collect();
@@ -351,6 +379,29 @@ pub fn steps_inside(root: &Path, plan: &keyjutsu_plan::model::Plan) -> Vec<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_edited_git_record_is_refused_before_git_is_asked_anything() {
+        let clean = || RepoState {
+            root: r"C:\repo".into(),
+            branch: None,
+            head: Some("a".repeat(40)),
+            remotes: vec![],
+            dirty: vec![Dirty { path: "src/a.rs".into(), status: " M".into(), sha256: Some("b".repeat(64)) }],
+        };
+        assert_eq!(check_recorded(&clean()), Ok(()));
+        let mut option = clean();
+        option.head = Some(r"--output=C:\Users\Public\x".into());
+        assert!(check_recorded(&option).is_err(), "a HEAD that git would read as an option");
+        let mut hash = clean();
+        hash.dirty[0].sha256 = Some(r"..\..\..\secret.txt".into());
+        assert!(check_recorded(&hash).is_err(), "a hash that climbs out of the copies");
+        for path in [r"..\outside.txt", r"C:\Windows\win.ini", "a/../../b", "C:x"] {
+            let mut p = clean();
+            p.dirty[0].path = path.into();
+            assert!(check_recorded(&p).is_err(), "{path}");
+        }
+    }
 
     /// On a CI runner %TEMP% is a short name (`C:\Users\RUNNER~1\...`) while
     /// a shell reports the long one; the text differs, the folder doesn't.

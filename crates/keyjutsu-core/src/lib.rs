@@ -12,6 +12,7 @@ pub mod demo;
 pub mod diagnostics;
 pub mod dpapi;
 pub mod elevation;
+pub mod exact_file;
 pub mod execute;
 pub mod fingerprint;
 pub mod git;

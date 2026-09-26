@@ -194,7 +194,7 @@ waiting, and asks before it crosses the boundary, as the CLI does.
 
 ## Checked against its own rules
 
-The eight release gates are named lists of tests, 90 in all,
+The eight release gates are named lists of tests, 98 in all,
 run by `pnpm release:gates`, in CI, and on the tagged commit before a release
 is published; a renamed or deleted test fails its gate. Untrusted inputs are fuzzed as part of the ordinary suite: plans,
 snapshots, broker requests and terminal output. Fuzzing the terminal scanner

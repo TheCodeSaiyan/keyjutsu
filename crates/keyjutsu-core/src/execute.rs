@@ -790,6 +790,18 @@ pub fn preflight(snapshot: &ApprovedSnapshot) -> Result<(), String> {
             "the plan uses more than one shell; a performance runs in one terminal (deviation D19)".into()
         );
     }
+    // KeyJutsu types the line into a working directory itself, so it is
+    // checked here too, not only by validation.
+    for step in &snapshot.plan().steps {
+        let cmd = step.shell.as_ref().is_some_and(|s| s.kind == ShellName::Cmd);
+        if let Some(why) = step
+            .working_directory
+            .as_deref()
+            .and_then(|d| keyjutsu_validation::paths::working_directory_problem(d, cmd))
+        {
+            return Err(format!("step `{}`: {why}", step.id));
+        }
+    }
     for step in snapshot.plan().steps.iter().filter(|s| s.kind == StepKind::Credential) {
         if step.credential.is_none() {
             return Err(format!("credential step `{}` does not say what it asks for", step.id));
