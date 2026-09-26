@@ -35,6 +35,8 @@ export type { TechniqueDraft } from "./generated/TechniqueDraft";
 export type { TerminalMessage } from "./generated/TerminalMessage";
 export type { TerminalProfile } from "./generated/TerminalProfile";
 export type { TerminalSize } from "./generated/TerminalSize";
+export type { WaitingOpened } from "./generated/WaitingOpened";
+export type { WaitingRun } from "./generated/WaitingRun";
 export type { WindowsInfo } from "./generated/WindowsInfo";
 export type * as agent from "./agent";
 export type * as artifacts from "./artifacts";

@@ -131,7 +131,13 @@ Then: keyjutsu run fix.approved.json --resume
 KeyJutsu doesn't restart your machine, and doesn't start itself after you
 sign in: restarting someone's computer is about as disruptive as a tool gets, and resuming by itself would run the next phase before anyone looked.
 
-When you resume, it asks for `RESUME` typed out, then checks, in this order:
+In the desktop app, the run panel says what to do instead. After a Windows
+restart or a sign-out, open KeyJutsu: a banner names the plan that's waiting,
+with **Continue it**. That opens the plan as it was approved; open a terminal
+and arm it as before. After a new shell or a WSL or Docker restart, the app
+is still open, so arm the plan again once the boundary has happened.
+
+Resuming checks, in this order:
 
 1. **The boundary really happened.** It recorded what should change: the boot
    time, the logon id, the shell's process, WSL's boot id. Resuming before the
@@ -143,9 +149,14 @@ When you resume, it asks for `RESUME` typed out, then checks, in this order:
    completed step runs again, and nothing is assumed to have survived the
    restart.
 
-This has been done across a real Windows restart. A
-sign-out has only been tested with its identity faked, and the desktop app
-stops at a boundary but can't resume past one yet; resume from the CLI.
+Then you're asked, with `RESUME` typed out. The CLI asks before the checks,
+on the plain console. The app asks after them, and shows what they found:
+whether it saw the boundary happen, anything about the machine that changed,
+and each earlier check that still holds. A failed check stops the run before
+you're asked. "Not now" stops it too, still waiting, so you can come back.
+
+This has been done across a real Windows restart, from the CLI and from the
+app. A sign-out has only been tested with its identity faked.
 
 ## It wouldn't start at all
 

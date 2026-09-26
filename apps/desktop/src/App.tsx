@@ -20,6 +20,7 @@ import type {
   TerminalMessage,
   TerminalProfile,
   TerminalSize,
+  WaitingRun,
 } from "@keyjutsu/types";
 import { INPUT_OWNED, ipc } from "./ipc";
 import { TerminalView, type TerminalHandle } from "./components/TerminalView";
@@ -30,9 +31,10 @@ import { NewTask } from "./components/NewTask";
 import { PlanWorkspace } from "./components/PlanWorkspace";
 import { CriticalDialog } from "./components/CriticalDialog";
 import { RunPanel } from "./components/RunPanel";
+import { ResumeDialog } from "./components/ResumeDialog";
 import { HistoryView } from "./components/HistoryView";
 import { TechniquesView } from "./components/TechniquesView";
-import { confirmationFor } from "./plan";
+import { boundaryName, confirmationFor } from "./plan";
 import mark from "./assets/mark.png";
 
 const SHELL_NAMES: Record<ShellKind, string> = {
@@ -97,6 +99,10 @@ export function App() {
   const [ws, setWs] = useState<workspace.WorkspaceView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [sealed, setSealed] = useState<Sealed | null>(null);
+  // A run stopped at a restart or other boundary, and what was checked
+  // before crossing it.
+  const [waiting, setWaiting] = useState<WaitingRun | null>(null);
+  const [resumeNotice, setResumeNotice] = useState<execute.BoundaryNotice | null>(null);
   const [running, setRunning] = useState(false);
   const [runDone, setRunDone] = useState<Extract<RunMessage, { kind: "done" }> | null>(null);
   const [critical, setCritical] = useState<{
@@ -144,6 +150,16 @@ export function App() {
       .agents()
       .then(setAgents)
       .catch(() => setAgents([]));
+    // After a restart, a plan may be waiting on this side of it. That is
+    // not a first run, whatever the first-run marker says: go straight to
+    // the offer to continue it.
+    ipc
+      .waitingRun()
+      .then((w) => {
+        setWaiting(w);
+        if (w) setView("workspace");
+      })
+      .catch(() => setWaiting(null));
     ipc
       .workspace()
       .then((w) => {
@@ -331,9 +347,13 @@ export function App() {
       case "confirm":
         setCritical({ confirmation: m.confirmation, purpose: "run", rest: [], typed: {} });
         break;
+      case "resume":
+        setResumeNotice(m.notice);
+        break;
       case "done":
         setRunning(false);
         setRunDone(m);
+        setWaiting(null);
         break;
       case "execution":
         // An Administrator step ran in the elevation broker's shell: show
@@ -532,6 +552,32 @@ export function App() {
           <p role="alert" className="banner error">
             {error}
           </p>
+        )}
+        {waiting && !fullTerminal && (
+          <div className="banner waiting" role="status">
+            <p>
+              <strong>{waiting.title}</strong> is waiting to continue. Phase{" "}
+              <code>{waiting.after_phase}</code> finished before a {boundaryName(waiting.boundary)}.
+            </p>
+            <button
+              className="primary"
+              disabled={busy !== null}
+              onClick={() =>
+                void ipc
+                  .openWaiting()
+                  .then((o) => {
+                    setWs(o.view);
+                    setSealed(o.sealed);
+                    setRunDone(null);
+                    setWaiting(null);
+                    setSpace("plan");
+                  })
+                  .catch((e) => setError(String(e)))
+              }
+            >
+              Continue it
+            </button>
+          </div>
         )}
         {space === "task" && !fullTerminal && (
           <NewTask
@@ -791,6 +837,20 @@ export function App() {
         </div>
       </main>
       {dialog}
+      {resumeNotice && (
+        <ResumeDialog
+          notice={resumeNotice}
+          onConfirm={(typed) => {
+            setResumeNotice(null);
+            void ipc.confirm(typed);
+            term.current?.focus();
+          }}
+          onCancel={() => {
+            setResumeNotice(null);
+            void ipc.confirm(null);
+          }}
+        />
+      )}
     </div>
   );
 }

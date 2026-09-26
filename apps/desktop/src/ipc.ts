@@ -18,6 +18,8 @@ import type {
   TerminalProfile,
   TerminalSize,
   TechniqueDraft,
+  WaitingOpened,
+  WaitingRun,
 } from "@keyjutsu/types";
 
 /**
@@ -94,6 +96,10 @@ export const ipc = {
   },
   /** What the operator typed for a critical step, or null to decline. Rust compares it. */
   confirm: (typed: string | null) => invoke<void>("plan_confirm", { typed }),
+  /** A run stopped at a restart or other boundary, waiting to continue. */
+  waitingRun: () => invoke<WaitingRun | null>("run_waiting"),
+  /** Open it to continue: the next run resumes, and asks before crossing. */
+  openWaiting: () => invoke<WaitingOpened>("run_waiting_open"),
   recoveryPlan: () => invoke<recovery.RecoveryItem[]>("recovery_plan"),
   recover: (id: number) => invoke<recovery.RecoveryResult[]>("recovery_run", { id }),
 };

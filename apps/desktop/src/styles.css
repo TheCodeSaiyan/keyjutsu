@@ -540,6 +540,18 @@ button.arm {
   background: var(--surface-2);
 }
 
+/* A plan waiting on the far side of a restart: the offer to continue it. */
+.banner.waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  justify-content: space-between;
+}
+
+.banner.waiting p {
+  margin: 0;
+}
+
 .banner.error {
   border-left-color: var(--kj-error);
   color: var(--text);

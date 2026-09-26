@@ -158,6 +158,42 @@ export function idFor(title: string, taken: string[]): string {
 }
 
 /** The outcome of a run, in a sentence. */
+/** A session boundary as a person would say it. */
+export function boundaryName(b: plan.Boundary): string {
+  switch (b) {
+    case "windows_restart":
+      return "Windows restart";
+    case "sign_out":
+      return "sign-out and sign-in";
+    case "shell_restart":
+      return "shell restart";
+    case "wsl_restart":
+      return "WSL restart";
+    case "docker_restart":
+      return "Docker restart";
+  }
+}
+
+/**
+ * What to do at a boundary to continue the plan. A restart or sign-out
+ * closes the app, which offers to continue when it is opened again; the
+ * others happen while it stays open.
+ */
+export function boundaryStep(b: plan.Boundary): string {
+  switch (b) {
+    case "windows_restart":
+      return "Restart Windows, then open KeyJutsu: it offers to continue the plan.";
+    case "sign_out":
+      return "Sign out of Windows and back in, then open KeyJutsu: it offers to continue the plan.";
+    case "shell_restart":
+      return "Open a new terminal, then arm the plan again to continue it.";
+    case "wsl_restart":
+      return "Restart WSL (wsl --shutdown), then arm the plan again to continue it.";
+    case "docker_restart":
+      return "Restart Docker, then arm the plan again to continue it.";
+  }
+}
+
 export function outcomeLine(o: { kind: string } & Record<string, unknown>): string {
   switch (o.kind) {
     case "complete":
@@ -171,7 +207,7 @@ export function outcomeLine(o: { kind: string } & Record<string, unknown>): stri
     case "blocked":
       return `Stopped: ${String(o.reason)}.`;
     case "boundary":
-      return `Phase ${String(o.phase)} is done. The plan waits for a ${String(o.boundary).replace(/_/g, " ")}; resume it afterwards with keyjutsu run --resume.`;
+      return `Phase ${String(o.phase)} is done. The plan waits for a ${boundaryName(o.boundary as plan.Boundary)}.`;
     default:
       return "Finished.";
   }

@@ -668,12 +668,15 @@ fn detail(step: &Step) -> String {
 /// Where a snapshot and its runs are kept: `%LOCALAPPDATA%\KeyJutsu\runs`,
 /// one folder per snapshot, named for the plan and the snapshot's hash.
 pub fn run_folder(snapshot: &ApprovedSnapshot) -> std::path::PathBuf {
-    let base =
-        std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
     let hash = snapshot.snapshot_hash();
-    base.join("KeyJutsu").join("runs").join(format!(
-        "{}-{}",
-        snapshot.plan().plan_id,
-        &hash[..hash.len().min(12)]
-    ))
+    runs_root().join(format!("{}-{}", snapshot.plan().plan_id, &hash[..hash.len().min(12)]))
+}
+
+/// Where the desktop app keeps the plans it approved, one folder each.
+pub fn runs_root() -> std::path::PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("KeyJutsu")
+        .join("runs")
 }

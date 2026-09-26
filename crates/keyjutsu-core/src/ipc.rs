@@ -55,6 +55,12 @@ pub enum RunMessage {
     Confirm {
         confirmation: crate::execute::CriticalConfirmation,
     },
+    /// Resuming after a session boundary: what KeyJutsu checked. The window
+    /// asks the operator and answers with `plan_confirm`, `RESUME` to go on.
+    /// Nothing more runs until it does.
+    Resume {
+        notice: crate::boundary::BoundaryNotice,
+    },
     Done {
         outcome: crate::execute::Outcome,
         snapshot: String,
@@ -75,6 +81,24 @@ pub struct Sealed {
     /// Where it was written, so the CLI can run or recover it too.
     pub path: String,
     pub sealed_at: String,
+}
+
+/// A run that stopped at a session boundary and has not crossed it yet.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct WaitingRun {
+    pub title: String,
+    pub after_phase: String,
+    pub boundary: keyjutsu_plan::model::Boundary,
+    pub recorded_at: String,
+}
+
+/// A waiting run, opened to continue: the plan to show, and its snapshot.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct WaitingOpened {
+    pub view: crate::workspace::WorkspaceView,
+    pub sealed: Sealed,
 }
 
 /// A Technique made into a draft plan in the workspace, and how this machine

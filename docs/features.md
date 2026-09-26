@@ -185,8 +185,8 @@ panel has **Preview bundle** and then **Save bundle**, and the CLI has
 
 The desktop app (New task, Plan and Terminal) and the `keyjutsu` CLI drive
 the same Rust core, so there's one implementation of what may reach a shell.
-The desktop stops at a restart boundary without resuming past it; the CLI
-can resume there.
+After a restart, the desktop app offers to continue the plan that was
+waiting, and asks before it crosses the boundary, as the CLI does.
 
 ## Checked against its own rules
 

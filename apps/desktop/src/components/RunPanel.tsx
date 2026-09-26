@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { agent, recovery, RunMessage } from "@keyjutsu/types";
-import { outcomeLine } from "../plan";
+import { boundaryStep, outcomeLine } from "../plan";
 
 type Done = Extract<RunMessage, { kind: "done" }>;
 
@@ -30,11 +30,19 @@ export function RunPanel({ done, busy, agents, onReview, onRecover, onFix, onBac
   const [results, setResults] = useState<recovery.RecoveryResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const complete = done.outcome.kind === "complete";
+  const boundary = done.outcome.kind === "boundary" ? done.outcome : null;
 
   return (
     <section className="run-panel" aria-label="Run">
-      <h2>{complete ? "Complete" : "Stopped"}</h2>
+      <h2>{complete ? "Complete" : boundary ? "Waiting" : "Stopped"}</h2>
       <p role="status">{outcomeLine(done.outcome)}</p>
+      {boundary && (
+        <p className="small">
+          {boundaryStep(boundary.boundary)} Before anything more runs, KeyJutsu checks that it
+          happened, compares this machine with the one the plan was approved on, checks again what
+          the earlier phases achieved, and asks you.
+        </p>
+      )}
       <p className="muted small">
         Checkpoint: <code>{done.checkpoint}</code>
       </p>
@@ -72,7 +80,7 @@ export function RunPanel({ done, busy, agents, onReview, onRecover, onFix, onBac
           <pre className="code">{failed.output.trim()}</pre>
         </details>
       )}
-      {!complete && !items && (
+      {!complete && !boundary && !items && (
         <>
           <p className="small">Nothing has been rolled back. Your choices:</p>
           <ul className="small plain">
