@@ -30,7 +30,12 @@ fn snapshot() -> &'static ApprovedSnapshot {
                 "steps": [
                     {"id": "admin", "title": "Admin", "objective": "Needs Administrator.", "kind": "command",
                      "shell": {"kind": "pwsh"}, "privilege": "administrator",
+                     "reversibility": {"level": "full"},
+                     "recovery": {"strategy": "commands", "commands": [{"text": "Get-Date"}]},
                      "commands": [{"text": "Get-Service -Name Winmgmt"}]},
+                    {"id": "admin-final", "title": "Admin, no way back", "objective": "Needs Administrator.",
+                     "kind": "command", "shell": {"kind": "pwsh"}, "privilege": "administrator",
+                     "commands": [{"text": "Get-Service -Name Spooler"}]},
                     {"id": "plain", "title": "Plain", "objective": "Does not.", "kind": "command",
                      "shell": {"kind": "pwsh"}, "commands": [{"text": "Get-Date"}]}
                 ]
@@ -56,6 +61,7 @@ fn message() -> impl Strategy<Value = Vec<u8>> {
     let hash = snap.snapshot_hash().to_owned();
     let admin = snap.step_hashes()["admin"].clone();
     let plain = snap.step_hashes()["plain"].clone();
+    let final_ = snap.step_hashes()["admin-final"].clone();
     let good_hello = to_bytes(&Request::Hello { protocol: PROTOCOL, secret: SECRET.into() });
     let good_run = to_bytes(&Request::RunStep {
         snapshot_hash: hash.clone(),
@@ -84,6 +90,30 @@ fn message() -> impl Strategy<Value = Vec<u8>> {
             step: "nope".into(),
             step_hash: admin.clone(),
         }),
+        // Recovery: only the approved admin step's approved commands.
+        to_bytes(&Request::RecoverStep {
+            snapshot_hash: hash.clone(),
+            step: "admin".into(),
+            step_hash: admin.clone(),
+        }),
+        to_bytes(&Request::RecoverStep {
+            snapshot_hash: hash.clone(),
+            step: "admin".into(),
+            step_hash: final_.clone(),
+        }),
+        to_bytes(&Request::RecoverStep {
+            snapshot_hash: hash.clone(),
+            step: "admin-final".into(),
+            step_hash: final_,
+        }),
+        to_bytes(&Request::RecoverStep {
+            snapshot_hash: hash.clone(),
+            step: "plain".into(),
+            step_hash: snap.step_hashes()["plain"].clone(),
+        }),
+        serde_json::to_vec(&json!({"kind": "recover_step", "snapshot_hash": hash, "step": "admin",
+                                   "step_hash": admin, "commands": ["Stop-Computer"]}))
+        .unwrap(),
         to_bytes(&Request::Goodbye),
         // Smuggling a command alongside a real request.
         serde_json::to_vec(&json!({"kind": "run_step", "snapshot_hash": hash, "step": "admin",
@@ -123,8 +153,8 @@ proptest! {
         let mut broker = Broker::new(
             snap.clone(),
             SECRET.into(),
-            Box::new(move |_, step| {
-                seen.lock().unwrap().push(step.id.clone());
+            Box::new(move |_, step, work| {
+                seen.lock().unwrap().push(format!("{}:{work:?}", step.id));
                 Ok(ElevatedRun { outcomes: Vec::new(), output: String::new() })
             }),
         );
@@ -142,18 +172,26 @@ proptest! {
             let did_run = ran.lock().unwrap().len() > before;
             if did_run {
                 prop_assert!(authenticated, "ran for a client that never proved the secret");
-                let Some(Request::RunStep { snapshot_hash, step, step_hash }) = parsed else {
-                    return Err(TestCaseError::fail("ran for something that was not a RunStep"));
+                let (snapshot_hash, step, step_hash, want) = match parsed {
+                    Some(Request::RunStep { snapshot_hash, step, step_hash }) => {
+                        (snapshot_hash, step, step_hash, "admin:Step")
+                    }
+                    Some(Request::RecoverStep { snapshot_hash, step, step_hash }) => {
+                        (snapshot_hash, step, step_hash, "admin:Recovery")
+                    }
+                    _ => return Err(TestCaseError::fail("ran for something that was not a step or its recovery")),
                 };
                 prop_assert_eq!(snapshot_hash.as_str(), snap.snapshot_hash());
                 prop_assert_eq!(step.as_str(), "admin");
                 prop_assert_eq!(&step_hash, &snap.step_hashes()["admin"]);
+                let last = ran.lock().unwrap().last().cloned();
+                prop_assert_eq!(last.as_deref(), Some(want));
                 prop_assert!(matches!(response, Response::StepDone { .. }), "{:?}", response);
             } else {
                 prop_assert!(!matches!(response, Response::StepDone { .. }), "{:?}", response);
             }
         }
-        prop_assert!(ran.lock().unwrap().iter().all(|s| s == "admin"));
+        prop_assert!(ran.lock().unwrap().iter().all(|s| s == "admin:Step" || s == "admin:Recovery"));
     }
 
     /// A frame's length prefix is untrusted: however large it claims to be,
@@ -187,7 +225,7 @@ fn the_genuine_sequence_runs_the_approved_step() {
     let mut broker = Broker::new(
         snap.clone(),
         SECRET.into(),
-        Box::new(move |_, _| {
+        Box::new(move |_, _, _| {
             *count.lock().unwrap() += 1;
             Ok(ElevatedRun { outcomes: Vec::new(), output: String::new() })
         }),

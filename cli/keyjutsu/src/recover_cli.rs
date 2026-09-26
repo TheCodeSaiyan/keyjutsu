@@ -10,6 +10,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
 use keyjutsu_core::SessionOptions;
+use keyjutsu_core::elevation::ElevatedRunner;
 use keyjutsu_core::execute::Driver;
 use keyjutsu_core::execution::PerformanceConfig;
 use keyjutsu_core::plan::ApprovedSnapshot;
@@ -114,6 +115,31 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
     }
 
     let dir = recovery_dir(&cp_path);
+    // An Administrator step's recovery commands run in the elevation broker,
+    // started now, with one UAC prompt, and never typed into this console.
+    let broker = if keyjutsu_core::recovery::needs_broker(&snapshot, &items) {
+        let Some(exe) = keyjutsu_broker::broker_path() else {
+            eprintln!(
+                "keyjutsu: recovering an Administrator step needs keyjutsu-broker.exe, which is not installed next to KeyJutsu. Nothing was changed."
+            );
+            return ExitCode::FAILURE;
+        };
+        println!("Recovering an Administrator step. Windows will ask once, now, to start KeyJutsu's broker.");
+        match keyjutsu_broker::launch(
+            &exe,
+            args.snapshot,
+            snapshot.snapshot_hash(),
+            &keyjutsu_core::artifacts::default_store(),
+        ) {
+            Ok(b) => Some(Arc::new(b)),
+            Err(e) => {
+                eprintln!("keyjutsu: the elevation broker did not start: {e}. Nothing was changed.");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
     let needs_terminal = items.iter().any(|i| matches!(i, RecoveryItem::Commands { .. }));
     let results = if needs_terminal {
         let mut options = SessionOptions::new(ShellKind::Pwsh);
@@ -122,9 +148,20 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
         }
         let out: Arc<Mutex<Vec<RecoveryResult>>> = Arc::new(Mutex::new(Vec::new()));
         let (snap, cp, found, done) = (snapshot.clone(), checkpoint.clone(), items.clone(), out.clone());
+        let elevated = broker.clone();
         let controller: console::Controller = Box::new(move |session, events| {
             let driver = Driver { session: &session, events: &events };
-            let r = recover(Some(&driver), &snap, &cp, &dir, &found, &PerformanceConfig::default(), &|_| {});
+            let runner = elevated.as_deref().map(|b| b as &dyn ElevatedRunner);
+            let r = recover(
+                Some(&driver),
+                runner,
+                &snap,
+                &cp,
+                &dir,
+                &found,
+                &PerformanceConfig::default(),
+                &|_| {},
+            );
             if let Ok(mut d) = done.lock() {
                 *d = r;
             }
@@ -137,7 +174,7 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
         }
         out.lock().map(|r| r.clone()).unwrap_or_default()
     } else {
-        recover(None, &snapshot, &checkpoint, &dir, &items, &PerformanceConfig::default(), &|_| {})
+        recover(None, None, &snapshot, &checkpoint, &dir, &items, &PerformanceConfig::default(), &|_| {})
     };
     println!();
     if print_results(&results) {

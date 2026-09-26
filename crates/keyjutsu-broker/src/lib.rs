@@ -21,10 +21,11 @@ use std::time::Duration;
 
 use keyjutsu_core::elevation::{ElevatedRun, ElevatedRunner};
 use keyjutsu_core::execute::{ForwardingSink, Performed, hand_artifacts, perform, staged_for};
+use keyjutsu_core::execution::StagedScript;
 use keyjutsu_core::execution::{ExecutionMode, PerformanceConfig, StepOutcome};
 use keyjutsu_core::headless::Collector;
 use keyjutsu_core::plan::ApprovedSnapshot;
-use keyjutsu_core::plan::model::{Privilege, ShellName, Step, ValidationDisplay};
+use keyjutsu_core::plan::model::{Privilege, RecoveryStrategy, ShellName, Step, ValidationDisplay};
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 use keyjutsu_core::{Session, SessionOptions};
 use serde::{Deserialize, Serialize};
@@ -34,16 +35,30 @@ pub mod pipe;
 #[cfg(windows)]
 pub mod protected;
 
-/// Both ends must speak exactly this version.
-pub const PROTOCOL: u32 = 1;
+/// Both ends must speak exactly this version. 2 added `RecoverStep`.
+pub const PROTOCOL: u32 = 2;
 /// No message is larger than this.
 const MAX_FRAME: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Request {
-    Hello { protocol: u32, secret: String },
-    RunStep { snapshot_hash: String, step: String, step_hash: String },
+    Hello {
+        protocol: u32,
+        secret: String,
+    },
+    RunStep {
+        snapshot_hash: String,
+        step: String,
+        step_hash: String,
+    },
+    /// Run approved step X's approved recovery commands. Like `RunStep`, it
+    /// names the step and carries no command.
+    RecoverStep {
+        snapshot_hash: String,
+        step: String,
+        step_hash: String,
+    },
     Goodbye,
 }
 
@@ -89,7 +104,16 @@ fn same_secret(a: &str, b: &str) -> bool {
 }
 
 /// Runs a step, elevated in the real broker, plainly in tests.
-pub type StepRunner = Box<dyn FnMut(&ApprovedSnapshot, &Step) -> Result<ElevatedRun, String> + Send>;
+/// What the broker is asked to do with an approved step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Work {
+    /// Run its commands.
+    Step,
+    /// Run its approved recovery commands.
+    Recovery,
+}
+
+pub type StepRunner = Box<dyn FnMut(&ApprovedSnapshot, &Step, Work) -> Result<ElevatedRun, String> + Send>;
 
 pub struct Broker {
     snapshot: ApprovedSnapshot,
@@ -135,33 +159,59 @@ impl Broker {
                 }
             }
             Request::Goodbye => Response::Bye,
-            Request::RunStep { .. } if !self.authenticated => refuse("not authenticated".into()),
+            Request::RunStep { .. } | Request::RecoverStep { .. } if !self.authenticated => {
+                refuse("not authenticated".into())
+            }
             Request::RunStep { snapshot_hash, step, step_hash } => {
-                if snapshot_hash != self.snapshot.snapshot_hash() {
-                    return refuse(format!(
-                        "unknown plan {snapshot_hash}: this broker was started for {}",
-                        self.snapshot.snapshot_hash()
-                    ));
-                }
-                let Some(s) = self.snapshot.plan().step(&step).cloned() else {
-                    return refuse(format!("there is no step `{step}` in the approved plan"));
-                };
-                if s.privilege != Some(Privilege::Administrator) {
-                    return refuse(format!(
-                        "step `{step}` does not need Administrator, and the broker runs only steps that do"
-                    ));
-                }
-                let approved = self.snapshot.step_hashes().get(&step).cloned().unwrap_or_default();
-                if step_hash != approved {
-                    return refuse(format!(
-                        "step `{step}` is not the approved version: its hash differs, so its command or what it depends on was altered"
-                    ));
-                }
-                match (self.run)(&self.snapshot, &s) {
-                    Ok(run) => Response::StepDone { outcomes: run.outcomes, output: run.output },
-                    Err(e) => refuse(format!("step `{step}` could not be run: {e}")),
+                match self.approved(&snapshot_hash, &step, &step_hash) {
+                    Ok(s) => self.work(&s, Work::Step),
+                    Err(reason) => refuse(reason),
                 }
             }
+            Request::RecoverStep { snapshot_hash, step, step_hash } => {
+                let s = match self.approved(&snapshot_hash, &step, &step_hash) {
+                    Ok(s) => s,
+                    Err(reason) => return refuse(reason),
+                };
+                let commands = s.recovery.as_ref().filter(|r| r.strategy == RecoveryStrategy::Commands);
+                if commands.is_none_or(|r| r.commands.is_empty()) {
+                    return refuse(format!("step `{step}` has no approved recovery commands"));
+                }
+                self.work(&s, Work::Recovery)
+            }
+        }
+    }
+
+    /// The approved Administrator step `step`, if the request names it
+    /// exactly as it was approved.
+    fn approved(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<Step, String> {
+        if snapshot_hash != self.snapshot.snapshot_hash() {
+            return Err(format!(
+                "unknown plan {snapshot_hash}: this broker was started for {}",
+                self.snapshot.snapshot_hash()
+            ));
+        }
+        let Some(s) = self.snapshot.plan().step(step).cloned() else {
+            return Err(format!("there is no step `{step}` in the approved plan"));
+        };
+        if s.privilege != Some(Privilege::Administrator) {
+            return Err(format!(
+                "step `{step}` does not need Administrator, and the broker runs only steps that do"
+            ));
+        }
+        let approved = self.snapshot.step_hashes().get(step).cloned().unwrap_or_default();
+        if step_hash != approved {
+            return Err(format!(
+                "step `{step}` is not the approved version: its hash differs, so its command or what it depends on was altered"
+            ));
+        }
+        Ok(s)
+    }
+
+    fn work(&mut self, s: &Step, work: Work) -> Response {
+        match (self.run)(&self.snapshot, s, work) {
+            Ok(run) => Response::StepDone { outcomes: run.outcomes, output: run.output },
+            Err(e) => Response::Refused { reason: format!("step `{}` could not be run: {e}", s.id) },
         }
     }
 }
@@ -202,21 +252,61 @@ pub fn run_step(
     step: &Step,
     artifacts: Option<&Path>,
 ) -> Result<ElevatedRun, String> {
+    let show = snapshot.plan().execution_preferences.as_ref().and_then(|p| p.show_validation)
+        != Some(ValidationDisplay::None);
+    let mut script = staged_for(step, show);
+    if step.artifacts.is_empty() {
+        return run_script(step, script);
+    }
     #[cfg(windows)]
-    let handed = if step.artifacts.is_empty() {
-        None
-    } else {
+    {
         let store =
             artifacts.ok_or("this step has artifacts, and the broker was not told where they are staged")?;
         let dir = protected::ProtectedDir::create()?;
-        let line = hand_over(step, store, dir.path())?;
-        Some((dir, line))
-    };
+        if let Some(line) = hand_over(step, store, dir.path())? {
+            hand_artifacts(&mut script, step, line);
+        }
+        // `dir` lives until the step is done, then is removed.
+        run_script(step, script)
+    }
     #[cfg(not(windows))]
-    let handed: Option<((), Option<String>)> = {
-        let _ = artifacts;
-        if step.artifacts.is_empty() { None } else { return Err("artifacts need Windows".into()) }
+    {
+        let _ = (artifacts, script);
+        Err("artifacts need Windows".into())
+    }
+}
+
+/// Run an approved step's approved recovery commands, elevated, directly.
+pub fn run_recovery(step: &Step) -> Result<ElevatedRun, String> {
+    let commands: Vec<String> =
+        step.recovery.iter().flat_map(|r| r.commands.iter().map(|c| c.text.clone())).collect();
+    let script = StagedScript {
+        steps: commands
+            .into_iter()
+            .enumerate()
+            .map(|(i, command)| keyjutsu_core::execution::StagedStep {
+                id: format!("{}#r{i}", step.id),
+                title: format!("Recover {}", step.id),
+                command,
+                mode: Some(ExecutionMode::Direct),
+                submit: None,
+                answers: None,
+            })
+            .collect(),
     };
+    run_script(step, script)
+}
+
+/// The broker's runner: a step's commands, or its recovery commands.
+pub fn runner(artifacts: Option<std::path::PathBuf>) -> StepRunner {
+    Box::new(move |snapshot, step, work| match work {
+        Work::Step => run_step(snapshot, step, artifacts.as_deref()),
+        Work::Recovery => run_recovery(step),
+    })
+}
+
+/// A script in a fresh shell of the step's kind, directly.
+fn run_script(step: &Step, script: StagedScript) -> Result<ElevatedRun, String> {
     let kind = match step.shell.as_ref().map(|s| s.kind) {
         Some(ShellName::WindowsPowershell) => ShellKind::WindowsPowershell,
         Some(ShellName::Cmd) => ShellKind::Cmd,
@@ -233,15 +323,9 @@ pub fn run_step(
         session.close();
         return Err("the elevated shell never showed a prompt".into());
     }
-    let show = snapshot.plan().execution_preferences.as_ref().and_then(|p| p.show_validation)
-        != Some(ValidationDisplay::None);
     let before = out.plain_output().len();
     let config = PerformanceConfig { mode: ExecutionMode::Direct, ..PerformanceConfig::default() };
     let driver = keyjutsu_core::execute::Driver { session: &session, events: &events };
-    let mut script = staged_for(step, show);
-    if let Some((_, Some(line))) = &handed {
-        hand_artifacts(&mut script, step, line.clone());
-    }
     let performed = perform(&driver, script, config);
     let _ = session.wait_for_prompt(Duration::from_secs(10));
     let text = out.plain_output();
@@ -340,17 +424,31 @@ impl BrokerClient {
     }
 }
 
-impl ElevatedRunner for BrokerClient {
-    fn run_step(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<ElevatedRun, String> {
-        match self.ask(&Request::RunStep {
-            snapshot_hash: snapshot_hash.to_owned(),
-            step: step.to_owned(),
-            step_hash: step_hash.to_owned(),
-        })? {
+impl BrokerClient {
+    fn done(&self, request: &Request) -> Result<ElevatedRun, String> {
+        match self.ask(request)? {
             Response::StepDone { outcomes, output } => Ok(ElevatedRun { outcomes, output }),
             Response::Refused { reason } => Err(reason),
             other => Err(format!("unexpected answer: {other:?}")),
         }
+    }
+}
+
+impl ElevatedRunner for BrokerClient {
+    fn run_step(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<ElevatedRun, String> {
+        self.done(&Request::RunStep {
+            snapshot_hash: snapshot_hash.to_owned(),
+            step: step.to_owned(),
+            step_hash: step_hash.to_owned(),
+        })
+    }
+
+    fn recover_step(&self, snapshot_hash: &str, step: &str, step_hash: &str) -> Result<ElevatedRun, String> {
+        self.done(&Request::RecoverStep {
+            snapshot_hash: snapshot_hash.to_owned(),
+            step: step.to_owned(),
+            step_hash: step_hash.to_owned(),
+        })
     }
 }
 

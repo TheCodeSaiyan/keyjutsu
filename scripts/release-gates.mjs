@@ -100,6 +100,7 @@ const gates = {
     "a_failed_run_is_recovered_only_when_the_operator_confirms",
     "a_backup_changed_since_it_was_taken_is_not_used",
     "a_step_whose_recovery_cannot_be_prepared_does_not_run",
+    "an_administrator_step_is_recovered_through_the_broker_and_never_from_the_profile",
   ],
   "Credential boundary": [
     "a_line_that_asks_the_operator_waits_for_enter_and_is_never_performed",

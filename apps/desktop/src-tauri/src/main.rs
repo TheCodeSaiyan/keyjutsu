@@ -846,14 +846,30 @@ async fn recovery_run(
     plans: State<'_, Arc<Plans>>,
 ) -> Result<Vec<RecoveryResult>, String> {
     let (snapshot, checkpoint, path) = last_run(&plans)?;
+    let snapshot_file = locked(&plans.sealed).clone().map(|(_, p)| p).ok_or("no plan has run")?;
     let (session, sink) = sessions.get(id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let items = plan_recovery(&snapshot, &checkpoint, &[])?;
+        // An Administrator step's recovery commands run in the elevation
+        // broker, started now with one UAC prompt, never in this terminal.
+        let broker = if keyjutsu_core::recovery::needs_broker(&snapshot, &items) {
+            let exe = keyjutsu_broker::broker_path()
+                .ok_or("keyjutsu-broker.exe is not installed next to KeyJutsu")?;
+            Some(keyjutsu_broker::launch(
+                &exe,
+                &snapshot_file,
+                snapshot.snapshot_hash(),
+                &keyjutsu_core::artifacts::default_store(),
+            )?)
+        } else {
+            None
+        };
         let (tx, rx) = channel();
         *locked(&sink.forward) = Some(tx);
         let driver = Driver { session: &session, events: &rx };
         let results = recover(
             Some(&driver),
+            broker.as_ref().map(|b| b as &dyn keyjutsu_core::elevation::ElevatedRunner),
             &snapshot,
             &checkpoint,
             &recovery_dir(&path),

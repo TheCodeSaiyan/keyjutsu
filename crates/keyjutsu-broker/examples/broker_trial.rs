@@ -5,7 +5,8 @@
 //! `broker_trial DIR` starts `keyjutsu-broker.exe` (from the same folder)
 //! through Windows' own "run as administrator" path, runs an approved
 //! Administrator step through it, checks the HKLM key exists, and checks an
-//! altered step is refused. Then a second Administrator step reads a staged
+//! altered step is refused, then undoes it through the broker with the
+//! step's approved recovery command. Then a second Administrator step reads a staged
 //! download: the trial checks what it read reached HKLM, that the folder it
 //! read it from admitted only Administrators and SYSTEM and was removed
 //! afterwards, and that a staged file changed since it was pinned is
@@ -58,6 +59,9 @@ fn plan(value: &str) -> String {
         "agent": {"name": "codex", "version": "1"},
         "steps": [{"id": "admin", "title": "Write under HKLM", "objective": "Needs Administrator.",
                    "kind": "command", "shell": {"kind": "windows_powershell"}, "privilege": "administrator",
+                   "reversibility": {"level": "full"},
+                   "recovery": {"strategy": "commands",
+                                "commands": [{"text": format!("Remove-ItemProperty -Path '{KEY}' -Name Trial")}]},
                    "commands": [{"text": format!("New-Item -Path '{KEY}' -Force | Out-Null; Set-ItemProperty -Path '{KEY}' -Name Trial -Value {value}")}]},
                   {"id": "use-artifact", "title": "Record a download under HKLM",
                    "objective": "Needs Administrator and a staged file.",
@@ -125,12 +129,24 @@ fn main() -> ExitCode {
 
     let run = client.run_step(snap.snapshot_hash(), "admin", &snap.step_hashes()["admin"]);
     println!("approved step: {run:?}");
+    let written = reg_value("Trial");
+    println!("value written: {written:?}");
+    // Undone through the broker: the step's approved recovery command, run
+    // as Administrator, named by step and hash only.
+    let recovery = client.recover_step(snap.snapshot_hash(), "admin", &snap.step_hashes()["admin"]);
+    println!("recovery: {recovery:?}");
+    let after_recovery = reg_value("Trial");
+    println!("value after recovery: {after_recovery:?}");
+    let undone = recovery.is_ok() && written.as_deref() == Some("approved") && after_recovery.is_none();
     drop(client);
     let exists = key_exists();
     println!("HKLM key after: {exists}");
 
-    let first = refusal.is_err() && run.is_ok() && exists;
-    println!("first step: {}", if first { "ran elevated; the altered one was refused" } else { "FAILED" });
+    let first = refusal.is_err() && run.is_ok() && exists && undone;
+    println!(
+        "first step: {}",
+        if first { "ran elevated, the altered one was refused, and it was undone" } else { "FAILED" }
+    );
 
     // An artifact, staged in the operator's own store as `keyjutsu plan
     // stage` leaves it, which anything running as the operator can change.
@@ -186,7 +202,7 @@ fn main() -> ExitCode {
         && tampered.as_ref().is_err_and(|e| e.contains("changed since it was staged"));
     if first && second {
         println!(
-            "PASS: the broker ran the approved Administrator steps elevated, refused the altered one, handed over a checked copy of the artifact from a folder only Administrators could write to, and refused a changed one"
+            "PASS: the broker ran the approved Administrator steps elevated, refused the altered one, undid one with its approved recovery command, handed over a checked copy of the artifact from a folder only Administrators could write to, and refused a changed one"
         );
         ExitCode::SUCCESS
     } else {
