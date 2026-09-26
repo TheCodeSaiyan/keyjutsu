@@ -303,6 +303,7 @@ mod tests {
                 name: "Windows".into(),
                 status: CheckStatus::Ok,
                 detail: "running on ROBINS-DESK as robin.hale".into(),
+                get: None,
             }],
         }
     }

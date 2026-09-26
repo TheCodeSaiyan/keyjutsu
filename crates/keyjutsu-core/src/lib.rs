@@ -18,6 +18,7 @@ pub mod git;
 pub mod headless;
 pub mod history;
 pub mod ipc;
+pub mod links;
 pub mod readiness;
 pub mod recovery;
 pub mod session;

@@ -19,6 +19,10 @@ fn every_supported_agent_is_listed_installed_or_not() {
     assert_eq!(kinds, ["codex", "claude_code", "gemini", "github_copilot", "cursor"]);
     for a in list.as_array().unwrap() {
         assert!(a["capabilities"]["read_only"].as_str().unwrap().len() > 10, "{a}");
+        // Installed or not, it says where to get it, and it is a page
+        // KeyJutsu is willing to open.
+        let url = a["install_url"].as_str().unwrap();
+        assert!(keyjutsu_core::links::is_known(url), "{url}");
     }
 }
 

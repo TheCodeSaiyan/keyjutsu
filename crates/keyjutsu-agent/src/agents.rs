@@ -43,6 +43,19 @@ impl AgentKind {
         }
     }
 
+    /// Where to get it: the maker's own install page.
+    pub fn install_url(self) -> &'static str {
+        match self {
+            AgentKind::Codex => "https://github.com/openai/codex",
+            AgentKind::ClaudeCode => "https://code.claude.com/docs/en/setup",
+            AgentKind::Gemini => "https://github.com/google-gemini/gemini-cli",
+            AgentKind::GithubCopilot => {
+                "https://docs.github.com/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli"
+            }
+            AgentKind::Cursor => "https://cursor.com/cli",
+        }
+    }
+
     /// The executable name looked up on `PATH`.
     pub fn executable(self) -> &'static str {
         match self {
