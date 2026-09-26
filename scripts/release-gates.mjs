@@ -7,6 +7,7 @@
 //
 //   node scripts/release-gates.mjs
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const gates = {
   "Broker security": [
@@ -114,6 +115,23 @@ const gates = {
     "a_resumed_run_asks_for_the_credential_again",
   ],
 };
+
+// THREAT_MODEL.md says how many tests each gate holds; a count that no longer
+// matches this list is a promise the document no longer keeps.
+const model = readFileSync(new URL("../THREAT_MODEL.md", import.meta.url), "utf8")
+  .replace(/\s+/g, " ")
+  .toLowerCase();
+const stale = Object.entries(gates).flatMap(([gate, tests]) => {
+  const said = model.match(new RegExp(`${gate.toLowerCase()} \\((\\d+)`))?.[1];
+  return said === String(tests.length)
+    ? []
+    : [`${gate}: ${tests.length} here, ${said ?? "none"} in THREAT_MODEL.md`];
+});
+if (stale.length) {
+  for (const s of stale) console.log(`STALE  ${s}`);
+  console.log("THREAT_MODEL.md's release gate counts do not match; update it.");
+  process.exit(1);
+}
 
 const names = [...new Set(Object.values(gates).flat())];
 // The default members hold every gate's tests. The desktop crate is left out
