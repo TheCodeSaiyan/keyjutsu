@@ -125,7 +125,7 @@ fn resizing_the_terminal_reaches_the_shell() {
     session.close();
 }
 
-/// Milestone 2's acceptance case, end to end against a real shell.
+/// Mashed keys deliver exactly the staged command, end to end against a real shell.
 #[test]
 fn mashed_keys_type_and_run_exactly_the_staged_command() {
     let (session, out) = start(ShellKind::Pwsh);

@@ -1,5 +1,5 @@
 //! What an agent is given to work from, and the manifest the operator sees
-//! before anything is sent (§9).
+//! before anything is sent.
 //!
 //! Pasted text and individual files are read by KeyJutsu, redacted, and
 //! placed in the prompt. A folder is not read: the agent is started in it and

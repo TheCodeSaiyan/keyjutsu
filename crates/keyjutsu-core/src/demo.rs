@@ -1,10 +1,8 @@
 //! The safe demo: a short, read-only performance that shows the whole idea on
 //! a machine nobody has planned anything for yet.
 //!
-//! Every command here only reads. The specification suggests
-//! `Get-PSVersionTable`, which is not a cmdlet; the demo reads the
-//! `$PSVersionTable` variable instead, and the deviation is recorded in
-//! `docs/architecture/deviations.md`.
+//! Every command here only reads. The PowerShell version comes from the
+//! `$PSVersionTable` variable: there is no `Get-PSVersionTable` cmdlet.
 
 use keyjutsu_execution::{StagedScript, StagedStep};
 use keyjutsu_terminal::ShellKind;

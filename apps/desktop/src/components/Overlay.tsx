@@ -12,7 +12,7 @@ interface Props {
 /**
  * The operator's private controls during a performance, opened with
  * Ctrl+Shift+K. Small and in a corner: it is for the operator, not the room.
- * Shows what the design kit asks for (§19): current step, state, next step,
+ * Shows what the design kit asks for: current step, state, next step,
  * mode and progress, with Resume and Disarm.
  */
 export function Overlay({ snapshot, paused, onResume, onDisarm }: Props) {

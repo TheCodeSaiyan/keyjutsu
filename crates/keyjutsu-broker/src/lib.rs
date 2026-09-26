@@ -1,4 +1,4 @@
-//! KeyJutsu's elevation broker (§26, ADR 0011).
+//! KeyJutsu's elevation broker (ADR 0011).
 //!
 //! The broker is started elevated, once, before a plan runs, pinned to one
 //! approved snapshot by its hash. It accepts exactly one kind of work: *run

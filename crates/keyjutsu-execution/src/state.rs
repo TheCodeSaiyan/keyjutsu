@@ -23,7 +23,7 @@ pub enum ExecutionState {
     /// Submitted; waiting for the shell to report the command finished.
     Executing,
     /// Waiting on an external condition after a command, such as a service
-    /// becoming healthy. Entered by runtime validation (Milestone 8).
+    /// becoming healthy. Entered by runtime validation.
     Waiting,
     /// Checking the finished command against its validation contract.
     Validating,
@@ -145,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn serialises_as_the_names_the_specification_uses() {
+    fn serialises_as_the_documented_state_names() {
         assert_eq!(serde_json::to_string(&AwaitingExecution).unwrap(), "\"AWAITING_EXECUTION\"");
         assert_eq!(serde_json::to_string(&RevalidationRequired).unwrap(), "\"REVALIDATION_REQUIRED\"");
     }

@@ -119,7 +119,7 @@ launch "$kj\work\validated.json"
 d capture '' 'plan-workspace'
 
 # A run in the app, recorded, made a Technique and used again: the end of
-# the specification's V1 scenario. Direct mode, so no keys are needed.
+# the whole journey. Direct mode, so no keys are needed.
 launch "$kj\work\validated.json"
 d click 'Terminal'
 Start-Sleep -Seconds 6

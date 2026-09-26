@@ -1,4 +1,4 @@
-//! Milestone 10: the broker refuses altered commands, unknown plan hashes,
+//! The broker refuses altered commands, unknown plan hashes,
 //! unauthorised operations and other protocol versions, and has no way to
 //! run a command string. Over a real named pipe, unelevated: the checks do
 //! not depend on elevation; elevation itself is tried in Windows Sandbox.

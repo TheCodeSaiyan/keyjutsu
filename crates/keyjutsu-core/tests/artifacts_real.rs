@@ -1,4 +1,4 @@
-//! Milestone 12: a task that depends on a download is staged before it is
+//! A task that depends on a download is staged before it is
 //! armed and runs the verified staged copy. The "internet" is a small HTTP
 //! server on 127.0.0.1 whose content the test changes under the plan.
 

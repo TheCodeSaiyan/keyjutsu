@@ -1,7 +1,7 @@
 # 0010: Canonical JSON and SHA-256 for plan and step hashes
 
-Status: accepted, Milestone 4. It was proposed at Milestone 0 because the plan
-schema's hash fields depended on it.
+Status: accepted. It was decided first because the plan schema's hash
+fields depended on it.
 
 ## Decision
 
@@ -22,7 +22,7 @@ about 100 lines and passes RFC 8785's own number and key-ordering vectors.
 - the hash of every step in `depends_on`.
 
 Chaining predecessor hashes is what makes invalidation flow downstream: change
-step 3 and steps 4, 5 and 7 get new hashes too. `diff` (Milestone 3) computes
+step 3 and steps 4, 5 and 7 get new hashes too. `diff` computes
 the same "affected" set independently; a property test across 500 random
 edit sequences holds the two answers together.
 
@@ -44,9 +44,9 @@ change the steps bound to that shell, a tool change the steps that name it.
   independently of the hash, but its phrase is derivable from the step's
   title, so it only stops a forger who does not bother. Tamper resistance
   against a local attacker needs a keyed MAC under a DPAPI-protected key: the
-  key belongs to encrypted storage (Milestone 14) and the verifier that
-  matters is the elevated broker (Milestone 10). Milestone 17 closed this
+  key belongs to encrypted storage and the verifier that
+  matters is the elevated broker. This was later closed
   differently: sealing records the snapshot hash in the DPAPI-keyed store,
   and a snapshot without that record is refused.
 - **Tool versions are not in the fingerprint yet.** Paths are; asking a tool
-  its version is validation's job (Milestone 5).
+  its version is validation's job.

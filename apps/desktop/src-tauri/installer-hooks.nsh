@@ -1,4 +1,4 @@
-; KeyJutsu's additions to the Tauri NSIS installer (Milestone 16).
+; KeyJutsu's additions to the Tauri NSIS installer.
 ;
 ; After installing, two questions: put `keyjutsu` on the PATH, and add
 ; "Open KeyJutsu here" to Explorer's folder menus. A silent install (/S)

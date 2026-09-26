@@ -91,7 +91,7 @@ export function App() {
   const [view, setView] = useState<"first-run" | "workspace">(() =>
     readFlag(FIRST_RUN_KEY) ? "workspace" : "first-run",
   );
-  // Where the operator is: the task, the plan, or the terminal (§8).
+  // Where the operator is: the task, the plan, or the terminal.
   const [space, setSpace] = useState<"task" | "plan" | "terminal" | "history" | "techniques">(
     "task",
   );
@@ -451,7 +451,7 @@ export function App() {
   const canArm = sessionId !== null && ready && !exited && !armed;
   const modeHint = MODES.find((m) => m.value === mode)?.hint;
   // During a performance, and for the whole of a plan run, only the terminal
-  // is on screen (§18).
+  // is on screen.
   const fullTerminal = armed || running;
 
   const dialog = critical && (
@@ -763,7 +763,7 @@ export function App() {
                         />
                         <p className="muted small">
                           These run exactly as if you typed them. They are not validated or
-                          approved: plans and approval arrive in later milestones.
+                          approved: for that, get a plan from New task.
                         </p>
                       </>
                     )}

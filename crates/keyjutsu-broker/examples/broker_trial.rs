@@ -1,4 +1,4 @@
-//! Real elevation through the broker (Milestone 10), for a disposable
+//! Real elevation through the broker, for a disposable
 //! machine such as Windows Sandbox. It writes a key under HKLM, which only
 //! an Administrator can.
 //!

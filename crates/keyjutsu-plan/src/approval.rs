@@ -3,10 +3,10 @@
 //! The operator edits a draft plan. Approving a step records the step's
 //! current hash. If the step, or anything before it, changes afterwards, its
 //! hash changes and the approval no longer matches: the step is shown as
-//! invalidated, never silently kept (§2.2, §11).
+//! invalidated, never silently kept.
 //!
 //! Critical steps cannot be approved wholesale. Each needs its own typed
-//! confirmation phrase (§28): "approve everything" skips them and says so.
+//! confirmation phrase: "approve everything" skips them and says so.
 //!
 //! Sealing turns a fully approved draft into an [`ApprovedSnapshot`]. A
 //! snapshot has no mutating methods. Loading one from JSON re-checks every
@@ -64,7 +64,7 @@ pub enum ApprovalError {
 
 /// Whether a step needs its own typed confirmation. Today that is the agent's
 /// proposed risk or KeyJutsu's own assessment saying critical; KeyJutsu's
-/// independent risk rules arrive with validation (Milestone 5), so an agent
+/// independent risk rules arrive with validation, so an agent
 /// that under-states risk is not yet caught here.
 pub fn is_critical(plan: &Plan, step: &Step) -> bool {
     let proposed = step.proposed_risk.as_ref().is_some_and(|r| r.level == RiskLevel::Critical);
@@ -172,7 +172,7 @@ impl ApprovalBook {
 pub enum SealError {
     #[error("{} not approved as they stand: {}", crate::count(.0.len(), "step is", "steps are"), .0.join(", "))]
     NotApproved(Vec<String>),
-    /// Validation found these steps not READY (§12: a plan must not arm with
+    /// Validation found these steps not READY: a plan must not arm with
     /// a step that is blocked, invalid, awaiting review or awaiting revalidation).
     #[error("{} not ready: {}", crate::count(.0.len(), "step is", "steps are"), .0.join(", "))]
     NotReady(Vec<String>),

@@ -1,9 +1,9 @@
 //! KeyJutsu's own risk assessment.
 //!
-//! §27: risk must be explainable and must not rest on the agent's label
-//! alone. Each rule here looks at what a step actually runs and says why it
-//! set the level it did; the step's risk is the highest any rule gives. The
-//! agent's own label can raise that, never lower it.
+//! Risk must be explainable and must not rest on the agent's label alone. Each rule
+//! here looks at what a step actually runs and says why it set the level it did;
+//! the step's risk is the highest any rule gives. The agent's own label can raise
+//! that, never lower it.
 //!
 //! The rules are deliberately blunt. A false "high" costs the operator a
 //! second look; a false "low" could let a destructive command through

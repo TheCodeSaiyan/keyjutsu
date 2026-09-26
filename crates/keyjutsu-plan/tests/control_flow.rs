@@ -94,7 +94,7 @@ fn a_plan_without_edges_runs_in_the_order_written() {
     assert_eq!(frontier(p.plan(), p.graph(), &facts).ready, ["confirm-feature"]);
 }
 
-/// The specification's own example (§11): step 3 changes, and steps 4, 5 and
+/// The textbook case: step 3 changes, and steps 4, 5 and
 /// 7 depend on it, while 6 does not.
 fn chain_plan() -> serde_json::Value {
     let step = |n: u32| {

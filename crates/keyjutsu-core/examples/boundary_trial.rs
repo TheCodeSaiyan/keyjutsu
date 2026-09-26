@@ -1,4 +1,4 @@
-//! A real Windows restart across a plan boundary (Milestone 15), for a
+//! A real Windows restart across a plan boundary, for a
 //! disposable machine such as Windows Sandbox. Never run it on a machine
 //! whose restart would cost anything: the script around it restarts Windows.
 //!

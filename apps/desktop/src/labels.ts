@@ -1,7 +1,7 @@
 import type { ExecutionMode, ExecutionState } from "@keyjutsu/types";
 
 /**
- * Labels for the operator's view. Where the design kit names a state (§11),
+ * Labels for the operator's view. Where the design kit names a state,
  * its canonical label is used so the desktop, CLI and docs agree; the rest
  * are the engine's own states in plain words.
  */

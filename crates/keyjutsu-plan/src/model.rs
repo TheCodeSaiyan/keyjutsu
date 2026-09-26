@@ -686,7 +686,7 @@ pub struct KeyJutsuState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub snapshot_hash: Option<String>,
-    /// Who did what to which step, in order (§7).
+    /// Who did what to which step, in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub provenance: Vec<ProvenanceEvent>,
 }

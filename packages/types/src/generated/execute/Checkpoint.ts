@@ -6,7 +6,7 @@ import type { StepRun } from "./StepRun";
 
 /**
  * Written before and after every step, so a crash, power loss or restart
- * leaves a record of exactly what is known (§52).
+ * leaves a record of exactly what is known.
  */
 export type Checkpoint = { kind: string, snapshot_hash: string, runs: Array<StepRun>, 
 /**
@@ -14,8 +14,8 @@ export type Checkpoint = { kind: string, snapshot_hash: string, runs: Array<Step
  */
 in_progress: InProgress | null, 
 /**
- * What each step declared it would change, captured just before it ran
- * (§29). Latest last.
+ * What each step declared it would change, captured just before it ran.
+ * Latest last.
  */
 captures: Array<StepCapture>, 
 /**

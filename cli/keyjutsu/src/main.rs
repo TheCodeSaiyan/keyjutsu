@@ -718,7 +718,6 @@ fn doctor(json: bool) -> ExitCode {
                 CheckStatus::Ok => "ok  ",
                 CheckStatus::Warning => "warn",
                 CheckStatus::Unavailable => "FAIL",
-                CheckStatus::NotYetBuilt => "--  ",
             };
             println!("  [{mark}] {:<32} {}", check.name, check.detail);
         }

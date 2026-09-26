@@ -2,8 +2,8 @@
 //! each is kept to investigating rather than changing anything.
 //!
 //! Every flag here was read from the agent's own `--help` on a real machine;
-//! `verified_with` records which version. Agent CLIs change between versions
-//! (§5), so detection compares the installed version with that and says when
+//! `verified_with` records which version. Agent CLIs change between versions,
+//! so detection compares the installed version with that and says when
 //! they differ.
 
 use std::path::{Path, PathBuf};

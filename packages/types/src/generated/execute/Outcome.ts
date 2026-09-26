@@ -4,7 +4,7 @@ import type { Boundary } from "../plan/Boundary";
 export type Outcome = { "kind": "complete" } | { "kind": "failed", step: string, expected: string, actual: string, 
 /**
  * The end of what the step printed, without colour codes, so the
- * agent asked to fix it can read the real error (§61). Redacted
+ * agent asked to fix it can read the real error. Redacted
  * before it is sent anywhere, like everything given to an agent.
  */
 output: string, } | { "kind": "aborted", step: string | null, in_doubt: boolean, } | { "kind": "blocked", reason: string, } | { "kind": "boundary", phase: string, boundary: Boundary, };

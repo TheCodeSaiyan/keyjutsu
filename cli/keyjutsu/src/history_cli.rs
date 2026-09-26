@@ -86,7 +86,7 @@ pub fn history_show(id: &str) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Compare this machine with the one a session was approved on (§36).
+/// Compare this machine with the one a session was approved on.
 pub fn history_recheck(id: &str) -> ExitCode {
     let store = match open() {
         Ok(s) => s,
@@ -291,7 +291,7 @@ pub fn technique_import(file: &Path) -> ExitCode {
     }
 }
 
-/// `keyjutsu store clear`: storage management (§35).
+/// `keyjutsu store clear`: storage management.
 pub fn store_clear(history_too: bool, techniques: bool, artifacts: bool) -> ExitCode {
     let store = match open() {
         Ok(s) => s,

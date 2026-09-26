@@ -1,4 +1,4 @@
-//! Administrator steps (§26). KeyJutsu itself runs unelevated; a step that
+//! Administrator steps. KeyJutsu itself runs unelevated; a step that
 //! needs Administrator goes to an elevation broker started once, before the
 //! run, which runs only approved steps bound to their hashes (ADR 0011).
 

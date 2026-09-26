@@ -10,7 +10,7 @@ interface Props {
 }
 
 /**
- * The first thing on screen (§8): what to do, which agent, and optional
+ * The first thing on screen: what to do, which agent, and optional
  * context. Nothing is sent until "Plan task", and then only the task and the
  * pasted context, redacted by Rust before it leaves.
  */

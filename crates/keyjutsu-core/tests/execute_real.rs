@@ -1,4 +1,4 @@
-//! Milestone 8: approved snapshots executed through real pwsh sessions, in
+//! Approved snapshots executed through real pwsh sessions, in
 //! each mode, from the same snapshot. Plans are validated, approved and
 //! sealed exactly as the CLI does it; nothing here is mocked.
 

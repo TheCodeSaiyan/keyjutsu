@@ -1,4 +1,4 @@
-# KeyJutsu on a clean Windows 11 (Milestone 16), in Windows Sandbox.
+# KeyJutsu on a clean Windows 11, in Windows Sandbox.
 #
 #   pwsh tests/e2e/install-trial/run.ps1
 #

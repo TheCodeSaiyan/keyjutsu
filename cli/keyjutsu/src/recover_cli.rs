@@ -1,5 +1,5 @@
 //! `keyjutsu recover`: put back what a stopped run changed, when the
-//! operator says so (§29).
+//! operator says so.
 //!
 //! Without `--confirm` it only shows the recovery plan: nothing is rolled
 //! back by default. With it, captured state is restored and approved recovery

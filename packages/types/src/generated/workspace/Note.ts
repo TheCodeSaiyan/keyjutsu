@@ -2,7 +2,7 @@
 
 /**
  * Something said about the plan, shown beside it. The plan is authoritative;
- * these explain how it got that way (§8: "chat assists").
+ * these explain how it got that way. Chat assists; it never decides.
  */
 export type Note = { 
 /**

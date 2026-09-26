@@ -1,10 +1,10 @@
 //! What changed between two versions of a plan, and what that change touches.
 //!
-//! §11: "Step 3 changed. Affected downstream assumptions: steps 4, 5 and 7.
+//! The shape of the answer: "Step 3 changed. Affected downstream assumptions: steps 4, 5 and 7.
 //! Status: revalidation required." A change to what a step *does* makes it and
 //! every step after it in the graph need revalidation. A change to how it is
 //! *described* (title, objective, reason) does not, because nothing that runs
-//! depends on wording. Approval (Milestone 4) will build on exactly this list.
+//! depends on wording. Approval will build on exactly this list.
 
 use std::collections::BTreeSet;
 

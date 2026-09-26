@@ -90,7 +90,7 @@ pub fn step_hashes(plan: &Plan, graph: &PlanGraph) -> BTreeMap<String, String> {
 }
 
 /// The state of the machine an approval was given against. Compared later to
-/// find drift (§33). Collected by `keyjutsu-core`; this crate only holds and
+/// find drift. Collected by `keyjutsu-core`; this crate only holds and
 /// compares it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]

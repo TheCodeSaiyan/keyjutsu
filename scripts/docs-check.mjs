@@ -5,7 +5,11 @@
 //   of a code block, that the built CLI does not have, read from its --help;
 // - a relative link, or a #heading in one, that does not resolve;
 // - a page under docs/ that nothing reachable from README.md links to;
-// - hype words and American spellings in prose.
+// - hype words and American spellings in prose;
+// - anywhere in the repository, a numbered reference to the product brief
+//   or to a build milestone (a section sign or a milestone number), which a
+//   reader cannot follow. The design kit's own sections and RFC sections are
+//   fine.
 //
 //   node scripts/docs-check.mjs
 import { execFileSync } from "node:child_process";
@@ -212,6 +216,23 @@ for (const p of pages) {
   if (!reached.has(p)) {
     report(p, 1, "nothing reachable from README.md links to this page");
   }
+}
+
+// --- Internal references ---------------------------------------------------
+
+const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" })
+  .split("\0")
+  .filter((f) => f && !f.startsWith("docs/brand/KeyJutsu-Design-Kit/") && f !== "pnpm-lock.yaml")
+  .filter((f) => /\.(rs|ts|tsx|mjs|js|css|md|ps1|nsh|json|ya?ml|toml)$/.test(f));
+const internal = /\u00a7 ?\d|\bmilestones? \d|\bM\d{1,2}\b/i;
+const allowed = /kit \u00a7|RFC \d+ \u00a7|RFC \d+ Appendix/;
+for (const f of tracked) {
+  const lines = readFileSync(join(root, f), "utf8").split("\n");
+  lines.forEach((line, i) => {
+    if (internal.test(line) && !allowed.test(line)) {
+      report(join(root, f), i + 1, "a spec section or milestone number a reader cannot follow");
+    }
+  });
 }
 
 if (problems.length) {

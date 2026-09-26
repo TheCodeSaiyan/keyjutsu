@@ -1,4 +1,4 @@
-//! Staged artifacts (§30): download, pin, verify, and run the staged copy.
+//! Staged artifacts: download, pin, verify, and run the staged copy.
 //!
 //! An artifact is downloaded before the plan is armed, into a store where
 //! each copy is kept under its own SHA-256, with a record of where it came
@@ -23,7 +23,7 @@ pub fn default_store() -> PathBuf {
         .join("artifacts")
 }
 
-/// Where a staged artifact came from, kept beside it (§30 provenance).
+/// Where a staged artifact came from, kept beside it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export, export_to = "artifacts/")]
 pub struct StagedArtifact {
@@ -176,7 +176,7 @@ pub fn assignment(store: &Path, step: &Step) -> Result<Option<String>, String> {
 }
 
 /// The plan with each staged artifact's hash written in, for the operator
-/// to review and approve (§30: pin before execution).
+/// to review and approve: pinned before execution, never during it.
 pub fn pin(plan: &Plan, staged: &[StagedArtifact]) -> Plan {
     let mut out = plan.clone();
     for step in &mut out.steps {

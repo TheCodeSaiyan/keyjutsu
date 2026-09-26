@@ -1,7 +1,7 @@
 //! Property tests: many generated inputs against the plan crate's promises.
 //!
-//! This is not coverage-guided fuzzing (that needs cargo-fuzz and is
-//! Milestone 17's), but it covers the same promises §55 asks fuzzing to test:
+//! This is not coverage-guided fuzzing (that needs cargo-fuzz), but it
+//! covers the same promises fuzzing would test:
 //! hostile input is refused cleanly, never with a panic, and the same input
 //! always gets the same answer.
 

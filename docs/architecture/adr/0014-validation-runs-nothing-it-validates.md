@@ -1,13 +1,13 @@
 # 0014: Validation runs nothing a plan names, with one guarded exception
 
-Status: accepted, Milestone 5.
+Status: accepted.
 
 ## Context
 
 Validation happens before approval. If it ran what a plan names, an agent's
 plan would be executing on the operator's machine before the operator had
-said yes, which is exactly what KeyJutsu exists to prevent (§2.1). But §13 also
-asks for the strongest safe proof, including native dry runs such as
+said yes, which is exactly what KeyJutsu exists to prevent. But validation
+should still find the strongest safe proof, including native dry runs such as
 `-WhatIf`, and knowing a tool's version needs *something* to be asked.
 
 ## Decision
