@@ -29,6 +29,12 @@ if ($lua -ne 1 -and -not (Test-Path "$w\uac.on")) {
     exit
 }
 
+# UAC on but this process still elevated: the restart that makes it count
+# has not happened yet. The Sandbox sometimes runs its logon command twice,
+# and a trial started now would run elevated and be killed by the restart.
+$high = [bool](whoami /groups | Select-String 'S-1-16-12288')
+if ((Test-Path "$w\uac.on") -and $high) { log "UAC is on but the restart has not happened yet; waiting for it"; exit }
+
 New-Item -ItemType File "$w\started" | Out-Null
 & "$kj\bin\broker_trial.exe" $w *>> "$w\trial.log"
 log "broker trial exited $LASTEXITCODE"

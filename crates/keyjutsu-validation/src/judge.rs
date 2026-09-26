@@ -229,6 +229,11 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
                         );
                     }
                 }
+                CaptureKind::File if crate::paths::plain_file_path(&c.target).is_err() => v.fail(
+                    "recovery",
+                    Readiness::Invalid,
+                    crate::paths::plain_file_path(&c.target).err().unwrap_or_default(),
+                ),
                 CaptureKind::File if std::path::Path::new(&c.target).is_dir() => v.fail(
                     "recovery",
                     Readiness::Invalid,
@@ -361,6 +366,12 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
     }
 
     // Working directory.
+    let cmd = step.shell.as_ref().is_some_and(|s| s.kind == keyjutsu_plan::model::ShellName::Cmd);
+    if let Some(why) =
+        step.working_directory.as_deref().and_then(|d| crate::paths::working_directory_problem(d, cmd))
+    {
+        v.fail("working directory", Readiness::Invalid, why);
+    }
     match g.working_directory_exists {
         Some(true) => v.pass("working directory", step.working_directory.clone().unwrap_or_default()),
         Some(false) => v.fail(

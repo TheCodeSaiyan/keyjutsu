@@ -18,6 +18,7 @@
 
 pub mod judge;
 pub mod network;
+pub mod paths;
 pub mod powershell;
 pub mod probe;
 pub mod process;

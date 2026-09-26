@@ -181,19 +181,19 @@ fn read_service(name: &str) -> Result<(bool, Option<String>, Option<String>), St
 fn capture_one(c: &Capture, step: &str, index: usize, dir: &Path) -> Result<Captured, String> {
     match c.kind {
         CaptureKind::File => {
-            let path = Path::new(&c.target);
-            if path.is_dir() {
-                return Err(format!("`{}` is a folder; only files can be captured", c.target));
-            }
-            if !path.exists() {
+            // Exactly the file named: never through a link or junction, which
+            // for the broker would mean reading as Administrator whatever a
+            // link planted since approval points at.
+            let read =
+                crate::exact_file::read(&c.target).map_err(|e| format!("cannot read `{}`: {e}", c.target))?;
+            let Some(bytes) = read else {
                 return Ok(Captured::File {
                     path: c.target.clone(),
                     existed: false,
                     sha256: None,
                     backup: None,
                 });
-            }
-            let bytes = std::fs::read(path).map_err(|e| format!("cannot read `{}`: {e}", c.target))?;
+            };
             let sha = sha256_hex(&bytes);
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
             let name = format!("{step}-{index}.bak");
@@ -371,8 +371,10 @@ pub struct RecoveryResult {
 fn restore_one(c: &Captured, dir: &Path) -> CheckResult {
     let done = |check: String, ok: bool, detail: String| CheckResult { check, passed: Some(ok), detail };
     match c {
+        // Exactly the file named, never through a link or junction: for the
+        // broker, following one would write or delete as Administrator
+        // wherever a link planted since the capture points.
         Captured::File { path, existed, sha256, backup } => {
-            let target = Path::new(path);
             if *existed {
                 let (Some(backup), Some(want)) = (backup, sha256) else {
                     return done(format!("file {path}"), false, "no backup was recorded".into());
@@ -388,18 +390,18 @@ fn restore_one(c: &Captured, dir: &Path) -> CheckResult {
                         "the backup has changed since it was taken; not used".into(),
                     );
                 }
-                if let Err(e) = std::fs::write(target, &bytes) {
+                if let Err(e) = crate::exact_file::write(path, &bytes) {
                     return done(format!("file {path}"), false, e.to_string());
                 }
-                let now = std::fs::read(target).map(|b| sha256_hex(&b)).unwrap_or_default();
+                let now =
+                    crate::exact_file::read(path).ok().flatten().map(|b| sha256_hex(&b)).unwrap_or_default();
                 done(format!("file {path}"), &now == want, format!("sha256 {now}"))
             } else {
-                if target.is_file()
-                    && let Err(e) = std::fs::remove_file(target)
-                {
+                if let Err(e) = crate::exact_file::remove(path) {
                     return done(format!("file {path}"), false, e.to_string());
                 }
-                done(format!("file {path}"), !target.exists(), "absent, as before".into())
+                let gone = matches!(crate::exact_file::read(path), Ok(None));
+                done(format!("file {path}"), gone, "absent, as before".into())
             }
         }
         Captured::RegistryValue { target, existed, value_kind, value_json } => {

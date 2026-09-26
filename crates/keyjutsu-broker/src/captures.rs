@@ -147,12 +147,31 @@ pub fn check_secured(sddl: &str) -> Result<(), String> {
 
 /// `%ProgramData%\KeyJutsu`, made the first time and checked every time.
 pub fn secured_root() -> Result<PathBuf, String> {
-    let root = program_data()?.join("KeyJutsu");
+    secured_root_in(&program_data()?)
+}
+
+/// `KeyJutsu` in `base`, made the first time and checked every time.
+pub fn secured_root_in(base: &Path) -> Result<PathBuf, String> {
+    let root = base.join("KeyJutsu");
     // Made here if it is not there; if it is, by whoever, it is checked.
     if let Err(e) = crate::protected::create_with(&root, SECURED)
         && !root.is_dir()
     {
         return Err(e);
+    }
+    // A junction here would be checked, and written through, as the folder
+    // it points at: one someone else made is refused however well it is
+    // locked down.
+    {
+        use std::os::windows::fs::MetadataExt;
+        const REPARSE_POINT: u32 = 0x400;
+        let link = std::fs::symlink_metadata(&root).map_err(|e| e.to_string())?;
+        if link.file_attributes() & REPARSE_POINT != 0 {
+            return Err(format!(
+                "{} is a link to another folder, so it cannot hold Administrator captures. Remove it, and KeyJutsu's broker will make it again",
+                root.display()
+            ));
+        }
     }
     check_secured(&security_of(&root)?).map_err(|why| {
         format!(
@@ -261,5 +280,22 @@ mod tests {
         assert!(check_secured("O:BAD:NO_ACCESS_CONTROL").is_err());
         // A deny entry for someone else is fine: it only takes away.
         check_secured("O:BAD:P(D;;FA;;;BU)(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)").unwrap();
+    }
+
+    #[test]
+    fn a_junction_planted_where_captures_are_kept_is_refused() {
+        let base = std::env::temp_dir().join(format!("kj-root-{}", std::process::id()));
+        let elsewhere = base.join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let made = std::process::Command::new("cmd")
+            .args(["/d", "/c", "mklink", "/J"])
+            .arg(base.join("KeyJutsu"))
+            .arg(&elsewhere)
+            .output()
+            .unwrap();
+        assert!(made.status.success());
+        let refused = super::secured_root_in(&base).unwrap_err();
+        assert!(refused.contains("link to another folder"), "{refused}");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
