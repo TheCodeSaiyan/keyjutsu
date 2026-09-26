@@ -70,7 +70,8 @@ pub fn bundle(report: &ReadinessReport, agents: &[AgentInfo], kept: &Kept, scrub
     let mut t = String::new();
     let _ = writeln!(t, "KeyJutsu diagnostic bundle");
     let _ = writeln!(t);
-    let _ = writeln!(t, "This is all of it. KeyJutsu has not sent it anywhere; it goes only where you send it.");
+    let _ =
+        writeln!(t, "This is all of it. KeyJutsu has not sent it anywhere; it goes only where you send it.");
     let _ = writeln!(
         t,
         "Left out: tasks, plans, commands, terminal contents, what runs printed, environment variables and credentials."
@@ -264,9 +265,12 @@ mod tests {
 
     fn report() -> ReadinessReport {
         let mut terminal_profile = TerminalProfile::built_in();
-        terminal_profile.source =
-            format!(r"{PROFILE}\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json");
-        terminal_profile.commandline = Some("pwsh.exe -NoExit -Command $env:GITHUB_TOKEN='ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'".into());
+        terminal_profile.source = format!(
+            r"{PROFILE}\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+        );
+        terminal_profile.commandline = Some(
+            "pwsh.exe -NoExit -Command $env:GITHUB_TOKEN='ghp_0123456789abcdefghijklmnopqrstuvwxyzAB'".into(),
+        );
         ReadinessReport {
             keyjutsu_version: "0.1.0".into(),
             windows: WindowsInfo {
@@ -373,7 +377,8 @@ mod tests {
 
     #[test]
     fn an_unreadable_history_is_said_rather_than_hidden() {
-        let k = Kept { sessions: Err("the key could not be unwrapped".into()), techniques: Err("same".into()) };
+        let k =
+            Kept { sessions: Err("the key could not be unwrapped".into()), techniques: Err("same".into()) };
         let text = bundle(&report(), &[], &k, &scrub());
         assert!(text.contains("could not be read: the key could not be unwrapped"), "{text}");
     }

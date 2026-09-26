@@ -33,7 +33,10 @@ fn the_preview_names_neither_the_user_nor_the_machine() {
         }
     }
     if let Ok(profile) = std::env::var("USERPROFILE") {
-        assert!(!text.to_lowercase().contains(&profile.to_lowercase()), "the profile folder is in the bundle");
+        assert!(
+            !text.to_lowercase().contains(&profile.to_lowercase()),
+            "the profile folder is in the bundle"
+        );
     }
 }
 
