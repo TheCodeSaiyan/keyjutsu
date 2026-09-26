@@ -43,6 +43,14 @@ All of it on this machine, under `%LOCALAPPDATA%\KeyJutsu`:
   reversible step said it would change, taken just before it ran, so it can
   be put back.
 
+One thing is kept elsewhere. Before an Administrator step that declares
+what it will change, the elevation broker captures that state itself and
+keeps it in `%ProgramData%\KeyJutsu\captures`, which only Administrators can
+read or write, so it can be put back after a failure. Each capture is
+removed once it has been restored, after 30 days, or when KeyJutsu is
+uninstalled. It is not encrypted: it holds what the step declared (a file,
+a registry value, a service's state) and nothing of your history.
+
 Credentials are never stored: you type them into PowerShell's own masked
 prompt, and KeyJutsu doesn't keep them, log them or write them anywhere. The desktop app also
 remembers that you have seen the first-run screen, in the webview's local

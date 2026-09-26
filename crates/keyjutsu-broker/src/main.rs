@@ -47,6 +47,10 @@ fn main() -> ExitCode {
     // Where the operator's artifacts are staged. Only copies that match the
     // snapshot's pinned hashes are ever handed to a step.
     let artifacts = arg("--artifacts").map(std::path::PathBuf::from);
+    // Captures kept past their time go, whenever the broker starts.
+    if let Ok(root) = keyjutsu_broker::captures::secured_root() {
+        keyjutsu_broker::captures::sweep(&root, keyjutsu_broker::captures::KEEP_FOR);
+    }
     let mut broker = Broker::new(snapshot, secret, runner(artifacts));
     let mut server = server;
     match serve(&mut server, &mut broker) {

@@ -1074,8 +1074,14 @@ pub fn execute(
                 );
             }
         }
+        // An Administrator step, with KeyJutsu itself unelevated, goes to the
+        // elevation broker, which checks it against its own copy of the
+        // approved snapshot. It is never typed into the unelevated shell,
+        // and the broker captures what it declares itself (ADR 0017).
+        let needs_broker = step.privilege == Some(keyjutsu_plan::model::Privilege::Administrator)
+            && !crate::elevation::is_elevated();
         // Prepare the step's recovery before it runs, or do not run it.
-        if step.recovery.as_ref().is_some_and(|r| !r.capture.is_empty()) {
+        if !needs_broker && step.recovery.as_ref().is_some_and(|r| !r.capture.is_empty()) {
             let Some(dir) = options.checkpoint.as_deref().map(crate::recovery::recovery_dir) else {
                 return finish(
                     Outcome::Blocked {
@@ -1139,11 +1145,6 @@ pub fn execute(
             }
         }
         let config = PerformanceConfig { mode: default_mode, ..options.base.clone() };
-        // An Administrator step, with KeyJutsu itself unelevated, goes to the
-        // elevation broker, which checks it against its own copy of the
-        // approved snapshot. It is never typed into the unelevated shell.
-        let needs_broker = step.privilege == Some(keyjutsu_plan::model::Privilege::Administrator)
-            && !crate::elevation::is_elevated();
         let performed = if needs_broker {
             let Some(runner) = &options.elevated_runner else {
                 checkpoint.in_progress = None;
@@ -1159,6 +1160,11 @@ pub fn execute(
             };
             match runner.run_step(snapshot.snapshot_hash(), &id, &step_hash) {
                 Ok(run) => {
+                    // The broker's account of what it captured, for the
+                    // recovery plan to show.
+                    if let Some(c) = run.captured {
+                        checkpoint.captures.push(c);
+                    }
                     elevated_output = Some(run.output.clone());
                     observe(ExecutionEvent::ElevatedOutput { step: id.clone(), text: run.output });
                     Performed::Finished(run.outcomes)

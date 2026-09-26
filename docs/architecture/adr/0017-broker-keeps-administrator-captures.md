@@ -1,7 +1,6 @@
 # 0017: The broker captures and restores what an Administrator step changes
 
-Status: proposed. Nothing here is built yet; until it is, restoring an
-Administrator step's captures needs KeyJutsu run as Administrator.
+Status: accepted, 26 September 2026.
 
 ## Context
 
@@ -24,9 +23,10 @@ write chosen values to the registry or chosen bytes to a file, as
 Administrator. The broker would have become a way round UAC, which is the
 one thing [ADR 0011](0011-elevation-broker.md) says it must never be.
 
-So today the broker recovers an Administrator step only by running that
-step's own approved recovery commands, and a step that relies on captured
-state is marked "cannot be recovered" unless KeyJutsu itself is elevated.
+Before this, the broker recovered an Administrator step only by running
+that step's own approved recovery commands, and a step that relied on
+captured state was marked "cannot be recovered" unless KeyJutsu itself was
+elevated.
 
 ## Decision
 
@@ -39,24 +39,29 @@ only Administrators can write, and is the only thing that restores them.
   step. If a capture cannot be made and verified, the step does not run,
   as for any other step.
 - **Kept in `%ProgramData%\KeyJutsu\captures\<snapshot hash>\<step>`.** The
-  installer creates `%ProgramData%\KeyJutsu` with an access list of
-  Administrators and SYSTEM, full control, nothing inherited. An ordinary
-  user can create folders in `%ProgramData%`, so one could make
-  `KeyJutsu` there first and own it: the broker therefore checks, every
-  time, that the folder's owner is Administrators or SYSTEM and that no one
-  else may write to it, and refuses to capture or restore otherwise.
+  broker finds `%ProgramData%` by asking Windows, not from the environment,
+  which the operator sets. It makes `KeyJutsu` there the first time, owned
+  by Administrators, with an access list of Administrators and SYSTEM, full
+  control, nothing inherited. An ordinary user can create folders in
+  `%ProgramData%`, so one could make `KeyJutsu` there first and own it: the
+  broker therefore checks, every time, that the folder's owner is
+  Administrators or SYSTEM and that every entry allowing anything names one
+  of them, and refuses to capture or restore otherwise. An entry that only
+  allows reading is refused too, rather than judging which rights are
+  harmless.
 - **Restored only by the broker, only what the step declared.** A third
   request, `RestoreStep`, names the snapshot, the step and its hash, like
   the other two; it carries no path and no value. The broker restores the
   targets its own snapshot declares for that step, from its own captures,
-  and checks each against what was captured.
+  and checks each against what was captured. A capture that names anything
+  the step did not declare is refused whole.
 - **The operator still sees the plan.** The broker's answer to a step says
   what it captured, as text for the recovery plan. KeyJutsu keeps that in the
   checkpoint for display only; nothing in it is used to restore.
-- **Captures are removed** by the broker once the step's recovery has
-  succeeded, when a later run of the same snapshot completes, and by the
-  uninstaller. The broker also removes captures more than 30 days old each
-  time it starts.
+- **Captures are removed** by the broker once the step's restore has
+  succeeded, so each is used once; by the broker, when it starts, once they
+  are more than 30 days old; and by the uninstaller, which removes
+  `%ProgramData%\KeyJutsu`. Running the step again replaces its capture.
 - **The portable build is unchanged.** It has no broker, and so no
   Administrator steps.
 
@@ -70,16 +75,26 @@ only Administrators can write, and is the only thing that restores them.
 - **The Windows folder's `Temp`**, where the broker hands a step its
   artifacts. Windows' own clean-up empties it after some days, and a
   recovery can be wanted later than that.
-- **Leave it as it is.** Recovery through a step's own approved commands
-  covers most Administrator steps; a step that relies on captured state asks
-  for KeyJutsu to be run as Administrator. This is the honest fallback, and
-  the one in place until this is built.
+- **Leave it as it was.** Recovery through a step's own approved commands
+  covers most Administrator steps, and a step that relies on captured state
+  could ask for KeyJutsu to be run as Administrator. Honest, but it left the
+  safest kind of recovery, putting back exactly what was there, out of reach
+  for exactly the steps that change the most.
+- **The installer makes the folder.** It could, elevated, but a broker
+  installed some other way would then find no folder, and the broker has to check
+  the folder every time anyway; making it there costs nothing more.
 
 ## Consequences
 
-- The broker writes to disk for the first time outside a step's own
-  commands, so its tests have to cover the ownership check: a folder
-  pre-created by an ordinary user is refused.
+- The broker writes to disk outside a step's own commands, so the ownership
+  check is tested: the access-list rules on their own, and in Windows
+  Sandbox with UAC on, a folder made first by the unelevated account is
+  refused, the broker's own is owned by Administrators and cannot be written
+  by that account, and a restore puts the value back once.
+- A capture the broker cannot make stops the step before it runs, but the
+  executor hears only that the broker failed, so the checkpoint marks the
+  step in doubt and the operator settles it. That is the cautious reading of
+  a failure it cannot tell apart from one mid-step.
 - The protocol goes to version 3.
 - A capture now lives in two places: the broker's store, which is the
   truth, and the checkpoint's copy for display. They are never reconciled;

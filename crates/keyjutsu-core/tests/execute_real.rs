@@ -843,6 +843,7 @@ impl keyjutsu_core::elevation::ElevatedRunner for RecordingBroker {
         Ok(keyjutsu_core::elevation::ElevatedRun {
             outcomes: vec![keyjutsu_core::execution::StepOutcome::Succeeded { exit_code: 0 }],
             output: "done elevated\n".into(),
+            captured: None,
         })
     }
 }
@@ -891,4 +892,72 @@ fn an_administrator_step_goes_to_the_broker_not_the_unelevated_shell() {
         )
     );
     assert!(!dir.join("typed-here.txt").exists(), "it was never typed into the unelevated shell");
+}
+
+/// Answers as the broker does for a step it captured before running.
+struct CapturingBroker;
+
+impl keyjutsu_core::elevation::ElevatedRunner for CapturingBroker {
+    fn run_step(
+        &self,
+        _: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<keyjutsu_core::elevation::ElevatedRun, String> {
+        Ok(keyjutsu_core::elevation::ElevatedRun {
+            outcomes: vec![keyjutsu_core::execution::StepOutcome::Succeeded { exit_code: 0 }],
+            output: String::new(),
+            captured: Some(keyjutsu_core::recovery::StepCapture {
+                step: step.to_owned(),
+                step_hash: step_hash.to_owned(),
+                captured_at: "by the broker".into(),
+                items: Vec::new(),
+            }),
+        })
+    }
+}
+
+/// An Administrator step's state is captured by the broker, not here: no
+/// capture is taken in the operator's profile, and the checkpoint keeps the
+/// broker's account of what it captured, to show in the recovery plan.
+#[test]
+fn an_administrator_steps_capture_is_the_brokers_not_the_profiles() {
+    if keyjutsu_core::elevation::is_elevated() {
+        eprintln!("skipped: this test process is elevated, so no broker is needed");
+        return;
+    }
+    let dir = scratch("admin-capture");
+    let target = fwd(&dir.join("setting.txt"));
+    std::fs::write(dir.join("setting.txt"), "before").unwrap();
+    let mut s = step("admin", "Get-Date");
+    s["privilege"] = json!("administrator");
+    s["reversibility"] = json!({"level": "full"});
+    s["recovery"] =
+        json!({"strategy": "restore_captured_state", "capture": [{"kind": "file", "target": target}]});
+    let draft = parse_plan(&plan(json!([s]), json!([])).to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
+    let validated =
+        keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    book.approve_all_except_critical(&validated, AT);
+    let snap = seal(&validated, &book, None, AT).unwrap();
+
+    let cp = dir.join("run.checkpoint.json");
+    let t = terminal();
+    let options = ExecuteOptions {
+        elevated_runner: Some(Arc::new(CapturingBroker)),
+        checkpoint: Some(cp.clone()),
+        ..mode(ExecutionMode::Direct)
+    };
+    let (outcome, checkpoint, events) = run(&t, &snap, &options, None);
+    t.session.close();
+    assert_eq!(outcome, Outcome::Complete, "{events:?}");
+    assert_eq!(checkpoint.captures.len(), 1);
+    assert_eq!(checkpoint.captures[0].captured_at, "by the broker");
+    let local = keyjutsu_core::recovery::recovery_dir(&cp);
+    assert!(
+        !local.exists() || std::fs::read_dir(&local).unwrap().next().is_none(),
+        "nothing was captured in the operator's profile"
+    );
 }

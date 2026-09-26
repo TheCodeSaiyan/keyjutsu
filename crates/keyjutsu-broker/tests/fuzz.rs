@@ -9,7 +9,7 @@
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use keyjutsu_broker::{Broker, PROTOCOL, Request, Response, read_frame};
+use keyjutsu_broker::{Broker, Done, PROTOCOL, Request, Response, Work, read_frame};
 use keyjutsu_core::elevation::ElevatedRun;
 use keyjutsu_core::plan::{ApprovalBook, ApprovedSnapshot, ValidPlan, parse_plan, seal};
 use keyjutsu_core::validation::{Options, validate};
@@ -36,6 +36,13 @@ fn snapshot() -> &'static ApprovedSnapshot {
                     {"id": "admin-final", "title": "Admin, no way back", "objective": "Needs Administrator.",
                      "kind": "command", "shell": {"kind": "pwsh"}, "privilege": "administrator",
                      "commands": [{"text": "Get-Service -Name Spooler"}]},
+                    {"id": "admin-restore", "title": "Admin, captured", "objective": "Needs Administrator.",
+                     "kind": "command", "shell": {"kind": "pwsh"}, "privilege": "administrator",
+                     "reversibility": {"level": "full"},
+                     "recovery": {"strategy": "restore_captured_state",
+                                  "capture": [{"kind": "registry_value",
+                                               "target": r"HKLM:\SOFTWARE\KeyJutsu-Fuzz\Value"}]},
+                     "commands": [{"text": "Get-Service -Name W32Time"}]},
                     {"id": "plain", "title": "Plain", "objective": "Does not.", "kind": "command",
                      "shell": {"kind": "pwsh"}, "commands": [{"text": "Get-Date"}]}
                 ]
@@ -62,6 +69,7 @@ fn message() -> impl Strategy<Value = Vec<u8>> {
     let admin = snap.step_hashes()["admin"].clone();
     let plain = snap.step_hashes()["plain"].clone();
     let final_ = snap.step_hashes()["admin-final"].clone();
+    let restorable = snap.step_hashes()["admin-restore"].clone();
     let good_hello = to_bytes(&Request::Hello { protocol: PROTOCOL, secret: SECRET.into() });
     let good_run = to_bytes(&Request::RunStep {
         snapshot_hash: hash.clone(),
@@ -114,6 +122,25 @@ fn message() -> impl Strategy<Value = Vec<u8>> {
         serde_json::to_vec(&json!({"kind": "recover_step", "snapshot_hash": hash, "step": "admin",
                                    "step_hash": admin, "commands": ["Stop-Computer"]}))
         .unwrap(),
+        // Restoring: only the broker's own capture of a step that declares one.
+        to_bytes(&Request::RestoreStep {
+            snapshot_hash: hash.clone(),
+            step: "admin-restore".into(),
+            step_hash: restorable.clone(),
+        }),
+        to_bytes(&Request::RestoreStep {
+            snapshot_hash: hash.clone(),
+            step: "admin".into(),
+            step_hash: admin.clone(),
+        }),
+        to_bytes(&Request::RestoreStep {
+            snapshot_hash: hash.clone(),
+            step: "admin-restore".into(),
+            step_hash: admin.clone(),
+        }),
+        serde_json::to_vec(&json!({"kind": "restore_step", "snapshot_hash": hash, "step": "admin-restore",
+                                   "step_hash": restorable, "value": "planted"}))
+        .unwrap(),
         to_bytes(&Request::Goodbye),
         // Smuggling a command alongside a real request.
         serde_json::to_vec(&json!({"kind": "run_step", "snapshot_hash": hash, "step": "admin",
@@ -155,7 +182,10 @@ proptest! {
             SECRET.into(),
             Box::new(move |_, step, work| {
                 seen.lock().unwrap().push(format!("{}:{work:?}", step.id));
-                Ok(ElevatedRun { outcomes: Vec::new(), output: String::new() })
+                Ok(match work {
+                    Work::Restore => Done::Restored(Vec::new()),
+                    _ => Done::Ran(ElevatedRun { outcomes: Vec::new(), output: String::new(), captured: None }),
+                })
             }),
         );
         let mut authenticated = false;
@@ -172,26 +202,40 @@ proptest! {
             let did_run = ran.lock().unwrap().len() > before;
             if did_run {
                 prop_assert!(authenticated, "ran for a client that never proved the secret");
-                let (snapshot_hash, step, step_hash, want) = match parsed {
+                // Which steps each request may do anything for.
+                let (snapshot_hash, step, step_hash, work, allowed): (_, _, _, _, &[&str]) = match parsed {
                     Some(Request::RunStep { snapshot_hash, step, step_hash }) => {
-                        (snapshot_hash, step, step_hash, "admin:Step")
+                        (snapshot_hash, step, step_hash, "Step", &["admin", "admin-restore"])
                     }
                     Some(Request::RecoverStep { snapshot_hash, step, step_hash }) => {
-                        (snapshot_hash, step, step_hash, "admin:Recovery")
+                        (snapshot_hash, step, step_hash, "Recovery", &["admin"])
                     }
-                    _ => return Err(TestCaseError::fail("ran for something that was not a step or its recovery")),
+                    Some(Request::RestoreStep { snapshot_hash, step, step_hash }) => {
+                        (snapshot_hash, step, step_hash, "Restore", &["admin-restore"])
+                    }
+                    _ => return Err(TestCaseError::fail("ran for something that names no approved step")),
                 };
                 prop_assert_eq!(snapshot_hash.as_str(), snap.snapshot_hash());
-                prop_assert_eq!(step.as_str(), "admin");
-                prop_assert_eq!(&step_hash, &snap.step_hashes()["admin"]);
+                prop_assert!(allowed.contains(&step.as_str()), "{} for `{}`", work, step);
+                prop_assert_eq!(&step_hash, &snap.step_hashes()[&step]);
                 let last = ran.lock().unwrap().last().cloned();
-                prop_assert_eq!(last.as_deref(), Some(want));
-                prop_assert!(matches!(response, Response::StepDone { .. }), "{:?}", response);
+                prop_assert_eq!(last, Some(format!("{step}:{work}")));
+                let answered = if work == "Restore" {
+                    matches!(response, Response::Restored { .. })
+                } else {
+                    matches!(response, Response::StepDone { .. })
+                };
+                prop_assert!(answered, "{:?}", response);
             } else {
-                prop_assert!(!matches!(response, Response::StepDone { .. }), "{:?}", response);
+                prop_assert!(
+                    !matches!(response, Response::StepDone { .. } | Response::Restored { .. }),
+                    "{:?}", response
+                );
             }
         }
-        prop_assert!(ran.lock().unwrap().iter().all(|s| s == "admin:Step" || s == "admin:Recovery"));
+        let everything = ran.lock().unwrap().clone();
+        let expected = ["admin:Step", "admin-restore:Step", "admin:Recovery", "admin-restore:Restore"];
+        prop_assert!(everything.iter().all(|s| expected.contains(&s.as_str())), "{:?}", everything);
     }
 
     /// A frame's length prefix is untrusted: however large it claims to be,
@@ -227,7 +271,7 @@ fn the_genuine_sequence_runs_the_approved_step() {
         SECRET.into(),
         Box::new(move |_, _, _| {
             *count.lock().unwrap() += 1;
-            Ok(ElevatedRun { outcomes: Vec::new(), output: String::new() })
+            Ok(Done::Ran(ElevatedRun { outcomes: Vec::new(), output: String::new(), captured: None }))
         }),
     );
     let hello = broker.handle(&to_bytes(&Request::Hello { protocol: PROTOCOL, secret: SECRET.into() }));

@@ -6,7 +6,10 @@
 //! through Windows' own "run as administrator" path, runs an approved
 //! Administrator step through it, checks the HKLM key exists, and checks an
 //! altered step is refused, then undoes it through the broker with the
-//! step's approved recovery command. Then a second Administrator step reads a staged
+//! step's approved recovery command. A third has what it changes captured
+//! by the broker and put back from the broker's own copy, after the broker
+//! has refused a captures folder made first by an ordinary user. Then a
+//! fourth Administrator step reads a staged
 //! download: the trial checks what it read reached HKLM, that the folder it
 //! read it from admitted only Administrators and SYSTEM and was removed
 //! afterwards, and that a staged file changed since it was pinned is
@@ -63,6 +66,18 @@ fn plan(value: &str) -> String {
                    "recovery": {"strategy": "commands",
                                 "commands": [{"text": format!("Remove-ItemProperty -Path '{KEY}' -Name Trial")}]},
                    "commands": [{"text": format!("New-Item -Path '{KEY}' -Force | Out-Null; Set-ItemProperty -Path '{KEY}' -Name Trial -Value {value}")}]},
+                  {"id": "admin-captured", "title": "Change a value the broker captured",
+                   "objective": "Needs Administrator, and is put back from the broker's capture.",
+                   "kind": "command", "shell": {"kind": "windows_powershell"}, "privilege": "administrator",
+                   "reversibility": {"level": "full"},
+                   "recovery": {"strategy": "restore_captured_state",
+                                "capture": [{"kind": "registry_value", "target": format!("{KEY}\\Captured")}]},
+                   "commands": [{"text": format!(
+                       "$d = Join-Path $env:ProgramData 'KeyJutsu'; \
+                        New-Item -Path '{KEY}' -Force | Out-Null; \
+                        Set-ItemProperty -Path '{KEY}' -Name RootOwner -Value (Get-Acl -LiteralPath $d).Owner; \
+                        Set-ItemProperty -Path '{KEY}' -Name RootAccess -Value (Get-Acl -LiteralPath $d).AccessToString; \
+                        Set-ItemProperty -Path '{KEY}' -Name Captured -Value changed")}]},
                   {"id": "use-artifact", "title": "Record a download under HKLM",
                    "objective": "Needs Administrator and a staged file.",
                    "kind": "command", "shell": {"kind": "windows_powershell"}, "privilege": "administrator",
@@ -102,6 +117,11 @@ fn main() -> ExitCode {
     let file = dir.join("broker-trial-snapshot.json");
     std::fs::write(&file, snap.to_json()).unwrap();
 
+    // Someone gets to %ProgramData%\KeyJutsu first, as an ordinary user may.
+    let secured = std::path::PathBuf::from(std::env::var("ProgramData").unwrap()).join("KeyJutsu");
+    let squatted = std::fs::create_dir(&secured).is_ok();
+    println!("{} made first by this unelevated account: {squatted}", secured.display());
+
     let exe = std::env::current_exe().unwrap().with_file_name("keyjutsu-broker.exe");
     println!(
         "starting the broker through 'run as administrator' (a UAC prompt may appear in the Sandbox window)"
@@ -138,6 +158,44 @@ fn main() -> ExitCode {
     let after_recovery = reg_value("Trial");
     println!("value after recovery: {after_recovery:?}");
     let undone = recovery.is_ok() && written.as_deref() == Some("approved") && after_recovery.is_none();
+
+    // Captured by the broker, where only Administrators can write.
+    let captured_hash = snap.step_hashes()["admin-captured"].clone();
+    let squat_refused = client.run_step(snap.snapshot_hash(), "admin-captured", &captured_hash);
+    println!("with the folder made by someone else: {squat_refused:?}");
+    let _ = std::fs::remove_dir(&secured);
+    let run_captured = client.run_step(snap.snapshot_hash(), "admin-captured", &captured_hash);
+    println!("captured: {:?}", run_captured.as_ref().map(|r| &r.captured));
+    let changed = reg_value("Captured");
+    let root_owner = reg_value("RootOwner").unwrap_or_default();
+    let root_access = reg_value("RootAccess").unwrap_or_default();
+    println!("value after the step: {changed:?}; folder owner: {root_owner}; access: {root_access:?}");
+    let planted = std::fs::write(secured.join("planted.json"), "{}");
+    println!("this unelevated account writing into it: {planted:?}");
+    let restored = client.restore_step(snap.snapshot_hash(), "admin-captured", &captured_hash);
+    println!("restore: {restored:?}");
+    let after_restore = reg_value("Captured");
+    println!("value after restore: {after_restore:?}");
+    let again = client.restore_step(snap.snapshot_hash(), "admin-captured", &captured_hash);
+    println!("restore again: {again:?}");
+    let captures_held = squatted
+        && squat_refused.as_ref().is_err_and(|e| e.contains("cannot hold Administrator captures"))
+        && run_captured.as_ref().is_ok_and(|r| r.captured.is_some())
+        && changed.as_deref() == Some("changed")
+        && root_owner.contains("Administrators")
+        && !root_access.contains("Users")
+        && planted.is_err()
+        && restored.as_ref().is_ok_and(|c| !c.is_empty() && c.iter().all(|c| c.passed == Some(true)))
+        && after_restore.is_none()
+        && again.as_ref().is_err_and(|e| e.contains("captured nothing"));
+    println!(
+        "captures: {}",
+        if captures_held {
+            "refused a squatted folder, kept in an Administrators-only one, restored once"
+        } else {
+            "FAILED"
+        }
+    );
     drop(client);
     let exists = key_exists();
     println!("HKLM key after: {exists}");
@@ -200,9 +258,9 @@ fn main() -> ExitCode {
         && removed
         && not_staged_copy
         && tampered.as_ref().is_err_and(|e| e.contains("changed since it was staged"));
-    if first && second {
+    if first && captures_held && second {
         println!(
-            "PASS: the broker ran the approved Administrator steps elevated, refused the altered one, undid one with its approved recovery command, handed over a checked copy of the artifact from a folder only Administrators could write to, and refused a changed one"
+            "PASS: the broker ran the approved Administrator steps elevated, refused the altered one, undid one with its approved recovery command, restored another from its own capture after refusing a squatted folder, handed over a checked copy of the artifact from a folder only Administrators could write to, and refused a changed one"
         );
         ExitCode::SUCCESS
     } else {

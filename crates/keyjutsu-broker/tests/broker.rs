@@ -73,7 +73,11 @@ fn start(
     let secret = secret.to_owned();
     let handle = std::thread::spawn(move || {
         keyjutsu_broker::accept_launcher(&server, expected_pid)?;
-        let mut broker = Broker::new(snap, secret, Box::new(|s, step, _| run_in_shell(s, step)));
+        let mut broker = Broker::new(
+            snap,
+            secret,
+            Box::new(|s, step, _| run_in_shell(s, step).map(keyjutsu_broker::Done::Ran)),
+        );
         let mut server = server;
         serve(&mut server, &mut broker).map_err(|e| e.to_string())
     });
@@ -271,4 +275,83 @@ fn an_elevated_step_is_handed_only_a_checked_copy_the_operator_cannot_touch() {
     let mut unpinned = step.clone();
     unpinned.artifacts[0].sha256 = None;
     assert!(hand_over(&unpinned, &store, &into).unwrap_err().contains("not pinned"));
+}
+
+fn powershell(script: &str) -> String {
+    let out = std::process::Command::new("powershell.exe")
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_owned()
+}
+
+/// The broker restores its own capture, of what the step declared, and
+/// nothing else; a capture changed to name something else is refused, and
+/// a capture is used once. Run against HKCU, with an ordinary folder
+/// standing in for the Administrators-only one.
+#[test]
+fn the_broker_restores_only_its_own_capture_of_what_the_step_declared() {
+    use keyjutsu_broker::captures::{capture, restore};
+    let dir = scratch("captures");
+    let root = dir.join("root");
+    let key = format!(r"HKCU:\Software\KeyJutsu-Tests\broker-{}", std::process::id());
+    let value = format!(r"{key}\Value");
+    // The test's key goes when the test ends, passed or not.
+    struct Gone(String);
+    impl Drop for Gone {
+        fn drop(&mut self) {
+            powershell(&format!(
+                "Remove-Item -LiteralPath '{}' -Recurse -Force; $p = 'HKCU:\\Software\\KeyJutsu-Tests'; if (-not (Get-ChildItem -LiteralPath $p)) {{ Remove-Item -LiteralPath $p -ErrorAction SilentlyContinue }}",
+                self.0
+            ));
+        }
+    }
+    let _gone = Gone(key.clone());
+    let read = || powershell(&format!("(Get-ItemProperty -LiteralPath '{key}' -Name Value).Value"));
+    powershell(&format!(
+        "New-Item -Path '{key}' -Force | Out-Null; Set-ItemProperty -LiteralPath '{key}' -Name Value -Value before"
+    ));
+
+    let draft = parse_plan(
+        &json!({
+            "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+            "target": {"id": "local", "kind": "local_windows"},
+            "agent": {"name": "codex", "version": "1"},
+            "steps": [{"id": "change", "title": "Change", "objective": "Changes a value.", "kind": "command",
+                       "shell": {"kind": "pwsh"}, "commands": [{"text": "Get-Date"}],
+                       "reversibility": {"level": "full"},
+                       "recovery": {"strategy": "restore_captured_state",
+                                    "capture": [{"kind": "registry_value", "target": value}]}}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let v = ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
+    let mut book = ApprovalBook::new();
+    book.approve_all_except_critical(&v, AT);
+    let snap = seal(&v, &book, None, AT).unwrap();
+    let step = snap.plan().step("change").unwrap().clone();
+
+    capture(&root, &snap, &step, AT.into()).unwrap();
+    powershell(&format!("Set-ItemProperty -LiteralPath '{key}' -Name Value -Value after"));
+    assert_eq!(read(), "after");
+
+    // Its capture changed to name something the step never declared.
+    let kept = root.join("captures").join(snap.snapshot_hash()).join("change").join("capture.json");
+    let honest = std::fs::read_to_string(&kept).unwrap();
+    // In the JSON each backslash is written twice.
+    let forged = honest.replace(&value.replace('\\', r"\\"), r"HKCU:\\Software\\Elsewhere\\Run");
+    assert_ne!(forged, honest);
+    std::fs::write(&kept, forged).unwrap();
+    let refused = restore(&root, &snap, &step).unwrap_err();
+    assert!(refused.contains("was not declared"), "{refused}");
+    assert_eq!(read(), "after", "nothing was written");
+
+    std::fs::write(&kept, honest).unwrap();
+    let checks = restore(&root, &snap, &step).unwrap();
+    assert!(checks.iter().all(|c| c.passed == Some(true)), "{checks:?}");
+    assert_eq!(read(), "before");
+    assert!(!kept.exists(), "a capture is used once");
+    assert!(restore(&root, &snap, &step).unwrap_err().contains("captured nothing"));
 }
