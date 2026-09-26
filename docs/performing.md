@@ -74,9 +74,24 @@ profile above the terminal. It's remembered.
 | --- | --- | --- |
 | **Show it** | the question, over the terminal | answer it |
 | **Keep the illusion** | the terminal, paused, with a faint edge that reads as the window's own | press Ctrl+Shift+K; the question opens as a small card in the corner |
+| **Stage an error** | what looks like a command that failed, and a fresh prompt | read its wording, then press Ctrl+Shift+K |
 | **Out of view** | the terminal, paused, and nothing else | the taskbar button flashes, which a shared window doesn't show; press Ctrl+Shift+K |
 
-With either of the last two, the end of a run stays on the terminal rather
+**Stage an error** shows a believable error in the shell's own style, then
+what looks like the prompt again. Its wording is the tell:
+
+- "The operation cannot continue until it is **confirmed**." A critical step
+  is waiting for its phrase.
+- "The operation cannot continue until the session is **resumed**." A plan
+  is waiting to continue after a restart.
+
+It's a layer laid over the terminal, in the terminal's own font and colours,
+with a blinking cursor after the staged prompt; nothing is written into the
+terminal, so the shell never sees it, and it isn't in the history or in
+anything an agent is shown. It goes the moment you answer. If there's no room
+for it below the prompt, you get the faint edge instead.
+
+With any choice but **Show it**, the end of a run stays on the terminal rather
 than jumping to the run's results, and keys go nowhere until you press
 Ctrl+Shift+K: otherwise the last few mashed keys would be typed into the
 real shell, in front of everyone. **Show it** also puts "credential required"

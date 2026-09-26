@@ -346,6 +346,40 @@ button.arm {
   }
 }
 
+/* A staged error: laid over the rows below the prompt, in the terminal's
+   own font and colours, never written into the terminal. */
+.staged-layer {
+  position: absolute;
+  white-space: pre;
+  pointer-events: none;
+}
+
+.staged-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  vertical-align: text-bottom;
+}
+
+.staged-cursor[data-style="bar"] {
+  width: 2px;
+}
+
+.staged-cursor[data-style="underline"] {
+  height: 2px;
+  vertical-align: bottom;
+}
+
+.staged-cursor[data-blink] {
+  animation: kj-cursor 1.06s step-end infinite;
+}
+
+@keyframes kj-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+
 /* Said over the terminal when the operator has asked to be told. */
 .term-banner {
   position: absolute;
@@ -363,6 +397,7 @@ button.arm {
 }
 
 .terminal-frame {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;

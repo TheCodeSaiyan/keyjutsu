@@ -10,6 +10,9 @@ import type { KeyChord } from "@keyjutsu/types";
  * - `discreet`: the terminal is never covered. A faint edge appears on it,
  *   and the question waits in a small corner card the operator opens with
  *   Ctrl+Shift+K. The room sees a terminal that paused.
+ * - `staged`: the terminal shows a believable error, worded so the
+ *   operator knows what KeyJutsu wants (see `staging.ts`); Ctrl+Shift+K
+ *   opens the question. Where it would not fit, the faint edge instead.
  * - `hidden`: nothing in the window at all; the taskbar button flashes,
  *   which a shared window does not show. The operator opens the card with
  *   Ctrl+Shift+K.
@@ -17,7 +20,7 @@ import type { KeyChord } from "@keyjutsu/types";
  * Whatever the choice, nothing runs until the operator answers: this only
  * changes how the question is put.
  */
-export type Presentation = "standard" | "discreet" | "hidden";
+export type Presentation = "standard" | "discreet" | "staged" | "hidden";
 
 export const PRESENTATIONS: { value: Presentation; label: string; hint: string }[] = [
   {
@@ -29,6 +32,11 @@ export const PRESENTATIONS: { value: Presentation; label: string; hint: string }
     value: "discreet",
     label: "Keep the illusion",
     hint: "A faint edge on the terminal; Ctrl+Shift+K opens the question in a corner.",
+  },
+  {
+    value: "staged",
+    label: "Stage an error",
+    hint: "A believable error in the terminal says what is wanted; Ctrl+Shift+K opens the question.",
   },
   {
     value: "hidden",
@@ -52,6 +60,8 @@ export interface Rules {
   holdAfterRun: boolean;
   /** Say "credential required" over the terminal. */
   credentialBanner: boolean;
+  /** Show a staged error in the terminal while a question waits. */
+  stagedError: boolean;
 }
 
 export function rules(p: Presentation): Rules {
@@ -63,6 +73,7 @@ export function rules(p: Presentation): Rules {
         flashTaskbar: false,
         holdAfterRun: false,
         credentialBanner: true,
+        stagedError: false,
       };
     case "discreet":
       return {
@@ -71,6 +82,16 @@ export function rules(p: Presentation): Rules {
         flashTaskbar: false,
         holdAfterRun: true,
         credentialBanner: false,
+        stagedError: false,
+      };
+    case "staged":
+      return {
+        coverTerminal: false,
+        edgeCue: false,
+        flashTaskbar: false,
+        holdAfterRun: true,
+        credentialBanner: false,
+        stagedError: true,
       };
     case "hidden":
       return {
@@ -79,6 +100,7 @@ export function rules(p: Presentation): Rules {
         flashTaskbar: true,
         holdAfterRun: true,
         credentialBanner: false,
+        stagedError: false,
       };
   }
 }
@@ -102,7 +124,7 @@ const STORAGE_KEY = "keyjutsu.presentation";
 export function loadPresentation(): Presentation {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "standard" || v === "discreet" || v === "hidden") return v;
+    if (v === "standard" || v === "discreet" || v === "staged" || v === "hidden") return v;
   } catch {
     /* no storage: the default */
   }

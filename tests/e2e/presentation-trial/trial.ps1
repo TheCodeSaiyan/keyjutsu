@@ -69,10 +69,23 @@ d click 'Approve plan'
 Start-Sleep -Seconds 3
 d keys 'DELETE THE OLD BUILD CACHE'
 d click 'Approve critical step'
-Start-Sleep -Seconds 6
+# Sealed only once validation has run again: wait for the result before
+# moving the clock, or the plan is sealed after it and its approval is new.
+$sealed = $false
+for ($i = 0; $i -lt 30 -and -not $sealed; $i++) { $sealed = has 'Arm KeyJutsu'; if (-not $sealed) { Start-Sleep -Seconds 2 } }
+check 'the plan was approved and sealed' $sealed
+Start-Sleep -Seconds 2
 
 # Two hours on: the approval is past its hour when the step is reached.
+# Time sync first: the Windows Time service and Hyper-V's own set a moved
+# clock straight back, within seconds.
+foreach ($svc in 'vmictimesync', 'w32time') {
+    Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+    Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+}
 Set-Date (Get-Date).AddHours(2) | Out-Null
+Start-Sleep -Seconds 5
+log "clock after five seconds: $(Get-Date -Format o)"
 log "clock moved on to $(Get-Date -Format o)"
 d click 'Arm KeyJutsu'
 Start-Sleep -Seconds 15
@@ -100,6 +113,35 @@ d chord '^+k'
 Start-Sleep -Seconds 3
 d capture '' 'released'
 check 'Ctrl+Shift+K lets go of the stage' (has 'Back to the plan')
+
+# The same plan again, still past its hour, with "Stage an error": the next
+# choice down. The staged error is judged by eye from the screenshots: it
+# should read as the shell's own, and be gone, leaving a clean line, once
+# the step has been confirmed.
+d click 'When KeyJutsu needs you'
+Start-Sleep -Milliseconds 800
+d chord '{DOWN}'
+d chord '{ENTER}'
+Start-Sleep -Seconds 1
+d capture '' 'staged-setting'
+New-Item -ItemType Directory -Force $cache | Out-Null
+Set-Content -LiteralPath "$cache\old.bin" -Value 'old'
+d click 'Back to the plan'
+Start-Sleep -Seconds 2
+d click 'Arm KeyJutsu'
+Start-Sleep -Seconds 15
+d capture '' 'staged-waiting'
+check 'staged: the question does not cover the terminal' (-not (has 'Run critical step'))
+check 'staged: the step has not run while waiting' (Test-Path "$cache\old.bin")
+d chord '^+k'
+Start-Sleep -Seconds 2
+d keys 'DELETE THE OLD BUILD CACHE'
+d click 'Run critical step'
+Start-Sleep -Seconds 15
+d capture '' 'staged-after'
+check 'staged: the critical step ran once confirmed' (-not (Test-Path $cache))
+d chord '^+k'
+Start-Sleep -Seconds 2
 
 Get-Process keyjutsu-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($script:failed) { log 'RESULT: FAIL' } else { log 'RESULT: PASS' }

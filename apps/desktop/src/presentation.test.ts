@@ -37,6 +37,18 @@ describe("presentation", () => {
     expect(rules("hidden").credentialBanner).toBe(false);
   });
 
+  it("stages an error only when asked to, with nothing else on screen", () => {
+    expect(rules("staged")).toMatchObject({
+      stagedError: true,
+      coverTerminal: false,
+      edgeCue: false,
+      flashTaskbar: false,
+    });
+    for (const p of ["standard", "discreet", "hidden"] as const) {
+      expect(rules(p).stagedError).toBe(false);
+    }
+  });
+
   it("recognises Ctrl+Shift+K and nothing like it", () => {
     expect(isOperatorChord(chord({ key: { char: "K" }, ctrl: true, shift: true }))).toBe(true);
     expect(isOperatorChord(chord({ key: { char: "k" }, ctrl: true, shift: true }))).toBe(true);

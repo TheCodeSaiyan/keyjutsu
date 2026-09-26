@@ -35,6 +35,7 @@ import { ResumeDialog } from "./components/ResumeDialog";
 import { HistoryView } from "./components/HistoryView";
 import { TechniquesView } from "./components/TechniquesView";
 import { boundaryName, confirmationFor } from "./plan";
+import { stagedError } from "./staging";
 import {
   PRESENTATIONS,
   isOperatorChord,
@@ -118,6 +119,8 @@ export function App() {
   const [revealed, setRevealed] = useState(false);
   const [credential, setCredential] = useState<string | null>(null);
   const [holding, setHolding] = useState(false);
+  // A staged error is on screen; where it would not fit, the edge instead.
+  const [staged, setStaged] = useState<boolean | null>(null);
   const presentationRef = useRef(presentation);
   useEffect(() => {
     presentationRef.current = presentation;
@@ -436,6 +439,20 @@ export function App() {
     },
     [sessionId, holding, revealed, critical, resumeNotice],
   );
+  // A question arrived: with "Stage an error", show one. Taken away again,
+  // synchronously, before the answer lets anything more reach the terminal.
+  const waitingFor =
+    critical !== null && critical.purpose === "run" ? "confirm" : resumeNotice ? "resume" : null;
+  useEffect(() => {
+    if (!waitingFor || !rules(presentation).stagedError || staged !== null || !term.current) return;
+    const lines = stagedError(waitingFor, shell ?? "pwsh", term.current.promptText());
+    setStaged(term.current.stage(lines));
+  }, [waitingFor, presentation, staged, shell]);
+  const unstage = () => {
+    term.current?.unstage();
+    setStaged(null);
+  };
+
   // KeyJutsu is waiting on the operator. Out of view, the taskbar button
   // flashes, which a shared window does not show.
   const waitingNow =
@@ -520,6 +537,7 @@ export function App() {
       purpose={critical.purpose}
       onConfirm={(typed) => {
         if (critical.purpose === "run") {
+          unstage();
           setCritical(null);
           setRevealed(false);
           void ipc.confirm(typed);
@@ -536,7 +554,10 @@ export function App() {
         }
       }}
       onCancel={() => {
-        if (critical.purpose === "run") void ipc.confirm(null);
+        if (critical.purpose === "run") {
+          unstage();
+          void ipc.confirm(null);
+        }
         setCritical(null);
         setRevealed(false);
       }}
@@ -876,7 +897,11 @@ export function App() {
 
             <section
               className="term-area"
-              data-cue={waitingOnOperator && r.edgeCue ? "waiting" : undefined}
+              data-cue={
+                waitingOnOperator && (r.edgeCue || (r.stagedError && staged === false))
+                  ? "waiting"
+                  : undefined
+              }
             >
               <TerminalView
                 ref={term}
@@ -926,12 +951,14 @@ export function App() {
           notice={resumeNotice}
           discreet={!r.coverTerminal}
           onConfirm={(typed) => {
+            unstage();
             setResumeNotice(null);
             setRevealed(false);
             void ipc.confirm(typed);
             term.current?.focus();
           }}
           onCancel={() => {
+            unstage();
             setResumeNotice(null);
             setRevealed(false);
             void ipc.confirm(null);
