@@ -20,23 +20,28 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use keyjutsu_core::elevation::{ElevatedRun, ElevatedRunner};
+use keyjutsu_core::execute::CheckResult;
 use keyjutsu_core::execute::{ForwardingSink, Performed, hand_artifacts, perform, staged_for};
 use keyjutsu_core::execution::StagedScript;
 use keyjutsu_core::execution::{ExecutionMode, PerformanceConfig, StepOutcome};
 use keyjutsu_core::headless::Collector;
 use keyjutsu_core::plan::ApprovedSnapshot;
 use keyjutsu_core::plan::model::{Privilege, RecoveryStrategy, ShellName, Step, ValidationDisplay};
+use keyjutsu_core::recovery::StepCapture;
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 use keyjutsu_core::{Session, SessionOptions};
 use serde::{Deserialize, Serialize};
 
 #[cfg(windows)]
+pub mod captures;
+#[cfg(windows)]
 pub mod pipe;
 #[cfg(windows)]
 pub mod protected;
 
-/// Both ends must speak exactly this version. 2 added `RecoverStep`.
-pub const PROTOCOL: u32 = 2;
+/// Both ends must speak exactly this version. 2 added `RecoverStep`; 3
+/// added `RestoreStep` and the broker's own captures.
+pub const PROTOCOL: u32 = 3;
 /// No message is larger than this.
 const MAX_FRAME: usize = 1024 * 1024;
 
@@ -59,15 +64,37 @@ pub enum Request {
         step: String,
         step_hash: String,
     },
+    /// Put back what the broker itself captured before approved step X
+    /// ran. It names the step and carries no path and no value.
+    RestoreStep {
+        snapshot_hash: String,
+        step: String,
+        step_hash: String,
+    },
     Goodbye,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Response {
-    Welcome { protocol: u32, snapshot_hash: String, elevated: bool },
-    Refused { reason: String },
-    StepDone { outcomes: Vec<StepOutcome>, output: String },
+    Welcome {
+        protocol: u32,
+        snapshot_hash: String,
+        elevated: bool,
+    },
+    Refused {
+        reason: String,
+    },
+    StepDone {
+        outcomes: Vec<StepOutcome>,
+        output: String,
+        /// What the broker captured before the step, for display.
+        #[serde(default)]
+        captured: Option<StepCapture>,
+    },
+    Restored {
+        checks: Vec<CheckResult>,
+    },
     Bye,
 }
 
@@ -111,9 +138,18 @@ pub enum Work {
     Step,
     /// Run its approved recovery commands.
     Recovery,
+    /// Put back what the broker captured before it ran.
+    Restore,
 }
 
-pub type StepRunner = Box<dyn FnMut(&ApprovedSnapshot, &Step, Work) -> Result<ElevatedRun, String> + Send>;
+/// What the broker did.
+#[derive(Debug)]
+pub enum Done {
+    Ran(ElevatedRun),
+    Restored(Vec<CheckResult>),
+}
+
+pub type StepRunner = Box<dyn FnMut(&ApprovedSnapshot, &Step, Work) -> Result<Done, String> + Send>;
 
 pub struct Broker {
     snapshot: ApprovedSnapshot,
@@ -159,7 +195,9 @@ impl Broker {
                 }
             }
             Request::Goodbye => Response::Bye,
-            Request::RunStep { .. } | Request::RecoverStep { .. } if !self.authenticated => {
+            Request::RunStep { .. } | Request::RecoverStep { .. } | Request::RestoreStep { .. }
+                if !self.authenticated =>
+            {
                 refuse("not authenticated".into())
             }
             Request::RunStep { snapshot_hash, step, step_hash } => {
@@ -178,6 +216,19 @@ impl Broker {
                     return refuse(format!("step `{step}` has no approved recovery commands"));
                 }
                 self.work(&s, Work::Recovery)
+            }
+            Request::RestoreStep { snapshot_hash, step, step_hash } => {
+                let s = match self.approved(&snapshot_hash, &step, &step_hash) {
+                    Ok(s) => s,
+                    Err(reason) => return refuse(reason),
+                };
+                let restores = s.recovery.as_ref().is_some_and(|r| {
+                    r.strategy == RecoveryStrategy::RestoreCapturedState && !r.capture.is_empty()
+                });
+                if !restores {
+                    return refuse(format!("step `{step}` declares nothing to capture and restore"));
+                }
+                self.work(&s, Work::Restore)
             }
         }
     }
@@ -210,7 +261,10 @@ impl Broker {
 
     fn work(&mut self, s: &Step, work: Work) -> Response {
         match (self.run)(&self.snapshot, s, work) {
-            Ok(run) => Response::StepDone { outcomes: run.outcomes, output: run.output },
+            Ok(Done::Ran(run)) => {
+                Response::StepDone { outcomes: run.outcomes, output: run.output, captured: run.captured }
+            }
+            Ok(Done::Restored(checks)) => Response::Restored { checks },
             Err(e) => Response::Refused { reason: format!("step `{}` could not be run: {e}", s.id) },
         }
     }
@@ -297,12 +351,56 @@ pub fn run_recovery(step: &Step) -> Result<ElevatedRun, String> {
     run_script(step, script)
 }
 
-/// The broker's runner: a step's commands, or its recovery commands.
+/// The broker's runner: a step's commands, with what it declares captured
+/// first; its recovery commands; or putting back what was captured.
 pub fn runner(artifacts: Option<std::path::PathBuf>) -> StepRunner {
     Box::new(move |snapshot, step, work| match work {
-        Work::Step => run_step(snapshot, step, artifacts.as_deref()),
-        Work::Recovery => run_recovery(step),
+        Work::Step => {
+            let captured = captured_first(snapshot, step)?;
+            let mut run = run_step(snapshot, step, artifacts.as_deref())?;
+            run.captured = captured;
+            Ok(Done::Ran(run))
+        }
+        Work::Recovery => run_recovery(step).map(Done::Ran),
+        Work::Restore => restore(snapshot, step).map(Done::Restored),
     })
+}
+
+/// Capture what `step` declares, before it runs, where only Administrators
+/// can write (ADR 0017). A capture that cannot be made stops the step.
+fn captured_first(snapshot: &ApprovedSnapshot, step: &Step) -> Result<Option<StepCapture>, String> {
+    let captures = step
+        .recovery
+        .as_ref()
+        .is_some_and(|r| r.strategy == RecoveryStrategy::RestoreCapturedState && !r.capture.is_empty());
+    if !captures {
+        return Ok(None);
+    }
+    #[cfg(windows)]
+    {
+        let root = captures::secured_root()?;
+        let at = keyjutsu_core::fingerprint::now_rfc3339();
+        captures::capture(&root, snapshot, step, at)
+            .map(Some)
+            .map_err(|e| format!("could not prepare recovery, so the step did not run: {e}"))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = snapshot;
+        Err("captures need Windows".into())
+    }
+}
+
+fn restore(snapshot: &ApprovedSnapshot, step: &Step) -> Result<Vec<CheckResult>, String> {
+    #[cfg(windows)]
+    {
+        captures::restore(&captures::secured_root()?, snapshot, step)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (snapshot, step);
+        Err("captures need Windows".into())
+    }
 }
 
 /// A script in a fresh shell of the step's kind, directly.
@@ -332,7 +430,7 @@ fn run_script(step: &Step, script: StagedScript) -> Result<ElevatedRun, String> 
     session.close();
     let output = text.get(before..).unwrap_or("").to_owned();
     match performed {
-        Performed::Finished(outcomes) => Ok(ElevatedRun { outcomes, output }),
+        Performed::Finished(outcomes) => Ok(ElevatedRun { outcomes, output, captured: None }),
         Performed::Refused(r) => Err(r),
         Performed::Unfinished { .. } => Err("the elevated shell ended before the step finished".into()),
     }
@@ -427,7 +525,9 @@ impl BrokerClient {
 impl BrokerClient {
     fn done(&self, request: &Request) -> Result<ElevatedRun, String> {
         match self.ask(request)? {
-            Response::StepDone { outcomes, output } => Ok(ElevatedRun { outcomes, output }),
+            Response::StepDone { outcomes, output, captured } => {
+                Ok(ElevatedRun { outcomes, output, captured })
+            }
             Response::Refused { reason } => Err(reason),
             other => Err(format!("unexpected answer: {other:?}")),
         }
@@ -449,6 +549,23 @@ impl ElevatedRunner for BrokerClient {
             step: step.to_owned(),
             step_hash: step_hash.to_owned(),
         })
+    }
+
+    fn restore_step(
+        &self,
+        snapshot_hash: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<Vec<CheckResult>, String> {
+        match self.ask(&Request::RestoreStep {
+            snapshot_hash: snapshot_hash.to_owned(),
+            step: step.to_owned(),
+            step_hash: step_hash.to_owned(),
+        })? {
+            Response::Restored { checks } => Ok(checks),
+            Response::Refused { reason } => Err(reason),
+            other => Err(format!("unexpected answer: {other:?}")),
+        }
     }
 }
 

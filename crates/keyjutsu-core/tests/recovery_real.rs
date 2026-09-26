@@ -373,9 +373,9 @@ fn approve_with_broker(v: &Value) -> ApprovedSnapshot {
     seal(&validated, &book, None, AT).unwrap()
 }
 
-/// Records what it was asked to recover, and runs nothing.
+/// Records what it was asked to recover or restore, and does nothing.
 #[derive(Default)]
-struct RecordingBroker(Mutex<Vec<(String, String)>>);
+struct RecordingBroker(Mutex<Vec<(String, String, String)>>);
 
 impl keyjutsu_core::elevation::ElevatedRunner for RecordingBroker {
     fn run_step(
@@ -392,11 +392,25 @@ impl keyjutsu_core::elevation::ElevatedRunner for RecordingBroker {
         step: &str,
         step_hash: &str,
     ) -> Result<keyjutsu_core::elevation::ElevatedRun, String> {
-        self.0.lock().unwrap().push((step.to_owned(), step_hash.to_owned()));
+        self.0.lock().unwrap().push(("recover".into(), step.to_owned(), step_hash.to_owned()));
         Ok(keyjutsu_core::elevation::ElevatedRun {
             outcomes: vec![keyjutsu_core::execution::StepOutcome::Succeeded { exit_code: 0 }],
             output: String::new(),
+            captured: None,
         })
+    }
+    fn restore_step(
+        &self,
+        _: &str,
+        step: &str,
+        step_hash: &str,
+    ) -> Result<Vec<keyjutsu_core::execute::CheckResult>, String> {
+        self.0.lock().unwrap().push(("restore".into(), step.to_owned(), step_hash.to_owned()));
+        Ok(vec![keyjutsu_core::execute::CheckResult {
+            check: "registry value".into(),
+            passed: Some(true),
+            detail: "restored by the broker, from its own capture".into(),
+        }])
     }
 }
 
@@ -416,10 +430,10 @@ fn ran(snap: &ApprovedSnapshot, ids: &[&str]) -> Checkpoint {
     cp
 }
 
-/// An Administrator step's recovery commands go to the elevation broker,
-/// named by step and hash only; they are never typed into the unelevated
-/// terminal. What it captured is not handed to the broker to write back:
-/// that lives in the operator's profile.
+/// An Administrator step is recovered through the elevation broker, named by
+/// step and hash only: its recovery commands, and what it captured, which
+/// the broker restores from its own copy. The checkpoint's account of the
+/// capture is only shown; nothing in it is written back.
 #[test]
 fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_profile() {
     if keyjutsu_core::elevation::is_elevated() {
@@ -438,33 +452,27 @@ fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_prof
     restore["privilege"] = json!("administrator");
     let snap = approve_with_broker(&plan(json!([undo, restore])));
     let mut checkpoint = ran(&snap, &["undo", "restore"]);
+    // The broker's account of what it captured, as the checkpoint keeps it,
+    // with a value planted in it: were it restored from here, the planted
+    // value would be written as Administrator.
     checkpoint.captures.push(keyjutsu_core::recovery::StepCapture {
         step: "restore".into(),
         step_hash: snap.step_hashes()["restore"].clone(),
         captured_at: AT.into(),
         items: vec![keyjutsu_core::recovery::Captured::RegistryValue {
             target: r"HKLM:\SOFTWARE\KeyJutsu-Tests\Value".into(),
-            existed: false,
-            value_kind: None,
-            value_json: None,
+            existed: true,
+            value_kind: Some("String".into()),
+            value_json: Some("\"planted\"".into()),
         }],
     });
 
-    let items = keyjutsu_core::recovery::plan_recovery_as(&snap, &checkpoint, &[], false).unwrap();
-    match &items[0] {
-        RecoveryItem::Cannot { step, reason } => {
-            assert_eq!(step, "restore");
-            assert!(reason.contains("does not trust"), "{reason}");
-        }
-        other => panic!("restoring captures unelevated: {other:?}"),
-    }
-    assert!(matches!(&items[1], RecoveryItem::Commands { step, .. } if step == "undo"));
-    // Elevated, KeyJutsu restores the captures itself.
-    let elevated = keyjutsu_core::recovery::plan_recovery_as(&snap, &checkpoint, &[], true).unwrap();
-    assert!(matches!(&elevated[0], RecoveryItem::Restore { .. }), "{elevated:?}");
+    let items = plan_recovery(&snap, &checkpoint, &[]).unwrap();
+    assert!(matches!(&items[0], RecoveryItem::Restore { step, .. } if step == "restore"), "{items:?}");
+    assert!(matches!(&items[1], RecoveryItem::Commands { step, .. } if step == "undo"), "{items:?}");
     assert!(keyjutsu_core::recovery::needs_broker(&snap, &items));
 
-    // With the broker: it is asked, by step and hash, and nothing else runs.
+    // With the broker: it is asked, by step and hash, and the checks are its own.
     let broker = RecordingBroker::default();
     let results = recover(
         None,
@@ -472,16 +480,24 @@ fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_prof
         &snap,
         &checkpoint,
         &dir,
-        &items[1..],
+        &items,
         &PerformanceConfig::default(),
         &|_| {},
     );
-    assert!(results[0].recovered, "{results:?}");
-    assert_eq!(*broker.0.lock().unwrap(), [("undo".to_owned(), snap.step_hashes()["undo"].clone())]);
+    assert!(results.iter().all(|r| r.recovered), "{results:?}");
+    assert_eq!(results[0].checks[0].detail, "restored by the broker, from its own capture");
+    let asked = broker.0.lock().unwrap().clone();
+    assert_eq!(
+        asked,
+        [
+            ("restore".to_owned(), "restore".to_owned(), snap.step_hashes()["restore"].clone()),
+            ("recover".to_owned(), "undo".to_owned(), snap.step_hashes()["undo"].clone()),
+        ]
+    );
 
-    // Without it: refused, and said why; no terminal was needed to find out.
+    // Without it: refused, and said why, before anything is written.
     let results =
-        recover(None, None, &snap, &checkpoint, &dir, &items[1..], &PerformanceConfig::default(), &|_| {});
+        recover(None, None, &snap, &checkpoint, &dir, &items, &PerformanceConfig::default(), &|_| {});
     assert!(!results[0].recovered);
     assert!(results[0].checks[0].detail.contains("no elevation broker"), "{results:?}");
 }

@@ -22,4 +22,4 @@ the code looks the way it does stays readable.
 | [0014](0014-validation-runs-nothing-it-validates.md) | Validation runs nothing a plan names, with one guarded exception | Accepted |
 | [0015](0015-credentials-through-the-shells-masked-prompt.md) | Credentials are typed into the shell's own masked prompt | Accepted |
 | [0016](0016-encrypted-file-store.md) | History is an encrypted file store under a DPAPI-protected key | Accepted |
-| [0017](0017-broker-keeps-administrator-captures.md) | The broker captures and restores what an Administrator step changes | Proposed |
+| [0017](0017-broker-keeps-administrator-captures.md) | The broker captures and restores what an Administrator step changes | Accepted |

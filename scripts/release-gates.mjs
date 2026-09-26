@@ -22,6 +22,8 @@ const gates = {
     "a_broker_that_dies_mid_step_leaves_the_step_in_doubt",
     "an_elevated_step_is_handed_only_a_checked_copy_the_operator_cannot_touch",
     "an_unelevated_account_cannot_write_into_the_admins_only_folder",
+    "only_a_folder_kept_to_administrators_and_system_holds_captures",
+    "the_broker_restores_only_its_own_capture_of_what_the_step_declared",
   ],
   "Plan integrity": [
     "changing_a_step_invalidates_it_and_everything_after_it",
@@ -101,6 +103,7 @@ const gates = {
     "a_backup_changed_since_it_was_taken_is_not_used",
     "a_step_whose_recovery_cannot_be_prepared_does_not_run",
     "an_administrator_step_is_recovered_through_the_broker_and_never_from_the_profile",
+    "an_administrator_steps_capture_is_the_brokers_not_the_profiles",
   ],
   "Credential boundary": [
     "a_line_that_asks_the_operator_waits_for_enter_and_is_never_performed",

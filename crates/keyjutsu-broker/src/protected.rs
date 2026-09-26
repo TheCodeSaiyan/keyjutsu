@@ -59,41 +59,48 @@ impl ProtectedDir {
     /// name exists, rather than using a folder someone else made.
     fn create_in(parent: &Path, sddl: &str) -> Result<Self, String> {
         let path = parent.join(format!("keyjutsu-broker-{}", &crate::random_hex()[..32]));
-        let sddl = wide(sddl);
-        let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
-        // SAFETY: `sddl` is NUL-terminated; the descriptor allocated on
-        // success is freed below, after the folder has taken its copy.
-        if unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                sddl.as_ptr(),
-                SDDL_REVISION_1,
-                &mut sd,
-                std::ptr::null_mut(),
-            )
-        } == 0
-        {
-            return Err("cannot build the folder's access list".into());
-        }
-        let sa = SECURITY_ATTRIBUTES {
-            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-            lpSecurityDescriptor: sd,
-            bInheritHandle: 0,
-        };
-        let name = wide(&path.display().to_string());
-        // SAFETY: `name` is NUL-terminated and `sa` points at a valid
-        // descriptor for the duration of the call.
-        let made = unsafe { CreateDirectoryW(name.as_ptr(), &sa) };
-        // SAFETY: allocated by the conversion above; the folder keeps its own copy.
-        unsafe { LocalFree(sd) };
-        if made == 0 {
-            return Err(format!("cannot create {}: {}", path.display(), std::io::Error::last_os_error()));
-        }
+        create_with(&path, sddl)?;
         Ok(Self { path })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
+}
+
+/// Make the folder `path` with the owner and access list `sddl`. Fails if it
+/// exists, rather than taking over a folder someone else made.
+pub fn create_with(path: &Path, sddl: &str) -> Result<(), String> {
+    let sddl = wide(sddl);
+    let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+    // SAFETY: `sddl` is NUL-terminated; the descriptor allocated on
+    // success is freed below, after the folder has taken its copy.
+    if unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            SDDL_REVISION_1,
+            &mut sd,
+            std::ptr::null_mut(),
+        )
+    } == 0
+    {
+        return Err("cannot build the folder's access list".into());
+    }
+    let sa = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: sd,
+        bInheritHandle: 0,
+    };
+    let name = wide(&path.display().to_string());
+    // SAFETY: `name` is NUL-terminated and `sa` points at a valid
+    // descriptor for the duration of the call.
+    let made = unsafe { CreateDirectoryW(name.as_ptr(), &sa) };
+    // SAFETY: allocated by the conversion above; the folder keeps its own copy.
+    unsafe { LocalFree(sd) };
+    if made == 0 {
+        return Err(format!("cannot create {}: {}", path.display(), std::io::Error::last_os_error()));
+    }
+    Ok(())
 }
 
 impl Drop for ProtectedDir {

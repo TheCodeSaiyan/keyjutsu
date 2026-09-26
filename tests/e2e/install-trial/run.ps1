@@ -48,6 +48,9 @@ while (-not (Test-Path "$stage\work\all.done")) {
     if ((Get-Date) -gt $deadline) { throw "no result after 20 minutes; see $stage\work\trial.log" }
     Start-Sleep -Seconds 5
 }
+# The Sandbox is this script's own (it refuses to start beside another), and
+# left open it stops the next run from starting.
+Get-Process WindowsSandboxRemoteSession, WindowsSandboxServer -ErrorAction SilentlyContinue | Stop-Process -Force
 # The log mixes UTF-8 (Add-Content) and UTF-16 (redirected output).
 $log = ([IO.File]::ReadAllText("$stage\work\trial.log")) -replace "`0", ""
 $log
