@@ -70,11 +70,20 @@ pub struct ShellInfo {
 pub fn locate(kind: ShellKind) -> Option<PathBuf> {
     let system_root = std::env::var_os("SystemRoot").map(PathBuf::from);
     match kind {
-        ShellKind::Pwsh => search_path("pwsh.exe").or_else(|| {
-            let pf = std::env::var_os("ProgramFiles")?;
-            let p = Path::new(&pf).join("PowerShell").join("7").join("pwsh.exe");
-            p.is_file().then_some(p)
-        }),
+        ShellKind::Pwsh => {
+            // A Store PowerShell puts its own package folder first on PATH,
+            // but only for programs started from it; every other program
+            // finds the alias in WindowsApps. Both are the same PowerShell, so
+            // the package folder is passed over: otherwise this machine would
+            // look different depending on what started KeyJutsu.
+            let pf = std::env::var_os("ProgramFiles").map(PathBuf::from);
+            let packages = pf.as_ref().map(|pf| pf.join("WindowsApps"));
+            let path = std::env::var_os("PATH").unwrap_or_default();
+            first_on_path(std::env::split_paths(&path), "pwsh.exe", packages.as_deref()).or_else(|| {
+                let p = pf?.join("PowerShell").join("7").join("pwsh.exe");
+                p.is_file().then_some(p)
+            })
+        }
         ShellKind::WindowsPowershell => {
             let p = system_root?.join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
             p.is_file().then_some(p)
@@ -88,9 +97,16 @@ pub fn locate(kind: ShellKind) -> Option<PathBuf> {
     }
 }
 
-fn search_path(exe: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|dir| dir.join(exe)).find(|p| p.is_file())
+/// The first `exe` in `dirs`, skipping any folder inside `except`.
+fn first_on_path(dirs: impl Iterator<Item = PathBuf>, exe: &str, except: Option<&Path>) -> Option<PathBuf> {
+    let inside = |dir: &Path| {
+        except.is_some_and(|e| {
+            let (dir, e) = (dir.to_string_lossy().to_lowercase(), e.to_string_lossy().to_lowercase());
+            dir.strip_prefix(e.trim_end_matches('\\'))
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('\\'))
+        })
+    };
+    dirs.filter(|dir| !inside(dir)).map(|dir| dir.join(exe)).find(|p| p.is_file())
 }
 
 /// Ask the shell for its version. This starts the shell once, without a
@@ -278,6 +294,33 @@ mod tests {
         ] {
             assert_eq!(base64(input.as_bytes()), expected);
         }
+    }
+
+    #[test]
+    fn a_store_powershells_own_folder_is_passed_over_for_the_alias_everyone_sees() {
+        let root = std::env::temp_dir().join(format!("kj-path-{}", std::process::id()));
+        let package = root.join("Program Files").join("WindowsApps").join("Microsoft.PowerShell_7.6.6.0_x64");
+        let alias = root.join("WindowsApps");
+        for dir in [&package, &alias] {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join("pwsh.exe"), b"").unwrap();
+        }
+        let packages = root.join("Program Files").join("WindowsApps");
+        let dirs = || [package.clone(), alias.clone()].into_iter();
+        assert_eq!(first_on_path(dirs(), "pwsh.exe", Some(&packages)), Some(alias.join("pwsh.exe")));
+        // Windows paths ignore case, and so does the comparison.
+        let shouted = PathBuf::from(packages.to_string_lossy().to_uppercase());
+        assert_eq!(first_on_path(dirs(), "pwsh.exe", Some(&shouted)), Some(alias.join("pwsh.exe")));
+        // Told nothing to skip, PATH order stands.
+        assert_eq!(first_on_path(dirs(), "pwsh.exe", None), Some(package.join("pwsh.exe")));
+        // A folder that only starts with the same letters is not inside it.
+        let lookalike = root.join("Program Files").join("WindowsAppsX");
+        std::fs::create_dir_all(&lookalike).unwrap();
+        std::fs::write(lookalike.join("pwsh.exe"), b"").unwrap();
+        let found =
+            first_on_path([lookalike.clone(), alias.clone()].into_iter(), "pwsh.exe", Some(&packages));
+        assert_eq!(found, Some(lookalike.join("pwsh.exe")));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
