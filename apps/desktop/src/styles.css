@@ -328,6 +328,40 @@ button.arm {
   display: flex;
 }
 
+/* KeyJutsu is waiting for the operator, and saying so faintly: an edge the
+   room reads as the window's own, which Ctrl+Shift+K answers. */
+.term-area[data-cue="waiting"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  opacity: 0.45;
+  animation: kj-waiting 2.4s ease-in-out infinite;
+}
+
+@keyframes kj-waiting {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/* Said over the terminal when the operator has asked to be told. */
+.term-banner {
+  position: absolute;
+  top: var(--sp-3);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(640px, 90%);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--kj-info);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-raised);
+  font-size: var(--fs-compact);
+}
+
 .terminal-frame {
   flex: 1;
   min-width: 0;
@@ -1023,6 +1057,24 @@ button.text-danger {
   place-items: center;
   background: var(--bg);
   z-index: 10;
+}
+
+/* Keeping the illusion: the question opens as a small card in a corner,
+   with the terminal still showing around it, not over a blank screen. */
+.scrim.discreet {
+  place-items: start end;
+  padding: var(--sp-4);
+  background: transparent;
+  pointer-events: none;
+}
+
+.scrim.discreet > .critical-dialog {
+  width: min(440px, 92vw);
+  max-height: calc(100vh - 2 * var(--sp-4));
+  overflow: auto;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  pointer-events: auto;
 }
 
 .critical-dialog {

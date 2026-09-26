@@ -84,6 +84,13 @@ pub struct Asker(Arc<Mutex<Option<Open>>>);
 struct Open {
     typed: String,
     answer: Sender<Option<String>>,
+    /// Show what is typed. Off when the question is put in the title bar.
+    echo: bool,
+}
+
+/// Set the console window's title.
+pub fn set_title(text: &str) {
+    let _ = execute!(std::io::stdout(), terminal::SetTitle(text));
 }
 
 fn show(text: &str) {
@@ -100,9 +107,20 @@ impl Asker {
         // Open before it is shown: a key pressed the moment it appears
         // belongs to the answer.
         if let Ok(mut open) = self.0.lock() {
-            *open = Some(Open { typed: String::new(), answer });
+            *open = Some(Open { typed: String::new(), answer, echo: true });
         }
         show(text);
+        reply.recv().ok().flatten()
+    }
+
+    /// As `ask`, with the question in the window's title bar and nothing in
+    /// the console: what is typed is not shown.
+    pub fn ask_in_title(&self, question: &str) -> Option<String> {
+        let (answer, reply) = channel();
+        if let Ok(mut open) = self.0.lock() {
+            *open = Some(Open { typed: String::new(), answer, echo: false });
+        }
+        set_title(question);
         reply.recv().ok().flatten()
     }
 
@@ -113,25 +131,31 @@ impl Asker {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Enter => {
-                show("\n");
+                if open.echo {
+                    show("\n");
+                }
                 if let Some(o) = guard.take() {
                     let _ = o.answer.send(Some(o.typed));
                 }
             }
             KeyCode::Esc | KeyCode::Char('c') if key.code == KeyCode::Esc || ctrl => {
-                show("\n");
+                if open.echo {
+                    show("\n");
+                }
                 if let Some(o) = guard.take() {
                     let _ = o.answer.send(None);
                 }
             }
             KeyCode::Backspace => {
-                if open.typed.pop().is_some() {
+                if open.typed.pop().is_some() && open.echo {
                     show("\u{8} \u{8}");
                 }
             }
             KeyCode::Char(c) if !ctrl => {
                 open.typed.push(c);
-                show(&c.to_string());
+                if open.echo {
+                    show(&c.to_string());
+                }
             }
             _ => {}
         }
@@ -207,10 +231,7 @@ pub fn run(
                 done.store(false, Ordering::SeqCst);
                 // Said only now that keys reach the shell again: said
                 // sooner, an answer typed straight away would be swallowed.
-                let _ = execute!(
-                    std::io::stdout(),
-                    terminal::SetTitle("KeyJutsu: the run has ended. Type exit to leave.")
-                );
+                set_title("KeyJutsu: the run has ended. Type exit to leave.");
             });
         } else {
             session.close();
