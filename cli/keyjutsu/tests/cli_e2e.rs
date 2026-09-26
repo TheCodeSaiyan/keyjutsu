@@ -624,7 +624,7 @@ fn an_old_approval_of_a_critical_step_is_confirmed_again_just_before_it_runs_in_
     assert!(screen.wait_for("Not confirmed: it will not run"), "{}", screen.plain());
     assert!(victim.join("keep.txt").exists());
     // The shell is handed back, and says so in the window's title.
-    assert!(screen.wait_for_raw("the run has ended"), "{}", screen.plain());
+    assert!(screen.wait_for_raw("the run has ended. Type exit to leave."), "{}", screen.plain());
     writer.lock().unwrap().write_all(b"exit\r").unwrap();
     let status = wait_exit(&mut child, &screen);
     assert!(!status.success());
@@ -687,7 +687,7 @@ fn a_discreet_run_asks_in_the_title_bar_and_shows_nothing_in_the_console() {
         assert!(Instant::now() < deadline, "the step never ran:\n{}", screen.plain());
         std::thread::sleep(Duration::from_millis(100));
     }
-    assert!(screen.wait_for_raw("the run has ended"), "{}", screen.plain());
+    assert!(screen.wait_for_raw("Ctrl+Alt+Shift+K gives you the keyboard back"), "{}", screen.plain());
     let seen = screen.plain();
     assert!(!seen.contains("CRITICAL ACTION"), "{seen}");
     assert!(!seen.contains("REMOVE THE VICTIM"), "the answer was shown: {seen}");

@@ -225,13 +225,20 @@ pub fn run(
             *f = Some(tx);
         }
         if session.wait_ready(Duration::from_secs(30)) {
-            let (s, done) = (session.clone(), controlling.clone());
+            let (s, done, after) = (session.clone(), controlling.clone(), session.clone());
             std::thread::spawn(move || {
                 control(s, rx);
                 done.store(false, Ordering::SeqCst);
-                // Said only now that keys reach the shell again: said
-                // sooner, an answer typed straight away would be swallowed.
-                set_title("KeyJutsu: the run has ended. Type exit to leave.");
+                // Said only now that the controller has let go: said sooner,
+                // an answer typed straight away would be swallowed. A finished
+                // performance still holds the keyboard, so mashing past the
+                // end types nothing into the shell; then only the disarm
+                // chord gives it back, and the title says so.
+                set_title(if after.snapshot().is_some() {
+                    "KeyJutsu: the run has ended. Ctrl+Alt+Shift+K gives you the keyboard back."
+                } else {
+                    "KeyJutsu: the run has ended. Type exit to leave."
+                });
             });
         } else {
             session.close();
