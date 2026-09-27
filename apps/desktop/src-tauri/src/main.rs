@@ -348,6 +348,27 @@ fn workspace_view(plans: State<'_, Arc<Plans>>) -> Option<WorkspaceView> {
     locked(&plans.workspace).as_ref().map(Workspace::view)
 }
 
+/// A reviewer's concern the operator decided needs no change, for `reason`;
+/// recorded in the plan's provenance (ADR 0020).
+#[tauri::command]
+fn workspace_dismiss(
+    index: usize,
+    reason: String,
+    plans: State<'_, Arc<Plans>>,
+) -> Result<WorkspaceView, String> {
+    with_workspace(&plans, |w| {
+        w.dismiss(index, &reason, &fingerprint::now_rfc3339()).map_err(|e| e.to_string())
+    })
+}
+
+/// Take KeyJutsu's own risk rating for step `id` (ADR 0020).
+#[tauri::command]
+fn workspace_use_rating(id: String, plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
+    with_workspace(&plans, |w| {
+        w.use_keyjutsu_rating(&id, &fingerprint::now_rfc3339()).map(|_| ()).map_err(|e| e.to_string())
+    })
+}
+
 /// Save the plan open now, with its findings, and show it in Explorer.
 #[tauri::command]
 fn workspace_save(plans: State<'_, Arc<Plans>>) -> Result<String, String> {
@@ -1035,6 +1056,8 @@ fn main() {
             workspace_propose,
             workspace_replace_step,
             workspace_save,
+            workspace_dismiss,
+            workspace_use_rating,
             workspace_insert_step,
             workspace_remove_step,
             workspace_move_step,

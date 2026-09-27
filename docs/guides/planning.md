@@ -106,8 +106,11 @@ In the desktop app, select a step and choose **Edit**, **Move up**,
 whole plan in Rust before it's kept, and an edit the plan's rules would refuse
 leaves it as it was.
 
-Or ask the agent: **Retry step with agent** with a sentence of guidance, or
-**Ask agent to reconsider the plan** for the whole thing. From the CLI:
+Or ask the agent. Under **What needs you**, each step and the plan have a
+reply box: **Send to agent** passes what you wrote as guidance, for that step
+or for the whole plan, and **Keep as a note** keeps it for yourself. What the
+agent sends back arrives unvalidated and unapproved, like any change. From the
+CLI:
 
 ```powershell
 keyjutsu plan revise spooler.json --step restart --guidance "Don't restart it; find out what stops it" --agent claude --out spooler.v2.json --send
@@ -122,8 +125,11 @@ For a second opinion, **Ask for review** in the app, or:
 keyjutsu plan review spooler.json --agent codex --send
 ```
 
-The reviewer can't change the plan. Its findings are shown beside the steps
-they're about.
+The reviewer can't change the plan. Its concerns appear under **What needs
+you**, beside the steps they're about, each with **Ask the agent to address
+it**, **It's fine** or **Edit the step**. **It's fine** asks for your reason
+and records it, with the concern, in the plan's history, so a saved plan shows
+what was decided and why.
 
 ### 4. Validate it
 
@@ -160,8 +166,8 @@ now; naming each file with `-LiteralPath` keeps the step to exactly those.
 
 If the agent rated a step lower than KeyJutsu does, KeyJutsu's rating is the
 one that counts, and the step says so. Where KeyJutsu rates it high or
-critical, the step waits for your review; **Use KeyJutsu's rating** accepts
-it.
+critical, the step waits for your review; **Use KeyJutsu's rating**, under
+**What needs you**, accepts it, or **Ask the agent why**.
 
 Validation looks at the machine as it is now, before anything has run. A step
 that needs a file an earlier step makes (step one prints `Cat.pdf`, step two
@@ -230,14 +236,21 @@ Environment unchanged since approval.
 
 ## If a step won't go READY
 
+Everything that stops a step is listed under **What needs you** in the step,
+with the answers that fit it. KeyJutsu chooses those answers from what kind of
+finding it is, never from anything the agent wrote, and each one is something
+you could already do by hand: stage, edit, remove, validate again, or send the
+agent guidance written from the finding.
+
 - **INVALID**: a mistyped command or parameter, or broken syntax. The finding
   names it. Edit the step, or retry it with the agent.
 - **BLOCKED**: something it needs isn't here: a tool, a version, a service.
-  Install it, or ask the agent for a step that doesn't need it.
+  Install it and choose **I've changed the machine: validate again**, or
+  **Ask for a step without it**.
 - **REVIEW**: KeyJutsu couldn't prove enough, or KeyJutsu rates the step high
   or critical and the agent rated it lower. Read the step; if it's right,
   **Use KeyJutsu's rating**, or edit it to say so honestly.
-- **A step needs a download.** **Stage downloads** in the app, or
+- **A step needs a download.** **Stage the download** in the step, or
   `keyjutsu plan stage spooler.json`, fetches each file and checks it against
   its pinned hash before approval. Nothing is downloaded while a plan runs.
 - **Still stuck?** **Save plan** writes the plan, with what validation found

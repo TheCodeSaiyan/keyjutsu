@@ -720,6 +720,8 @@ pub enum ProvenanceAction {
     Edited,
     Validated,
     Approved,
+    /// The operator read a reviewer's concern and decided it needs no change.
+    Dismissed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]

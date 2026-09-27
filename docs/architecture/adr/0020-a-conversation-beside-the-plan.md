@@ -1,6 +1,6 @@
 # 0020: A conversation beside the plan, where what needs you can be answered
 
-Status: proposed, 27 September 2026.
+Status: accepted, 27 September 2026. Phase 1 is in 0.1.3; phase 2 is to come.
 
 ## Context
 
@@ -45,7 +45,7 @@ operator's approval. A conversation must not become a way round any of that.
    free text is always possible. Each choice is one of the workspace's own
    operations; the conversation holds no authority of its own.
 
-## Decision (proposed)
+## Decision
 
 Option 3, in two phases.
 

@@ -12,4 +12,8 @@ who: string, text: string, step?: string,
 /**
  * A reviewer's finding, rather than something the author said.
  */
-review: boolean, at: string, };
+review: boolean, 
+/**
+ * A reviewer's finding the operator decided needs no change.
+ */
+dismissed: boolean, at: string, };

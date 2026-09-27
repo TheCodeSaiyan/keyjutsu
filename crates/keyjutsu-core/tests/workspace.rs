@@ -12,6 +12,7 @@ use keyjutsu_core::agent::agents::Invocation;
 use keyjutsu_core::agent::context::prepare;
 use keyjutsu_core::agent::session::RunOutput;
 use keyjutsu_core::agent::{AgentError, AgentHandle, AgentKind, Agents, Runner};
+use keyjutsu_core::asks::{AskFrom, Choice};
 use keyjutsu_core::plan::model::{Command, ProvenanceAction, Readiness, Step};
 use keyjutsu_core::plan::parse_plan;
 use keyjutsu_core::validation::Options;
@@ -291,4 +292,104 @@ fn a_saved_plan_keeps_its_findings_and_opens_again_as_it_was() {
     assert_eq!(reopened.plan(), w.plan(), "the same plan, findings and all");
     assert_eq!(readiness(&reopened), readiness(&w));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn reviewed(concern: &str) -> Workspace {
+    let mut w = validated(&chain());
+    let review = json!({"summary": "Mostly fine.", "findings": [
+        {"step": "c", "kind": "missing_validation", "severity": "warning", "message": concern}
+    ]});
+    let runner = Replay(
+        RefCell::new(vec![RunOutput {
+            success: true,
+            stdout: json!({"type": "result", "is_error": false, "result": format!("```json\n{review}\n```")})
+                .to_string(),
+            ..RunOutput::default()
+        }]),
+        RefCell::default(),
+    );
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    w.review(&agents, &claude(), AT).unwrap();
+    w
+}
+
+/// ADR 0020: a reviewer's concern is something to answer. Dismissing it
+/// takes it out of what needs the operator and keeps why, in the plan.
+#[test]
+fn a_dismissed_concern_leaves_what_needs_you_and_is_kept_in_the_provenance() {
+    let mut w = reviewed("Nothing checks c worked.");
+    let asks = w.view().asks;
+    let ask = asks.iter().find(|a| a.step.as_deref() == Some("c")).unwrap();
+    assert!(matches!(&ask.from, AskFrom::Review { .. }), "{ask:?}");
+    let Some(Choice::Dismiss { note }) = ask.choices.iter().find(|c| matches!(c, Choice::Dismiss { .. }))
+    else {
+        panic!("no way to dismiss it: {ask:?}");
+    };
+    assert!(ask.choices.contains(&Choice::EditStep));
+
+    w.dismiss(*note, "Get-Host cannot fail here.", AT).unwrap();
+
+    assert!(w.view().asks.iter().all(|a| a.step.as_deref() != Some("c")), "{:?}", w.view().asks);
+    let last = w.plan().keyjutsu.as_ref().unwrap().provenance.last().unwrap();
+    assert_eq!((last.step.as_deref(), last.action), (Some("c"), ProvenanceAction::Dismissed));
+    let said = last.note.as_deref().unwrap();
+    assert!(
+        said.contains("Nothing checks c worked.") && said.contains("Get-Host cannot fail here."),
+        "{said}"
+    );
+    assert!(readiness(&w).values().all(|r| *r == Some(Readiness::Ready)), "dismissing invalidates nothing");
+    assert!(w.dismiss(*note, "again", AT).is_err(), "a concern is dismissed once");
+    assert!(w.dismiss(0, "not a concern", AT).is_err(), "the operator's own note is not a concern");
+    assert!(
+        parse_plan(&serde_json::to_string(w.plan()).unwrap()).is_ok(),
+        "the plan still matches its schema"
+    );
+}
+
+/// A concern and a reason are each allowed up to the plan's note length, so
+/// the two together are clipped rather than make the plan invalid.
+#[test]
+fn dismissing_a_long_concern_keeps_the_plan_valid() {
+    let long = "x".repeat(3900);
+    let mut w = reviewed(&long);
+    let note = w.view().notes.iter().position(|n| n.review).unwrap();
+    w.dismiss(note, &"y".repeat(3900), AT).unwrap();
+    assert!(parse_plan(&serde_json::to_string(w.plan()).unwrap()).is_ok());
+}
+
+fn understated() -> Value {
+    json!({
+        "schema_version": "1.0", "plan_id": "p", "task_id": "t",
+        "target": {"id": "local", "kind": "local_windows"},
+        "agent": {"name": "codex", "version": "1"},
+        "steps": [
+            {"id": "wipe", "title": "Remove scratch data", "objective": "Start clean.", "kind": "command",
+             "shell": {"kind": "pwsh"},
+             "proposed_risk": {"level": "low", "rationale": "Only scratch."},
+             "commands": [{"text": "Remove-Item -Recurse -Force -LiteralPath C:/KeyJutsu-does-not-exist/scratch"}]}
+        ]
+    })
+}
+
+/// The agent rated a step lower than KeyJutsu does: the ask offers
+/// KeyJutsu's rating, and taking it sends the step back to validation, where
+/// it no longer needs review for that.
+#[test]
+fn an_understated_risk_can_be_answered_by_taking_keyjutsus_rating() {
+    let mut w = validated(&understated());
+    let ask = w.view().asks.into_iter().find(|a| a.step.as_deref() == Some("wipe")).unwrap();
+    assert_eq!(ask.from, AskFrom::Validation { check: "risk".into() }, "{ask:?}");
+    assert_eq!(ask.choices[0], Choice::UseKeyJutsuRating);
+
+    let change = w.use_keyjutsu_rating("wipe", AT).unwrap();
+    assert_eq!(change.affected, ["wipe"]);
+    let risk = w.plan().step("wipe").unwrap().proposed_risk.clone().unwrap();
+    assert!(risk.rationale.starts_with("KeyJutsu's rating"), "{}", risk.rationale);
+    w.validate(Options { dry_run: false, ..Options::default() }, AT).unwrap();
+    assert!(
+        w.view().asks.iter().all(|a| a.from != AskFrom::Validation { check: "risk".into() }),
+        "{:?}",
+        w.view().asks
+    );
+    assert!(w.use_keyjutsu_rating("nowhere", AT).is_err());
 }
