@@ -30,7 +30,10 @@ place and the terminal fills the window. **Runs in**, beside it, chooses how:
 Performance, Assisted, Auto or Direct, the same choice as the Terminal
 screen's. A step can have a mode of its own, set with **How this step runs**
 when you edit it, including **You type it yourself**; it keeps that mode
-whatever the run's.
+whatever the run's. Only you set a step's mode: a mode an agent writes on a
+step is dropped when its plan arrives, because it would otherwise override
+the run's for that step. A credential step is the exception, since you always
+type that yourself.
 
 Before anything is typed, KeyJutsu checks three things, and any one of them
 stops the run with nothing done:

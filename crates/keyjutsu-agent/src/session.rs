@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use keyjutsu_plan::model::{
-    Actor, ActorKind, Agent, KeyJutsuState, Plan, ProvenanceAction, ProvenanceEvent, Step,
+    Actor, ActorKind, Agent, ExecutionMode, KeyJutsuState, Plan, ProvenanceAction, ProvenanceEvent, Step,
 };
 use keyjutsu_plan::{PlanError, ValidPlan, parse_proposal};
 use keyjutsu_validation::process;
@@ -194,6 +194,21 @@ fn redact_strings(v: &mut Value) {
     }
 }
 
+/// How a step runs is the operator's choice, made on the plan (Runs in, or
+/// the step's own in the editor). A mode the agent writes on a step would
+/// override that choice for the step, and Claude Code writes one on every
+/// step, so choosing Auto changed nothing. Any mode in `after` that `before`
+/// did not already give that step is dropped, except `user_input`: typing it
+/// yourself is what a credential step is, not how it is performed.
+fn keep_the_operators_modes(before: Option<&Plan>, after: &mut Plan) {
+    for step in &mut after.steps {
+        let had = before.and_then(|b| b.step(&step.id)).and_then(|s| s.execution_mode);
+        if step.execution_mode.is_some_and(|m| m != ExecutionMode::UserInput) && step.execution_mode != had {
+            step.execution_mode = None;
+        }
+    }
+}
+
 /// Keep provenance, drop validation results: a revised plan must be
 /// validated again before any readiness means anything.
 fn carry_provenance(from: &Plan, into: &mut Plan, extra: Vec<ProvenanceEvent>) {
@@ -286,6 +301,7 @@ impl<R: Runner> Agents<'_, R> {
             context.working_directory.as_ref().map(PathBuf::from).unwrap_or_else(|| self.scratch.clone());
         let (plan, summary, attempts) = self.ask(agent, &text, &cwd, |doc| Self::accept_plan(agent, doc))?;
         let mut stored = plan.plan().clone();
+        keep_the_operators_modes(None, &mut stored);
         let authored = stored
             .steps
             .iter()
@@ -333,6 +349,7 @@ impl<R: Runner> Agents<'_, R> {
             Self::accept_plan(agent, doc)
         })?;
         let mut stored = revised.plan().clone();
+        keep_the_operators_modes(Some(plan), &mut stored);
         let note = (!guidance.trim().is_empty())
             .then(|| format!("guidance: {}", guidance.chars().take(500).collect::<String>()));
         carry_provenance(
@@ -359,6 +376,7 @@ impl<R: Runner> Agents<'_, R> {
         let (revised, summary, attempts) =
             self.ask(agent, &text, &self.scratch, |doc| Self::accept_plan(agent, doc))?;
         let mut stored = revised.plan().clone();
+        keep_the_operators_modes(Some(plan), &mut stored);
         let changed: Vec<ProvenanceEvent> = stored
             .steps
             .iter()
