@@ -179,7 +179,7 @@ fn diagnostics_save(diagnostics: State<'_, Arc<Diagnostics>>) -> Result<String, 
     let file = keyjutsu_core::diagnostics::save(&text, &keyjutsu_core::diagnostics::default_dir())?;
     let mut select = std::ffi::OsString::from("/select,");
     select.push(&file);
-    let _ = std::process::Command::new("explorer.exe").arg(select).spawn();
+    let _ = keyjutsu_core::terminal::shell::command("explorer.exe").arg(select).spawn();
     Ok(file.display().to_string())
 }
 
@@ -762,7 +762,11 @@ fn open_link(url: String) -> Result<(), String> {
     if !keyjutsu_core::links::is_known(&url) {
         return Err("that is not a link KeyJutsu offers".into());
     }
-    std::process::Command::new("explorer.exe").arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
+    keyjutsu_core::terminal::shell::command("explorer.exe")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// What the operator types to cross a session boundary.

@@ -111,7 +111,7 @@ pub enum AnalysisError {
 }
 
 fn powershell(program: &Path, script: &str) -> Command {
-    let mut c = Command::new(program);
+    let mut c = keyjutsu_terminal::shell::command(program);
     c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
     c.arg(keyjutsu_terminal::shell::encode_powershell_command(script));
     c

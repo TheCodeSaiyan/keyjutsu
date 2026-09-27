@@ -130,7 +130,7 @@ mod tests {
         let me = crate::pipe::current_user_sid().expect("this account's SID");
         let dir = ProtectedDir::create_in(&parent, &format!("D:P(A;OICI;FA;;;{me})")).expect("created");
         std::fs::write(dir.path().join("x"), "x").expect("the account named can write");
-        let acl = std::process::Command::new("icacls").arg(dir.path()).output().expect("icacls");
+        let acl = keyjutsu_core::terminal::shell::command("icacls").arg(dir.path()).output().expect("icacls");
         let acl = String::from_utf8_lossy(&acl.stdout).to_string();
         assert!(!acl.contains("BUILTIN\\Users") && !acl.contains("Everyone"), "{acl}");
         assert!(!acl.contains("(I)"), "nothing is inherited from the parent: {acl}");
@@ -154,7 +154,7 @@ mod tests {
         // rewrite the access list: that is how the test cleans up.
         let path = dir.path().to_owned();
         std::mem::forget(dir);
-        let _ = std::process::Command::new("icacls").arg(&path).arg("/reset").output();
+        let _ = keyjutsu_core::terminal::shell::command("icacls").arg(&path).arg("/reset").output();
         let _ = std::fs::remove_dir_all(&parent);
         assert!(refused.is_err(), "an unelevated account wrote into the Administrators' folder");
     }

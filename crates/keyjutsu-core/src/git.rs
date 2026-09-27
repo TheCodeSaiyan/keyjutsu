@@ -14,7 +14,6 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
 use keyjutsu_plan::hash::sha256_hex;
@@ -54,7 +53,7 @@ pub struct RepoState {
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<Finished, String> {
-    let mut c = Command::new("git");
+    let mut c = keyjutsu_terminal::shell::command("git");
     c.arg("-C").arg(root).args(["-c", "core.quotepath=off", "--no-pager"]).args(args);
     keyjutsu_validation::process::run(c, "", Duration::from_secs(60)).map_err(|e| e.to_string())
 }
@@ -452,7 +451,7 @@ mod tests {
         std::fs::create_dir_all(&long).expect("scratch folder");
         use std::os::windows::process::CommandExt;
         // raw_arg: cmd reads its own quotes, which Rust's escaping would break.
-        let out = std::process::Command::new("cmd")
+        let out = keyjutsu_terminal::shell::command("cmd")
             .raw_arg(format!("/c for %I in (\"{}\") do @echo %~sI", long.display()))
             .output()
             .expect("cmd");

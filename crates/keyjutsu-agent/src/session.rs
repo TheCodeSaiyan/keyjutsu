@@ -56,7 +56,7 @@ impl Default for ProcessRunner {
 
 impl Runner for ProcessRunner {
     fn run(&self, inv: &Invocation) -> Result<RunOutput, AgentError> {
-        let mut command = std::process::Command::new(&inv.program);
+        let mut command = keyjutsu_validation::process::command(&inv.program);
         command.args(&inv.args).current_dir(&inv.cwd);
         if let Some(f) = &inv.output_file {
             let _ = std::fs::remove_file(f);

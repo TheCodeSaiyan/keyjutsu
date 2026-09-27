@@ -7,7 +7,6 @@
 //! contents are a secret.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Duration;
 
 use keyjutsu_validation::probe::resolve_executable;
@@ -99,7 +98,7 @@ pub fn version_in(text: &str) -> Option<String> {
 }
 
 fn version_of(path: &Path) -> Option<String> {
-    let mut c = Command::new(path);
+    let mut c = keyjutsu_validation::process::command(path);
     c.arg("--version");
     let done = process::run(c, "", Duration::from_secs(20)).ok()?;
     version_in(&done.stdout).or_else(|| version_in(&done.stderr))

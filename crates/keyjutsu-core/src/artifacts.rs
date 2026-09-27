@@ -92,7 +92,7 @@ pub(crate) fn download(source: &str, to: &Path) -> Result<(), String> {
         crate::execute::ps_quote(source),
         crate::execute::ps_quote(&to.display().to_string())
     );
-    let mut c = std::process::Command::new(ps);
+    let mut c = keyjutsu_terminal::shell::command(ps);
     c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
     c.arg(keyjutsu_terminal::shell::encode_powershell_command(&script));
     let done =

@@ -4,6 +4,7 @@
 
 #![allow(clippy::unwrap_used)] // Helpers outside #[test] functions may unwrap too.
 #![cfg(windows)]
+#![allow(clippy::disallowed_methods)] // Tests start programs directly; no window matters here.
 
 use std::io::{Read, Write};
 use std::sync::{Arc, Condvar, Mutex};

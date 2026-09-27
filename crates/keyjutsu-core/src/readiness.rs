@@ -86,7 +86,7 @@ pub struct ReadinessReport {
 }
 
 pub fn windows_info() -> WindowsInfo {
-    let output = std::process::Command::new("reg")
+    let output = keyjutsu_terminal::shell::command("reg")
         .args(["query", r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion"])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -167,7 +167,7 @@ pub fn component_checks(pwsh: bool, git: Option<&str>, webview2: Option<&str>) -
 
 /// `git version 2.47.1.windows.1`, if Git is on the `PATH`.
 fn git_version() -> Option<String> {
-    let mut c = std::process::Command::new("git");
+    let mut c = keyjutsu_terminal::shell::command("git");
     c.arg("--version");
     let out = keyjutsu_validation::process::run(c, "", Duration::from_secs(10)).ok()?;
     let text = out.stdout.trim().to_owned();
@@ -180,7 +180,8 @@ fn webview2_version() -> Option<String> {
     const CLIENT: &str = r"Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
     [format!(r"HKLM\SOFTWARE\WOW6432Node\{CLIENT}"), format!(r"HKCU\Software\{CLIENT}")].iter().find_map(
         |key| {
-            let out = std::process::Command::new("reg").args(["query", key, "/v", "pv"]).output().ok()?;
+            let out =
+                keyjutsu_terminal::shell::command("reg").args(["query", key, "/v", "pv"]).output().ok()?;
             parse_reg_value(&String::from_utf8_lossy(&out.stdout), "pv").filter(|v| v != "0.0.0.0")
         },
     )

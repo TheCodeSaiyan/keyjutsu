@@ -31,7 +31,7 @@ pub fn path_without(path: &str, dir: &str) -> String {
 }
 
 fn powershell(script: &str) -> Result<String, String> {
-    let mut c = std::process::Command::new("powershell.exe");
+    let mut c = keyjutsu_core::terminal::shell::command("powershell.exe");
     c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
     c.arg(keyjutsu_core::terminal::shell::encode_powershell_command(script));
     let done =

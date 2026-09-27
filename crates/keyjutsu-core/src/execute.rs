@@ -613,7 +613,7 @@ fn http_status(url: &str) -> Option<u16> {
     let script = format!(
         "try {{ (Invoke-WebRequest -Uri '{quoted}' -Method Head -UseBasicParsing -TimeoutSec 10 -SkipHttpErrorCheck).StatusCode }} catch {{ -1 }}"
     );
-    let mut c = std::process::Command::new(ps);
+    let mut c = keyjutsu_terminal::shell::command(ps);
     c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
     c.arg(keyjutsu_terminal::shell::encode_powershell_command(&script));
     let done = keyjutsu_validation::process::run(c, "", Duration::from_secs(20)).ok()?;

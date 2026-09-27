@@ -86,7 +86,7 @@ fn pwsh_json(request: &Value, body: &str) -> Result<Value, String> {
     let script = format!(
         "$ErrorActionPreference = 'Stop'\n$req = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}')) | ConvertFrom-Json\n{body}"
     );
-    let mut c = std::process::Command::new(powershell()?);
+    let mut c = keyjutsu_terminal::shell::command(powershell()?);
     c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
     c.arg(keyjutsu_terminal::shell::encode_powershell_command(&script));
     let done =

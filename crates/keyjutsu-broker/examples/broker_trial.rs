@@ -16,6 +16,7 @@
 //! refused. Everything it sees goes to standard output.
 
 #![allow(clippy::unwrap_used, clippy::print_stdout)] // A trial program, not a library.
+#![allow(clippy::disallowed_methods)] // Tests start programs directly; no window matters here.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
