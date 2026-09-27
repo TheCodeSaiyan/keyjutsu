@@ -52,6 +52,16 @@ impl Screen {
     }
 }
 
+/// Where a run starts unless a test says otherwise: outside any Git
+/// repository. A run records the repositories it works in, so one started in
+/// this repository ran git on it, and a run stopped mid-way could leave
+/// .git/index.lock behind, blocking the next commit.
+fn outside_any_repository() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join("keyjutsu-cli-e2e");
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 /// A run lock of its own for each KeyJutsu started here: the tests run side
 /// by side, and must not wait on each other or on a real run.
 fn own_lock() -> String {
@@ -209,6 +219,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_keyjutsu"));
     cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
     cmd.env("KEYJUTSU_RUN_LOCK", own_lock());
+    cmd.cwd(outside_any_repository());
     cmd.args(["run", snap.to_str().unwrap(), "--mode", "performance", "--clean"]);
     let mut child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);
@@ -323,9 +334,7 @@ fn launch_in(
         .unwrap();
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_keyjutsu"));
     cmd.args(args);
-    if let Some(dir) = cwd {
-        cmd.cwd(dir);
-    }
+    cmd.cwd(cwd.map(std::path::Path::to_path_buf).unwrap_or_else(outside_any_repository));
     // Sessions these tests run go to a history of their own, not the operator's.
     cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
     cmd.env("KEYJUTSU_RUN_LOCK", own_lock());
