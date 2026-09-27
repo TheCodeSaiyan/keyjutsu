@@ -12,7 +12,7 @@ use keyjutsu_agent::agents::Invocation;
 use keyjutsu_agent::context::{ContextItem, prepare};
 use keyjutsu_agent::session::{RunOutput, record_review};
 use keyjutsu_agent::{AgentError, AgentHandle, AgentKind, Agents, Runner, StepRevision};
-use keyjutsu_plan::model::{AgentName, ProvenanceAction};
+use keyjutsu_plan::model::{AgentName, ExecutionMode, ProvenanceAction};
 use serde_json::{Value, json};
 
 const AT: &str = "2026-09-25T03:00:00Z";
@@ -296,4 +296,41 @@ fn an_agent_may_ask_instead_of_guessing() {
     let seen = runner.seen.borrow();
     assert!(seen[0].stdin.contains("ask rather than guess"), "the agent is told it may ask");
     assert!(seen[1].stdin.contains("U+202E"), "the hidden character is named when it is sent back");
+}
+
+/// How a plan runs is the operator's choice. An agent that writes a mode on
+/// every step (Claude Code writes "assisted") would otherwise override the
+/// run's mode step by step, so choosing Auto changed nothing. Only a
+/// credential step keeps its mode, because typing it yourself is what it is.
+#[test]
+fn how_a_step_runs_is_not_the_agents_to_choose() {
+    let mut doc = plan_doc();
+    doc["steps"][0]["execution_mode"] = json!("assisted");
+    doc["steps"][1]["execution_mode"] = json!("direct");
+    doc["steps"].as_array_mut().unwrap().push(json!({
+        "id": "token", "title": "Token", "objective": "Ask for it.", "kind": "credential",
+        "execution_mode": "user_input",
+        "credential": {"variable": "TOKEN", "prompt": "Token", "kind": "secret"}
+    }));
+    let runner = Replay::new(vec![claude_says(&doc)]);
+    let p =
+        agents(&runner).propose(&handle(AgentKind::ClaudeCode), "fix docker", &empty_context(), AT).unwrap();
+    let modes: Vec<Option<ExecutionMode>> = p.plan.plan().steps.iter().map(|s| s.execution_mode).collect();
+    assert_eq!(modes, [None, None, Some(ExecutionMode::UserInput)]);
+}
+
+/// A mode the operator gave a step stays through the agent's revision of
+/// the plan; one the agent adds is dropped.
+#[test]
+fn a_mode_the_operator_chose_survives_a_revision() {
+    let mut mine = plan_doc();
+    mine["steps"][0]["execution_mode"] = json!("direct");
+    let before: keyjutsu_plan::model::Plan = serde_json::from_value(mine.clone()).unwrap();
+    let mut back = mine.clone();
+    back["steps"][1]["execution_mode"] = json!("assisted");
+    let runner = Replay::new(vec![claude_says(&back)]);
+    let p =
+        agents(&runner).revise_plan(&handle(AgentKind::ClaudeCode), "fix docker", &before, "g", AT).unwrap();
+    let modes: Vec<Option<ExecutionMode>> = p.plan.plan().steps.iter().map(|s| s.execution_mode).collect();
+    assert_eq!(modes, [Some(ExecutionMode::Direct), None]);
 }

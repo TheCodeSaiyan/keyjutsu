@@ -44,7 +44,12 @@ Rules you must follow:
    \"options\": a few short answers, \"free_text\": true if another answer
    makes sense}). Meanwhile plan for the likeliest answer and say so in the
    step's reason. Ask only what you cannot find out read-only, and at most a
-   few questions. Say anything else you are unsure of in the step's reason.";
+   few questions. Each option is a whole answer the operator can pick as it
+   stands; where an answer needs details (a path, a name), leave it out and
+   set free_text. Say anything else you are unsure of in the step's reason.
+10. Leave out execution_mode and execution_preferences: the operator chooses
+   how the plan runs. The one exception is a credential step's
+   \"user_input\" (rule 6).";
 
 const COMPACT_FORMAT: &str = r#"The JSON document is a plan:
 {
@@ -224,6 +229,7 @@ mod tests {
             assert!(p.contains("Investigate only"), "{p}");
             assert!(p.contains("Never include a \"keyjutsu\" property"));
             assert!(p.contains("no expression or script form"));
+            assert!(p.contains("Leave out execution_mode"), "the operator chooses how it runs");
         }
     }
 
