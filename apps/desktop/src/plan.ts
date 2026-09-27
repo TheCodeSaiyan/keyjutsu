@@ -70,12 +70,24 @@ export function commandsToLines(commands: plan.Command[]): string {
 }
 
 /** What the step editor lets the operator change. */
+/** How one step runs: the run's mode, or one of its own. */
+export const STEP_MODES: { value: "" | plan.ExecutionMode; label: string }[] = [
+  { value: "", label: "As the run goes" },
+  { value: "performance", label: "Performance" },
+  { value: "assisted", label: "Assisted" },
+  { value: "auto_performance", label: "Auto" },
+  { value: "direct", label: "Direct" },
+  { value: "user_input", label: "You type it yourself" },
+];
+
 export interface StepForm {
   title: string;
   objective: string;
   commands: string;
   visibleValidation: string;
   recoveryCommands: string;
+  /** "" for the run's mode. */
+  mode: "" | plan.ExecutionMode;
 }
 
 export function formFromStep(s: plan.Step): StepForm {
@@ -86,6 +98,7 @@ export function formFromStep(s: plan.Step): StepForm {
     visibleValidation: commandsToLines(s.visible_validation),
     recoveryCommands:
       s.recovery?.strategy === "commands" ? commandsToLines(s.recovery.commands) : "",
+    mode: s.execution_mode ?? "",
   };
 }
 
@@ -101,6 +114,7 @@ export function stepFromForm(s: plan.Step, f: StepForm): plan.Step {
     objective: f.objective.trim(),
     commands: linesToCommands(f.commands),
     visible_validation: linesToCommands(f.visibleValidation),
+    execution_mode: f.mode === "" ? undefined : f.mode,
   };
   const recovery = linesToCommands(f.recoveryCommands);
   if (s.recovery?.strategy === "commands" || (!s.recovery && recovery.length > 0)) {

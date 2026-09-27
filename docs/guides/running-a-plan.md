@@ -26,7 +26,11 @@ keyjutsu run check-a-service.approved.json
 ```
 
 In the desktop app, once the plan is approved, **Arm KeyJutsu** takes its
-place and the terminal fills the window.
+place and the terminal fills the window. **Runs in**, beside it, chooses how:
+Performance, Assisted, Auto or Direct, the same choice as the Terminal
+screen's. A step can have a mode of its own, set with **How this step runs**
+when you edit it, including **You type it yourself**; it keeps that mode
+whatever the run's.
 
 Before anything is typed, KeyJutsu checks three things, and any one of them
 stops the run with nothing done:

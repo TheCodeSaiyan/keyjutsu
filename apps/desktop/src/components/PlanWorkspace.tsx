@@ -12,6 +12,7 @@ import {
   summaryLine,
   type StepForm,
   retryGuidance,
+  STEP_MODES,
 } from "../plan";
 import { ordinal } from "../labels";
 import { ipc } from "../ipc";
@@ -27,6 +28,10 @@ interface Props {
   act(label: string, request: () => Promise<workspace.WorkspaceView>): void;
   onApprove(): void;
   onArm(): void;
+  /** How the plan will run: the same choice as the Terminal's Performance panel. */
+  mode: string;
+  modes: { value: string; label: string; hint: string }[];
+  onMode(mode: string): void;
 }
 
 /**
@@ -166,6 +171,23 @@ export function PlanWorkspace(props: Props) {
             >
               Validate
             </button>
+            <label
+              className="small run-mode"
+              title={props.modes.find((m) => m.value === props.mode)?.hint}
+            >
+              Runs in{" "}
+              <select
+                value={props.mode}
+                disabled={busy !== null}
+                onChange={(e) => props.onMode(e.target.value)}
+              >
+                {props.modes.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             {sealed ? (
               <button
                 className="primary arm"
@@ -425,6 +447,19 @@ function StepPanel({
             />
           </label>
         )}
+        <label className="small">
+          How this step runs
+          <select
+            value={form.mode}
+            onChange={(e) => setForm({ ...form, mode: e.target.value as StepForm["mode"] })}
+          >
+            {STEP_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <p className="muted small">
           Saving sends this step and everything after it back to validation. Approval is never
           carried over.
@@ -458,6 +493,11 @@ function StepPanel({
           <p className="eyebrow muted">Command{step.commands.length > 1 ? "s" : ""}</p>
           <pre className="code">{step.commands.map((c) => c.text).join("\n")}</pre>
         </>
+      )}
+      {step.execution_mode && (
+        <p className="small muted">
+          This step always runs as: {STEP_MODES.find((m) => m.value === step.execution_mode)?.label}
+        </p>
       )}
       {step.kind === "manual" && (
         <p className="small">You do this yourself, outside the terminal, then press Enter.</p>

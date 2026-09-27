@@ -696,6 +696,9 @@ export function App() {
             act={act}
             onApprove={startApproval}
             onArm={() => void armPlan()}
+            mode={mode}
+            modes={MODES}
+            onMode={(m) => setMode(m as ExecutionMode)}
           />
         )}
         <div
