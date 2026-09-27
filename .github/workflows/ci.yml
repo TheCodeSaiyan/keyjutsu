@@ -27,8 +27,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
       # A release does not ship unless every gate's named tests pass.
       # A renamed or deleted test fails its gate rather than dropping out.
       - run: node scripts/release-gates.mjs
@@ -85,10 +85,13 @@ jobs:
       # The desktop crate's build script needs the CLI and broker beside it
       # (bundle.externalBin), even for clippy; tauri build stages them itself.
       - run: node scripts/stage-sidecars.mjs
-      - run: cargo clippy -p keyjutsu-desktop --all-targets -- -D warnings
+      - run: cargo clippy --locked -p keyjutsu-desktop --all-targets -- -D warnings
       # Not a default workspace member, so the rust job doesn't test it.
-      - run: cargo test -p keyjutsu-desktop
+      - run: cargo test --locked -p keyjutsu-desktop
       - run: pnpm --filter @keyjutsu/desktop tauri build
+      # The release publishes one; it is made here too, so a change that
+      # breaks it is found on the pull request, not on the tag.
+      - run: node scripts/sbom.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: keyjutsu-installer-unsigned

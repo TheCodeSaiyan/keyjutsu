@@ -38,6 +38,11 @@ double-click it. The installer isn't signed yet, so Windows shows "Windows
 protected your PC": choose **More info**, then **Run anyway**. Then approve the
 UAC prompt.
 
+Each release also lists everything it ships in `KeyJutsu_VERSION_sbom.cdx.json`
+(a CycloneDX software bill of materials): every Rust crate and npm package,
+with its version, its licence and the hash the lock file pins, checked
+against `SHA256SUMS` like the installer.
+
 If the machine has no WebView2 runtime, the installer fetches it from
 Microsoft, which needs the network. Windows 11 normally has it already; the
 clean Windows 11 this was tested on didn't, and fetching it took most of

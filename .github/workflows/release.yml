@@ -176,6 +176,11 @@ jobs:
 
       # Each file carries its own checksum, and the publish step collects them
       # into SHA256SUMS and checks that against the files being published.
+      # What the release ships, crate by crate and package by package, from
+      # the lock files this build used.
+      - name: Software bill of materials
+        run: node scripts/sbom.mjs "out/KeyJutsu_${{ steps.version.outputs.value }}_sbom.cdx.json"
+
       - name: Checksum
         shell: bash
         run: |
@@ -183,7 +188,7 @@ jobs:
           mkdir -p out
           cp "target/release/bundle/nsis/KeyJutsu_${{ steps.version.outputs.value }}_x64-setup.exe" out/
           cd out
-          for f in *.exe; do sha256sum "$f" | tr -d '\n' > "$f.sha256"; done
+          for f in *.exe *.cdx.json; do sha256sum "$f" | tr -d '\n' > "$f.sha256"; done
           cat *.sha256; echo
 
       - uses: actions/upload-artifact@v4
@@ -296,6 +301,10 @@ jobs:
     if: github.ref_type == 'tag'
     permissions:
       contents: write
+      # For build provenance: the OIDC token Sigstore signs with, and the
+      # right to record the attestation.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
@@ -319,6 +328,20 @@ jobs:
           # Checked here, against the very files about to be published.
           sha256sum -c SHA256SUMS
           cat SHA256SUMS
+
+      # Build provenance: a signed statement, kept by GitHub, that these files
+      # were built by this workflow from this commit. `gh attestation verify
+      # FILE --repo OWNER/REPO` checks it. GitHub offers attestations for a
+      # private repository only on some plans, so while the repository is
+      # private this is skipped rather than failing the release.
+      - name: Build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            out/*.exe
+            out/*.zip
+            out/*.cdx.json
 
       # For microsoft/winget-pkgs, from the very installer being published.
       # Kept as a workflow artifact: submitting is a separate step, in
@@ -377,6 +400,10 @@ jobs:
           Windows 11, x64. ${signed} The installer was installed, run and
           uninstalled on a clean runner before this page was published, and
           the portable build was run there once it had gone.
+
+          \`KeyJutsu_${version}_sbom.cdx.json\` lists every Rust crate and npm
+          package this release ships, with versions, licences and the hashes
+          the lock files pin (CycloneDX 1.5).
           STANDING
           cat notes.md
 
@@ -387,6 +414,7 @@ jobs:
           files: |
             out/*.exe
             out/*.zip
+            out/*.cdx.json
             out/SHA256SUMS
             scripts/install.ps1
           body_path: notes.md
