@@ -27,6 +27,7 @@ pub mod session;
 pub mod store;
 pub mod technique;
 pub mod transcript;
+pub mod update;
 pub mod workspace;
 
 pub use keyjutsu_agent as agent;

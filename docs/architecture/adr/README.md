@@ -24,3 +24,4 @@ the code looks the way it does stays readable.
 | [0016](0016-encrypted-file-store.md) | History is an encrypted file store under a DPAPI-protected key | Accepted |
 | [0017](0017-broker-keeps-administrator-captures.md) | The broker captures and restores what an Administrator step changes | Accepted |
 | [0018](0018-file-contents-kept-encrypted.md) | Copies of files are kept encrypted; plans and snapshots stay readable | Accepted |
+| [0019](0019-updates-through-the-signed-installer.md) | Updates come through the signed installer, when the operator asks | Accepted |

@@ -166,9 +166,10 @@ privately. Everyone taking part is asked to follow the
 
 ## Privacy
 
-No telemetry, no crash reporting, no update check. KeyJutsu's only network
-requests are the downloads a plan names, when you stage them; agents talk to
-their own providers under your account. [PRIVACY.md](PRIVACY.md) has what's
+No telemetry, no crash reporting, and no update check unless you ask for
+one. KeyJutsu's only network requests are the downloads a plan names, when
+you stage them, and GitHub's release list, when you check for an update;
+agents talk to their own providers under your account. [PRIVACY.md](PRIVACY.md) has what's
 stored and where.
 
 ## Licence

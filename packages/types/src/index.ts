@@ -48,5 +48,6 @@ export type * as plan from "./plan";
 export type * as recovery from "./recovery";
 export type * as serde_json from "./serde_json";
 export type * as technique from "./technique";
+export type * as update from "./update";
 export type * as validation from "./validation";
 export type * as workspace from "./workspace";

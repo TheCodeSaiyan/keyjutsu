@@ -5,6 +5,7 @@ import type {
   plan,
   recovery,
   technique,
+  update,
   workspace,
   KeyChord,
   OpenRequest,
@@ -34,6 +35,10 @@ export const ipc = {
   diagnosticsPreview: () => invoke<string>("diagnostics_preview"),
   /** Save the bundle last previewed; returns where. */
   diagnosticsSave: () => invoke<string>("diagnostics_save"),
+  /** Ask GitHub for a newer KeyJutsu. Only when the operator asks. */
+  updateCheck: (channel: update.Channel) => invoke<update.Checked>("update_check", { channel }),
+  /** Install the release last shown; the app closes once its installer starts. */
+  updateInstall: () => invoke<void>("update_install"),
   terminalProfile: () => invoke<TerminalProfile>("terminal_profile"),
 
   openTerminal: (request: OpenRequest, onMessage: (m: TerminalMessage) => void) => {
