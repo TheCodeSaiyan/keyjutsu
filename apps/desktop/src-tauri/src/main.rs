@@ -120,6 +120,43 @@ async fn readiness_scan() -> Result<ReadinessReport, String> {
     tauri::async_runtime::spawn_blocking(readiness::scan).await.map_err(|e| e.to_string())
 }
 
+/// The release the operator was last shown. Installing takes this one, never
+/// anything the window names, so a compromised window cannot point the
+/// update at an installer of its choosing.
+#[derive(Default)]
+struct Updates(Mutex<Option<keyjutsu_core::update::Available>>);
+
+/// Ask GitHub whether there is a newer KeyJutsu on `channel`. Only when the
+/// operator presses the button (ADR 0019).
+#[tauri::command]
+async fn update_check(
+    channel: keyjutsu_core::update::Channel,
+    updates: State<'_, Arc<Updates>>,
+) -> Result<keyjutsu_core::update::Checked, String> {
+    let checked = tauri::async_runtime::spawn_blocking(move || keyjutsu_core::update::check(channel))
+        .await
+        .map_err(|e| e.to_string())??;
+    *locked(&updates.0) = checked.available.clone();
+    Ok(checked)
+}
+
+/// Download the release last shown, check its checksum and signature, start
+/// its installer, and close, so the installer can replace this program.
+/// Refused while a run holds the run lock.
+#[tauri::command]
+async fn update_install(app: tauri::AppHandle, updates: State<'_, Arc<Updates>>) -> Result<(), String> {
+    let available = locked(&updates.0).clone().ok_or("check for an update first")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        keyjutsu_core::update::free_to_install()?;
+        let installer = keyjutsu_core::update::download(&available, &keyjutsu_core::update::download_dir())?;
+        keyjutsu_core::update::start(&installer)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    app.exit(0);
+    Ok(())
+}
+
 /// The bundle last shown to the operator: only that is ever saved, so what
 /// they read is what they get.
 #[derive(Default)]
@@ -955,6 +992,7 @@ fn main() {
         .manage(sessions)
         .manage(plans)
         .manage(Arc::new(Diagnostics::default()))
+        .manage(Arc::new(Updates::default()))
         .invoke_handler(tauri::generate_handler![
             readiness_scan,
             open_link,
@@ -962,6 +1000,8 @@ fn main() {
             run_waiting_open,
             diagnostics_preview,
             diagnostics_save,
+            update_check,
+            update_install,
             terminal_profile,
             terminal_open,
             terminal_write,

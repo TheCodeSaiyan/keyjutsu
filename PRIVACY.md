@@ -2,14 +2,20 @@
 
 ## What KeyJutsu sends anywhere
 
-KeyJutsu has no telemetry, no crash reporting, no remote diagnostics and no
-update check. There's no code for any of it, so there's no setting to
-turn off.
+KeyJutsu has no telemetry, no crash reporting and no remote diagnostics.
+There's no code for any of it, so there's no setting to turn off. It never
+looks for updates by itself either.
 
-It makes network requests in one place: when you stage a plan's artifacts
-(`keyjutsu plan stage`, or Stage in the app), it downloads the URLs the plan
-names, so they can be checked against their pinned hashes before anything
-runs. Nothing is downloaded while a plan runs.
+It makes network requests in two places, and only when you ask:
+
+- When you stage a plan's artifacts (`keyjutsu plan stage`, or Stage in the
+  app), it downloads the URLs the plan names, so they can be checked against
+  their pinned hashes before anything runs. Nothing is downloaded while a
+  plan runs.
+- When you check for an update (`keyjutsu update`, or Check for updates in
+  the app), it asks GitHub for the list of KeyJutsu's releases, which tells
+  GitHub that someone asked, from your address. Installing one downloads
+  the installer and its checksums from the release.
 
 AI agents are separate programs you installed and signed in to yourself.
 When you ask one for a plan, KeyJutsu runs it on your machine, and the agent

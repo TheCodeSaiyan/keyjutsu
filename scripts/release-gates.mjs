@@ -44,6 +44,9 @@ const gates = {
     "an_edited_checkpoint_is_refused",
     "a_changed_step_runs_again_even_though_it_succeeded_before",
     "a_machine_that_changed_since_approval_runs_nothing_whichever_front_end_starts_it",
+    "an_installer_that_is_unsigned_altered_or_signed_by_someone_else_is_refused",
+    "a_download_that_fails_its_checks_is_deleted_not_kept",
+    "only_our_publisher_is_accepted",
     "a_working_directory_cannot_carry_a_command_in",
     "an_edited_git_record_is_refused_before_git_is_asked_anything",
     "a_shared_technique_arrives_as_an_untrusted_draft",
@@ -86,6 +89,7 @@ const gates = {
     "arming_is_refused_on_a_dirty_or_busy_line",
     "a_second_run_is_refused_while_one_changes_the_machine",
     "one_run_at_a_time_and_the_next_once_it_ends",
+    "an_update_waits_while_a_run_changes_the_machine",
   ],
   "Schema validation": [
     "valid_fixtures_parse_as_proposals_and_as_plans",

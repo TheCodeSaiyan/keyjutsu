@@ -230,3 +230,24 @@ changes left out.
 Both `setup` commands change only your own Windows account. `store clear`
 leaves the records of approvals and checkpoints, which hold only hashes, so
 snapshots you've approved still run.
+
+## Updating
+
+### `keyjutsu update`
+
+Asks GitHub whether there's a newer KeyJutsu, and shows its version and what
+changed. KeyJutsu never asks by itself; this, and Check for updates in the
+app, are the only times it does.
+
+| Option | |
+| --- | --- |
+| `--channel stable\|beta` | releases only (the default), or pre-releases too |
+| `--install` | download the newer installer, check it, and start it |
+
+With `--install`, the installer is downloaded with the release's
+`SHA256SUMS`, and runs only if its hash is the one listed and its signature
+verifies and names TheCodeSaiyan Ltd; otherwise it's deleted. Then it starts
+as if you'd double-clicked it: Windows asks for Administrator, and it asks
+its questions. Nothing starts while a plan or a recovery is running, and the
+installer checks that again itself, so no install replaces KeyJutsu part-way
+through a task.

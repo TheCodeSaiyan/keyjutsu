@@ -83,7 +83,7 @@ pub fn verify(store: &Path, a: &Artifact) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn download(source: &str, to: &Path) -> Result<(), String> {
+pub(crate) fn download(source: &str, to: &Path) -> Result<(), String> {
     let ps = keyjutsu_terminal::shell::locate(keyjutsu_terminal::ShellKind::Pwsh)
         .or_else(|| keyjutsu_terminal::shell::locate(keyjutsu_terminal::ShellKind::WindowsPowershell))
         .ok_or("PowerShell is not installed")?;

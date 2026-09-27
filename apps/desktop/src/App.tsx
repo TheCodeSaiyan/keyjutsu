@@ -26,6 +26,7 @@ import { INPUT_OWNED, ipc } from "./ipc";
 import { TerminalView, type TerminalHandle } from "./components/TerminalView";
 import { ReadinessPanel } from "./components/ReadinessPanel";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
+import { UpdatePanel } from "./components/UpdatePanel";
 import { Overlay } from "./components/Overlay";
 import { NewTask } from "./components/NewTask";
 import { PlanWorkspace } from "./components/PlanWorkspace";
@@ -891,6 +892,10 @@ export function App() {
                 <section>
                   <h2>Diagnostics</h2>
                   <DiagnosticsPanel />
+                </section>
+                <section>
+                  <h2>Updates</h2>
+                  <UpdatePanel />
                 </section>
               </aside>
             )}

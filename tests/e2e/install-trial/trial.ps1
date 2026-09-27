@@ -20,12 +20,24 @@ log ("PowerShell 7 present: " + [bool](Get-Command pwsh -ErrorAction SilentlyCon
 $wv = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue
 log ("WebView2 runtime: " + $(if ($wv) { $wv.pv } else { 'not found' }))
 
-# Install, silently (both questions answered yes).
 $installer = Get-ChildItem "$kj\installer\*.exe" | Select-Object -First 1
+$dir = "$env:ProgramFiles\KeyJutsu"
+
+# A plan running: the machine-wide run lock, held as a run holds it. The
+# installer must refuse, and change nothing.
+function hold { $s = [System.Threading.Semaphore]::new(1, 1, 'Global\KeyJutsu.run'); [void]$s.WaitOne(0); $s }
+$held = hold
+log "installing $($installer.Name) while a run holds the lock"
+$p = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
+check "installer refused while a run holds the lock (exit $($p.ExitCode))" ($p.ExitCode -eq 3)
+check "nothing installed while the lock was held" (-not (Test-Path "$dir\keyjutsu.exe"))
+$held.Release() | Out-Null
+$held.Dispose()
+
+# Install, silently (both questions answered yes).
 log "installing $($installer.Name)"
 $p = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
 check "installer exited 0 ($($p.ExitCode))" ($p.ExitCode -eq 0)
-$dir = "$env:ProgramFiles\KeyJutsu"
 if (-not (Test-Path "$dir\keyjutsu.exe")) {
     # Nothing after this means anything without an installation.
     log "not installed; stopping"
@@ -78,6 +90,22 @@ if ($alive) { Stop-Process -Id $app.Id }
 log "--- safe demo"
 & "$kj\bin\demo_trial.exe" $cli *>> "$w\trial.log"
 check "demo trial ($LASTEXITCODE)" ($LASTEXITCODE -eq 0)
+
+# Asking for an update asks GitHub, and says what it found.
+log "--- keyjutsu update"
+$update = (& keyjutsu update 2>&1) -join "`n"
+log $update
+check "update check answered ($LASTEXITCODE)" ($LASTEXITCODE -eq 0 -and ($update -match 'is the newest|is available'))
+
+# The uninstaller refuses too while a run holds the lock: an upgrade can run
+# the old uninstaller before the new installer's own check.
+$held = hold
+$u = Start-Process -FilePath "$dir\uninstall.exe" -ArgumentList '/S' -Wait -PassThru
+Start-Sleep -Seconds 5
+log "uninstaller while a run holds the lock exited $($u.ExitCode)"
+check "still installed while the lock was held" (Test-Path "$dir\keyjutsu.exe")
+$held.Release() | Out-Null
+$held.Dispose()
 
 # Uninstall, silently, and check it all went, including what the broker
 # keeps in ProgramData (made here as it would be, since no plan has run).

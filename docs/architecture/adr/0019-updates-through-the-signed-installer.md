@@ -1,6 +1,6 @@
 # 0019: Updates come through the signed installer, when the operator asks
 
-Status: proposed, 27 September 2026.
+Status: accepted, 27 September 2026.
 
 ## Context
 
@@ -25,9 +25,8 @@ Three things constrain how an updater can work here:
   already checks a download against `SHA256SUMS` and its Authenticode
   signature before running it.
 
-And one practical fact: while the repository is private, its release files
-cannot be downloaded without signing in to GitHub, so no updater, and not
-`install.ps1` either, can fetch a release until the repository is public.
+And one practical fact: release files can be downloaded without signing in
+to GitHub only while the repository is public, which it is.
 
 ## Options
 
@@ -38,19 +37,18 @@ cannot be downloaded without signing in to GitHub, so no updater, and not
    per-machine install, a UAC prompt anyway, since the files are in Program
    Files.
 2. **Check when asked, and hand over to the signed installer.** "Check for
-   updates" in the app, and a new update command in the CLI, ask GitHub for the newest
-   release on the operator's channel, show its version and notes, and on
+   updates" in the app, and an update command in the CLI, ask GitHub for
+   the newest release on the operator's channel, show its version and notes, and on
    the operator's word download the installer, check it exactly as
    `install.ps1` does (`SHA256SUMS`, then its signature, which must be
    KeyJutsu's publisher), and run it. Windows asks for Administrator once,
    as for any install. Nothing new to sign: the installer is the update.
 3. **winget.** `winget upgrade TheCodeSaiyan.KeyJutsu` updates like any
-   other package. Only once the repository is public and the package is in
-   winget-pkgs, and no channel choice.
+   other package, once the package is in winget-pkgs; no channel choice.
 
-## Decision (proposed)
+## Decision
 
-Option 2, with winget as well once the repository is public.
+Option 2, with winget as well once the package is in winget-pkgs.
 
 - **The operator starts every check.** No check runs on its own, so the
   privacy promise changes only to say that asking for an update asks
@@ -72,9 +70,9 @@ Option 2, with winget as well once the repository is public.
 
 - `PRIVACY.md` and the README change: KeyJutsu makes network requests when
   the operator stages artifacts, or asks whether there is an update.
-- Until the repository is public, the check has nothing it can download;
-  it says so rather than failing.
-- The installer gains a pre-install check of the run lock.
+- If GitHub cannot be reached, the check says so rather than failing.
+- The installer and the uninstaller gain a check of the run lock: an
+  upgrade can run the old uninstaller before the new installer's own check.
 - Tests: the version comparison and channel choice; refusal while the run
   lock is held (app, CLI and installer hook); a download that fails its
   checksum or signature is deleted and not run.

@@ -50,6 +50,12 @@ enum SetupCommand {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
+enum UpdateChannel {
+    Stable,
+    Beta,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
 enum SetupAction {
     Add,
     Remove,
@@ -264,6 +270,17 @@ enum Command {
     /// counts, with no tasks, commands, output or secrets. Nothing is sent.
     #[command(subcommand)]
     Diagnostics(DiagnosticsCommand),
+    /// Ask GitHub whether there is a newer KeyJutsu. Only when you run this:
+    /// KeyJutsu never checks by itself.
+    Update {
+        /// Releases only, or pre-releases too.
+        #[arg(long, value_enum, default_value = "stable")]
+        channel: UpdateChannel,
+        /// Download the newer installer, check its checksum and signature,
+        /// and start it. Refused while a plan is running.
+        #[arg(long)]
+        install: bool,
+    },
     /// Open an ordinary interactive shell through KeyJutsu's terminal.
     Shell(ShellArgs),
     /// Run the safe, read-only demo performance.
@@ -535,6 +552,65 @@ impl PerformanceArgs {
     }
 }
 
+fn update(channel: UpdateChannel, install: bool) -> ExitCode {
+    use keyjutsu_core::update;
+    let channel = match channel {
+        UpdateChannel::Stable => update::Channel::Stable,
+        UpdateChannel::Beta => update::Channel::Beta,
+    };
+    let checked = match update::check(channel) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("keyjutsu: {e}.");
+            return ExitCode::FAILURE;
+        }
+    };
+    let Some(a) = checked.available else {
+        println!("KeyJutsu {} is the newest on the {channel:?} channel.", checked.current);
+        return ExitCode::SUCCESS;
+    };
+    println!(
+        "KeyJutsu {} is available{} (this is {}).",
+        a.version,
+        if a.prerelease { ", a pre-release" } else { "" },
+        checked.current
+    );
+    if !a.notes.trim().is_empty() {
+        println!();
+        println!("{}", a.notes.trim());
+        println!();
+    }
+    if !install {
+        println!("To install it: keyjutsu update --install");
+        return ExitCode::SUCCESS;
+    }
+    if let Err(e) = update::free_to_install() {
+        eprintln!("keyjutsu: {e}.");
+        return ExitCode::FAILURE;
+    }
+    println!("Downloading {}...", a.installer);
+    let installer = match update::download(&a, &update::download_dir()) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("keyjutsu: {e}.");
+            return ExitCode::FAILURE;
+        }
+    };
+    println!("It matches the release's SHA256SUMS and is signed by {}.", update::PUBLISHER);
+    match update::start(&installer) {
+        Ok(()) => {
+            println!(
+                "The installer has started: Windows asks for Administrator, then it asks its questions."
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("keyjutsu: {e}.");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
@@ -544,6 +620,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Command::Diagnostics(DiagnosticsCommand::Save { file, force }) => save_diagnostics(&file, force),
+        Command::Update { channel, install } => update(channel, install),
         Command::Agents { action: None, json } => agent_cli::list(json),
         Command::Agents { action: Some(AgentsCommand::Check { live }), .. } => agent_cli::check(live),
         Command::Plan(PlanCommand::Propose { task, agent, files, folder, out }) => {
