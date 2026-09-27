@@ -300,6 +300,26 @@ fn recovery_commands_are_checked_too() {
 }
 
 #[test]
+fn a_long_command_line_is_validated_and_recorded() {
+    // One line of several thousand characters, as an agent writes a whole
+    // small program on one line. Its findings quote it; the plan keeps 4,000
+    // characters for a finding, and recording used to fail on it.
+    let line = "$null = Get-Date; ".repeat(300);
+    assert!(line.len() > 5000);
+    let p = plan(json!([step("long", "pwsh", line.trim())]));
+    let r = validate(&p, Options::default());
+    let recorded = r.record_in(p.plan(), "2026-09-25T02:00:00Z");
+    let text = serde_json::to_string(&recorded).unwrap();
+    let back = parse_plan(&text).expect("a plan with a long command line records its validation");
+    let st = &back.plan().keyjutsu.as_ref().unwrap().steps["long"];
+    assert!(st.evidence.iter().filter_map(|e| e.detail.as_deref()).all(|d| d.chars().count() <= 1000));
+    assert!(
+        st.evidence.iter().any(|e| e.detail.as_deref().is_some_and(|d| d.ends_with('…'))),
+        "the cut is marked"
+    );
+}
+
+#[test]
 fn the_report_can_be_recorded_in_a_stored_plan() {
     let p = plan(json!([step("a", "pwsh", "Get-Date")]));
     let r = validate(&p, Options::default());
