@@ -133,6 +133,43 @@ fn validating_a_destructive_step_leaves_the_machine_alone() {
     assert_eq!(st.proof_level, ProofLevel::High, "a clean dry run of every line");
 }
 
+/// A wildcard is judged by what it could match, not by what it matches
+/// today, and before approval the dry run shows every file it matches now.
+/// A pipeline that feeds a delete is judged the same way.
+#[test]
+fn a_wildcard_is_rated_critical_and_shown_expanded_before_approval() {
+    let dir = scratch("wildcard");
+    for f in ["a.log", "b.log", "keep.txt"] {
+        std::fs::write(dir.join(f), "x").unwrap();
+    }
+    let honest = |mut s: Value| {
+        s["proposed_risk"] = json!({"level": "critical", "rationale": "Deletes the logs."});
+        s
+    };
+    let wildcard = honest(step("logs", "pwsh", &format!("Remove-Item -Path {}/*.log", forward(&dir))));
+    let piped = honest(step(
+        "piped",
+        "pwsh",
+        &format!("Get-ChildItem -LiteralPath {} -Filter *.log | Remove-Item", forward(&dir)),
+    ));
+    let r = validate(&plan(json!([wildcard, piped])), Options::default());
+    for f in ["a.log", "b.log", "keep.txt"] {
+        assert!(dir.join(f).exists(), "validation deleted {f}");
+    }
+
+    let st = state(&r, "logs");
+    assert_eq!(st.assessed_risk, Some(RiskLevel::Critical), "{st:#?}");
+    let dry = st.evidence.iter().find(|e| e.check == "dry run").expect("a dry run");
+    let shown = dry.detail.as_deref().unwrap_or_default();
+    assert!(shown.contains("a.log") && shown.contains("b.log"), "every match is shown: {shown}");
+    assert!(!shown.contains("keep.txt"), "{shown}");
+
+    let st = state(&r, "piped");
+    assert_eq!(st.assessed_risk, Some(RiskLevel::Critical), "{st:#?}");
+    let why = st.risk_reasons.join(" | ");
+    assert!(why.contains("pipeline"), "{why}");
+}
+
 #[test]
 fn a_trailing_comment_cannot_turn_a_dry_run_into_a_real_one() {
     let dir = scratch("comment");

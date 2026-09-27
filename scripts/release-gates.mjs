@@ -116,6 +116,10 @@ const gates = {
     "a_step_whose_recovery_cannot_be_prepared_does_not_run",
     "an_administrator_step_is_recovered_through_the_broker_and_never_from_the_profile",
     "an_administrator_steps_capture_is_the_brokers_not_the_profiles",
+    "a_wildcard_in_a_command_that_changes_things_is_critical_whatever_it_matches_today",
+    "a_command_that_changes_whatever_a_pipeline_yields_is_critical",
+    "cmd_deletes_are_high_and_with_a_wildcard_critical",
+    "a_wildcard_is_rated_critical_and_shown_expanded_before_approval",
   ],
   "Credential boundary": [
     "a_line_that_asks_the_operator_waits_for_enter_and_is_never_performed",

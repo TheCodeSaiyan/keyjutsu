@@ -57,6 +57,10 @@ pub struct CommandUse {
     #[serde(default)]
     pub ambiguous_parameters: Vec<String>,
     pub supports_what_if: bool,
+    /// Something earlier in the pipeline feeds it: it acts on whatever that
+    /// yields, which the command line alone does not show.
+    #[serde(default)]
+    pub from_pipeline: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

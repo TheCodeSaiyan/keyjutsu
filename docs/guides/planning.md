@@ -152,7 +152,11 @@ would happen; `--no-dry-run` skips even that.
 Each step comes back READY, REVIEW, BLOCKED or INVALID, with how well
 that was proved. The risk is KeyJutsu's own view: an agent can raise a
 step's risk but never lower it, so a recursive delete labelled "low" is
-still critical.
+still critical. So is a command that deletes or changes things through a
+wildcard (`Remove-Item C:\logs\*.log`, `del *.tmp`) or whatever a pipeline
+hands it (`Get-ChildItem … | Remove-Item`): what it touches is decided when
+it runs, not when you read it. The dry run shows what the wildcard matches
+now; naming each file with `-LiteralPath` keeps the step to exactly those.
 
 ### 5. Approve it
 

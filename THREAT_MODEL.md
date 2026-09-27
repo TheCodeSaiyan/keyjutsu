@@ -92,6 +92,7 @@ it is, and the row says which part is not.
 | Keys typed during a running command are fed into it. | Swallowed while executing, apart from Ctrl+C and Esc. | Held. |
 
 | An agent labels a destructive step as low risk to slip it through whole-plan approval. | KeyJutsu rates risk itself; a lower agent label puts the step in review. | Held (`validating_a_destructive_step_leaves_the_machine_alone`, CLI `a_critical_step_is_only_sealed_with_its_typed_phrase`). |
+| A wildcard or a pipeline makes a step touch more than the operator saw: `Remove-Item C:\logs\*.log` matches whatever is there when it runs, `Get-ChildItem … \| Remove-Item` deletes whatever the pipeline yields, and `-Path` reads `[ab]` as a pattern. | A command that deletes or changes its targets is critical when a path it is given is a wildcard (the value of `-Path`, `-Include` or `-Filter`, or its first positional argument; never with `-LiteralPath`) or when a pipeline feeds it; cmd's `del`, `erase`, `rd` and `rmdir` are high, and critical with a wildcard. Critical means its own typed phrase, and the dry run shows every file the wildcard matches at validation. | Held (`a_wildcard_in_a_command_that_changes_things_is_critical_whatever_it_matches_today`, `a_command_that_changes_whatever_a_pipeline_yields_is_critical`, `cmd_deletes_are_high_and_with_a_wildcard_critical`, `a_wildcard_is_rated_critical_and_shown_expanded_before_approval`; `what_is_not_a_path_pattern_is_not_mistaken_for_one` keeps values and destinations out). What a wildcard matches at run time can still differ from the dry run; the rating and the phrase are what hold. |
 | Validation executes an agent's command before approval. | Validation parses and looks up; it never runs a named program. The only exception is `-WhatIf` for literal-argument built-in management cmdlets, under `$WhatIfPreference` so a trailing comment cannot cancel it. | Held (`a_trailing_comment_cannot_turn_a_dry_run_into_a_real_one`, `expressions_are_never_evaluated_by_a_dry_run`); [ADR 0014](docs/architecture/adr/0014-validation-runs-nothing-it-validates.md). |
 | Looking commands up imports a module whose loading code runs. | `Get-Command` may import modules from the machine's module path to answer. Those modules are already installed; the plan cannot add one. | Accepted, stated. |
 | A profile alias or function hides what a command really is. | Validation runs without the profile and reports such names as not found. | Held, at the cost of blocking steps that rely on a profile. |
@@ -163,7 +164,7 @@ full suite. A test that is missing fails its gate, so renaming or deleting one
 cannot quietly take it out. All eight pass: broker security
 (20 tests), plan integrity (16), secret handling (12), the execution state
 machine (18), schema validation (7), supported-shell compatibility (8),
-critical rollback (12) and the credential boundary (6).
+critical rollback (16) and the credential boundary (6).
 
 ## Not covered
 

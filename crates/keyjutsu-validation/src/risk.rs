@@ -144,6 +144,66 @@ fn verb(name: &str) -> &str {
     name.split('-').next().unwrap_or(name)
 }
 
+/// Cmdlets that change or remove what they are pointed at. Pointed at many
+/// things at once, by a wildcard or a pipeline, they are critical.
+fn changes_its_targets(lower: &str) -> bool {
+    matches!(verb(lower), "remove" | "clear")
+        || matches!(
+            lower,
+            "move-item" | "rename-item" | "copy-item" | "set-content" | "set-item" | "set-itemproperty"
+        )
+}
+
+/// The first path pattern that is a wildcard: `*` or `?`, or `[…]`, which
+/// `-Path` reads as a set of characters, not as brackets. Only what is read
+/// as a path counts: the value of `-Path`, `-Include` or `-Filter`, or the
+/// first positional argument; a `-Value` of `what?` is not a pattern. With
+/// `-LiteralPath`, nothing is.
+fn wildcard(c: &crate::powershell::CommandUse) -> Option<&str> {
+    const SWITCHES: &[&str] =
+        &["recurse", "force", "confirm", "whatif", "passthru", "verbose", "debug", "nonewline"];
+    const PATTERNS: &[&str] = &["path", "include", "filter"];
+    if c.parameters_resolved.iter().any(|p| p == "LiteralPath") {
+        return None;
+    }
+    let is_pattern = |a: &str| {
+        a.contains(['*', '?']) || (a.contains('[') && a.contains(']') && !a.starts_with(['[', '$']))
+    };
+    let mut expecting: Option<String> = None;
+    let mut positional = 0;
+    for a in &c.arguments {
+        if let Some(param) = a.strip_prefix('-').filter(|p| p.starts_with(|c: char| c.is_ascii_alphabetic()))
+        {
+            let (name, inline) = match param.split_once(':') {
+                Some((n, v)) => (n.to_ascii_lowercase(), Some(v)),
+                None => (param.to_ascii_lowercase(), None),
+            };
+            let path_like = PATTERNS.iter().any(|p| p.starts_with(&name));
+            match inline {
+                Some(v) if path_like && is_pattern(v) => return Some(a),
+                Some(_) => expecting = None,
+                None if SWITCHES.contains(&name.as_str()) => expecting = None,
+                None => expecting = Some(name),
+            }
+            continue;
+        }
+        let path_like = match expecting.take() {
+            Some(name) => PATTERNS.iter().any(|p| p.starts_with(&name)),
+            None => {
+                positional += 1;
+                positional == 1
+            }
+        };
+        if path_like && is_pattern(a) {
+            return Some(a);
+        }
+    }
+    None
+}
+
+/// cmd's own deleting commands, as the first word of a segment.
+const CMD_DELETES: &[&str] = &["del", "erase", "rd", "rmdir"];
+
 fn assess_cmdlet(name: &str, resolved: &[String], a: &mut Assessment) {
     let lower = name.to_ascii_lowercase();
     if CRITICAL_CMDLETS.contains(&lower.as_str()) {
@@ -212,7 +272,24 @@ pub fn assess(step: &Step, lines: &[(&str, Option<&LineAnalysis>)]) -> Assessmen
                     };
                     match c.kind.as_deref() {
                         Some("Cmdlet" | "Function" | "Alias" | "Filter") => {
-                            assess_cmdlet(name, &c.parameters_resolved, &mut a)
+                            assess_cmdlet(name, &c.parameters_resolved, &mut a);
+                            let lower = name.to_ascii_lowercase();
+                            if changes_its_targets(&lower) {
+                                if let Some(pattern) = wildcard(c) {
+                                    a.raise(
+                                        RiskLevel::Critical,
+                                        format!(
+                                            "{name} acts on every match of the wildcard `{pattern}`, which can be more than the plan shows; name each target with -LiteralPath"
+                                        ),
+                                    );
+                                }
+                                if c.from_pipeline {
+                                    a.raise(
+                                        RiskLevel::Critical,
+                                        format!("{name} acts on whatever the pipeline before it yields, which the line does not show"),
+                                    );
+                                }
+                            }
                         }
                         _ => assess_tool(name, &c.arguments, &mut a),
                     }
@@ -224,7 +301,17 @@ pub fn assess(step: &Step, lines: &[(&str, Option<&LineAnalysis>)]) -> Assessmen
                     let mut words = segment.split_whitespace();
                     if let Some(first) = words.next() {
                         let rest: Vec<String> = words.map(str::to_owned).collect();
-                        assess_tool(first, &rest, &mut a);
+                        if CMD_DELETES.contains(&first) {
+                            a.raise(RiskLevel::High, format!("`{first}` deletes"));
+                            if let Some(pattern) = rest.iter().find(|w| w.contains(['*', '?'])) {
+                                a.raise(
+                                    RiskLevel::Critical,
+                                    format!("`{first}` deletes every match of the wildcard `{pattern}`, which can be more than the plan shows"),
+                                );
+                            }
+                        } else {
+                            assess_tool(first, &rest, &mut a);
+                        }
                     }
                 }
             }
@@ -371,6 +458,118 @@ mod tests {
         }));
         let l = line(json!([cmdlet("Clear-Content", &[])]));
         assert_eq!(assess(&deleting, &[("Clear-Content C:/data/x", Some(&l))]).level, RiskLevel::Critical);
+    }
+
+    fn used(name: &str, params: &[&str], args: &[&str], from_pipeline: bool) -> serde_json::Value {
+        json!({"name": name, "type": "Cmdlet", "static_arguments": true, "supports_what_if": true,
+               "parameters_resolved": params, "arguments": args, "from_pipeline": from_pipeline})
+    }
+
+    fn level(text: &str, c: serde_json::Value) -> RiskLevel {
+        assess(&step(json!({})), &[(text, Some(&line(json!([c]))))]).level
+    }
+
+    #[test]
+    fn a_wildcard_in_a_command_that_changes_things_is_critical_whatever_it_matches_today() {
+        // Whatever the folder holds at validation, the pattern decides at run time.
+        for (text, params, args) in [
+            ("Remove-Item C:/logs/*.log", vec![], vec!["C:/logs/*.log"]),
+            ("Remove-Item -Path 'C:/logs/app?.log'", vec!["Path"], vec!["-Path", "'C:/logs/app?.log'"]),
+            ("Remove-Item C:/logs -Include *.tmp", vec!["Include"], vec!["C:/logs", "-Include", "*.tmp"]),
+            ("Remove-Item -Force -Path:C:/logs/*", vec!["Force", "Path"], vec!["-Force", "-Path:C:/logs/*"]),
+            ("Remove-Item 'C:/data/[ab].txt'", vec![], vec!["'C:/data/[ab].txt'"]),
+            ("Clear-Content C:/logs/*", vec![], vec!["C:/logs/*"]),
+            ("Move-Item C:/in/* C:/out", vec![], vec!["C:/in/*", "C:/out"]),
+        ] {
+            let name = text.split(' ').next().unwrap();
+            assert_eq!(level(text, used(name, &params, &args, false)), RiskLevel::Critical, "{text}");
+        }
+        let a = assess(
+            &step(json!({})),
+            &[(
+                "Remove-Item C:/logs/*.log",
+                Some(&line(json!([used("Remove-Item", &[], &["C:/logs/*.log"], false)]))),
+            )],
+        );
+        assert!(
+            a.reasons.iter().any(|r| r.contains("`C:/logs/*.log`") && r.contains("-LiteralPath")),
+            "{a:?}"
+        );
+    }
+
+    #[test]
+    fn what_is_not_a_path_pattern_is_not_mistaken_for_one() {
+        // A literal path, even with brackets in it.
+        assert_eq!(
+            level(
+                "Remove-Item -LiteralPath 'C:/data/[ab].txt'",
+                used("Remove-Item", &["LiteralPath"], &["-LiteralPath", "'C:/data/[ab].txt'"], false)
+            ),
+            RiskLevel::High
+        );
+        // A value, a destination, an index into a variable.
+        assert_eq!(
+            level(
+                "Set-Content -Path C:/a.txt -Value 'what?'",
+                used("Set-Content", &["Path", "Value"], &["-Path", "C:/a.txt", "-Value", "'what?'"], false)
+            ),
+            RiskLevel::Normal
+        );
+        assert_eq!(
+            level(
+                "Copy-Item C:/a.txt 'C:/out/*'",
+                used("Copy-Item", &[], &["C:/a.txt", "'C:/out/*'"], false)
+            ),
+            RiskLevel::Normal
+        );
+        assert_eq!(
+            level(
+                "Copy-Item -Path $KJ_ARTIFACTS['tool.zip'] -Destination C:/t",
+                used(
+                    "Copy-Item",
+                    &["Path", "Destination"],
+                    &["-Path", "$KJ_ARTIFACTS['tool.zip']", "-Destination", "C:/t"],
+                    false
+                )
+            ),
+            RiskLevel::Normal
+        );
+        // Reading with a wildcard changes nothing.
+        assert_eq!(
+            level("Get-ChildItem C:/logs/*.log", used("Get-ChildItem", &[], &["C:/logs/*.log"], false)),
+            RiskLevel::Low
+        );
+    }
+
+    #[test]
+    fn a_command_that_changes_whatever_a_pipeline_yields_is_critical() {
+        let l = line(json!([
+            used("Get-ChildItem", &["Filter"], &["C:/logs", "-Filter", "*.log"], false),
+            used("Remove-Item", &[], &[], true)
+        ]));
+        let a = assess(&step(json!({})), &[("Get-ChildItem C:/logs -Filter *.log | Remove-Item", Some(&l))]);
+        assert_eq!(a.level, RiskLevel::Critical);
+        assert!(a.reasons.iter().any(|r| r.contains("pipeline")), "{a:?}");
+        // Reading from a pipeline is not.
+        let l = line(json!([
+            used("Get-Service", &[], &[], false),
+            used("Where-Object", &[], &["{ $_.Status -eq 'Running' }"], true)
+        ]));
+        assert_eq!(
+            assess(&step(json!({})), &[("Get-Service | Where-Object { $_.Status -eq 'Running' }", Some(&l))])
+                .level,
+            RiskLevel::Low
+        );
+    }
+
+    #[test]
+    fn cmd_deletes_are_high_and_with_a_wildcard_critical() {
+        let cmd = || step(json!({"shell": {"kind": "cmd"}}));
+        assert_eq!(assess(&cmd(), &[("del C:\\logs\\app.log", None)]).level, RiskLevel::High);
+        assert_eq!(assess(&cmd(), &[("del /q C:\\logs\\*.log", None)]).level, RiskLevel::Critical);
+        assert_eq!(assess(&cmd(), &[("erase C:\\logs\\app?.log", None)]).level, RiskLevel::Critical);
+        assert_eq!(assess(&cmd(), &[("rmdir C:\\empty", None)]).level, RiskLevel::High);
+        assert_eq!(assess(&cmd(), &[("dir C:\\logs\\*.log", None)]).level, RiskLevel::Low);
     }
 
     #[test]

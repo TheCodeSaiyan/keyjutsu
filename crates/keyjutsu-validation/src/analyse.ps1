@@ -84,6 +84,8 @@ $results = foreach ($item in @($request.commands)) {
             ambiguous_parameters = @($ambiguous)
             supports_what_if = [bool]($info -and $info.CommandType -eq 'Cmdlet' -and $info.Parameters -and
                 $info.Parameters.ContainsKey('WhatIf'))
+            from_pipeline = [bool]($c.Parent -is [System.Management.Automation.Language.PipelineAst] -and
+                $c.Parent.PipelineElements.IndexOf($c) -gt 0)
         }
     }
     [ordered]@{
