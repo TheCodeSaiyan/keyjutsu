@@ -234,11 +234,15 @@ Environment unchanged since approval.
   names it. Edit the step, or retry it with the agent.
 - **BLOCKED**: something it needs isn't here: a tool, a version, a service.
   Install it, or ask the agent for a step that doesn't need it.
-- **REVIEW**: KeyJutsu couldn't prove enough, or the agent's risk
-  label was lower than KeyJutsu's. Read the step; if it's right, edit it to
-  say so honestly.
+- **REVIEW**: KeyJutsu couldn't prove enough, or KeyJutsu rates the step high
+  or critical and the agent rated it lower. Read the step; if it's right,
+  **Use KeyJutsu's rating**, or edit it to say so honestly.
 - **A step needs a download.** **Stage downloads** in the app, or
   `keyjutsu plan stage spooler.json`, fetches each file and checks it against
   its pinned hash before approval. Nothing is downloaded while a plan runs.
+- **Still stuck?** **Save plan** writes the plan, with what validation found
+  for every step, to a file you can keep, open again with **Open plan file…**,
+  or hand to someone helping. It holds the plan's commands and paths, so read
+  it before you send it.
 
 Next: [running a plan](running-a-plan.md).

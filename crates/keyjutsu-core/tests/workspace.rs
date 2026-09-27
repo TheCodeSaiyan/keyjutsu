@@ -275,3 +275,20 @@ fn a_review_adds_concerns_but_changes_no_step() {
     assert!(v.notes.iter().any(|n| n.review && n.step.as_deref() == Some("c")));
     assert!(readiness(&w).values().all(|r| *r == Some(Readiness::Ready)), "a review invalidates nothing");
 }
+
+/// A plan saved from the workspace keeps what validation found for every
+/// step, and opens again as it was: something to hand over when a plan will
+/// not go, or to come back to.
+#[test]
+fn a_saved_plan_keeps_its_findings_and_opens_again_as_it_was() {
+    let w = validated(&chain());
+    let dir = std::env::temp_dir().join(format!("kj-saved-plan-{}", std::process::id()));
+    let file = w.save_draft(&dir).unwrap();
+    assert!(file.file_name().unwrap().to_string_lossy().starts_with("p-"), "{}", file.display());
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("\"evidence\""), "the findings are in the file");
+    let reopened = Workspace::open(&text).unwrap();
+    assert_eq!(reopened.plan(), w.plan(), "the same plan, findings and all");
+    assert_eq!(readiness(&reopened), readiness(&w));
+    let _ = std::fs::remove_dir_all(&dir);
+}

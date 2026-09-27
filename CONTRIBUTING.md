@@ -80,7 +80,7 @@ set with one command and checked in CI:
 ```powershell
 node scripts/version.mjs set 0.2.0     # every place, and Cargo.lock
 git commit -am "Release 0.2.0"
-git tag -a v0.2.0 -F notes.md           # what changed, for the release page
+git tag -a --cleanup=verbatim v0.2.0 -F notes.md   # what changed, for the release page
 git push origin main v0.2.0
 ```
 

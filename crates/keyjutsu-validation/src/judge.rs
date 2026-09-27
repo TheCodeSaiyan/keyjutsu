@@ -85,7 +85,7 @@ impl Verdict {
     }
 
     fn record(&mut self, check: &str, result: EvidenceResult, detail: impl Into<String>) {
-        let detail = detail.into();
+        let detail = clip(&detail.into());
         self.evidence.push(Evidence {
             check: check.into(),
             result,
@@ -101,6 +101,20 @@ impl Verdict {
         self.record(check, EvidenceResult::Failed, detail);
         self.worsen(readiness);
     }
+}
+
+/// The longest a finding is kept. A finding quotes the line it is about, and
+/// a command may be 8,000 characters where the plan keeps 4,000 for a
+/// finding: one long command line made a first real plan fail to record its
+/// validation at all. What is cut is marked.
+const MAX_FINDING: usize = 1000;
+
+fn clip(text: &str) -> String {
+    if text.chars().count() <= MAX_FINDING {
+        return text.to_owned();
+    }
+    let kept: String = text.chars().take(MAX_FINDING - 1).collect();
+    format!("{kept}…")
 }
 
 pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
@@ -135,6 +149,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
 
     // Syntax, commands and parameters, for every line the step can run.
     let mut all_parsed = !is_cmd && !g.lines.is_empty();
+    let mut computed_said = false;
     for (text, analysis) in g.lines.iter().chain(g.support_lines.iter()) {
         let Some(a) = analysis else { continue };
         if a.syntax_errors.is_empty() {
@@ -149,7 +164,24 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
             );
         }
         for c in &a.commands {
-            let name = c.name.as_deref().unwrap_or("(computed name)");
+            // Called through a variable (`& $write "…"`, often a script block
+            // the same line defines): there is no name to look up before it
+            // runs. That is not a missing command; it is something KeyJutsu
+            // cannot check, said once, and the proof is lower for it.
+            let Some(name) = c.name.as_deref() else {
+                all_parsed = false;
+                if !computed_said {
+                    computed_said = true;
+                    v.record(
+                        "commands",
+                        EvidenceResult::NotApplicable,
+                        "calls something through a variable (such as `& $name`), which cannot be looked up before it runs",
+                    );
+                    v.uncertainty
+                        .push("What a call through a variable runs is only known when it runs".into());
+                }
+                continue;
+            };
             match c.kind.as_deref() {
                 None => {
                     all_parsed = false;
@@ -508,7 +540,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
     StepState {
         readiness: v.readiness,
         proof_level: proof,
-        remaining_uncertainty: v.uncertainty,
+        remaining_uncertainty: v.uncertainty.iter().map(|u| clip(u)).collect(),
         assessed_risk: g.risk.as_ref().map(|r| r.level),
         risk_reasons: g.risk.as_ref().map(|r| r.reasons.clone()).unwrap_or_default(),
         evidence: v.evidence,
@@ -551,6 +583,46 @@ mod tests {
         let s = judge(&step("command"), &g);
         assert_eq!(s.readiness, Readiness::Invalid);
         assert_eq!(s.proof_level, ProofLevel::Low);
+    }
+
+    /// `& $write "…"` calls a script block through a variable: there is no
+    /// name to look up, which is not the same as a command that is missing.
+    /// A second real plan was blocked ten times over for it.
+    #[test]
+    fn a_call_through_a_variable_is_unchecked_not_missing() {
+        let l: LineAnalysis =
+            serde_json::from_value(json!({"id": "l", "single_command": false, "commands": [
+                {"name": null, "type": null, "static_arguments": false, "supports_what_if": false},
+                {"name": null, "type": null, "static_arguments": false, "supports_what_if": false},
+                {"name": "Get-Date", "type": "Cmdlet", "static_arguments": true, "supports_what_if": false}
+            ]}))
+            .unwrap();
+        let g = Gathered {
+            shell_version: Some("7".into()),
+            lines: vec![("$w = { param($t) $t }; & $w 'a'; & $w 'b'; Get-Date", Some(&l))],
+            ..Gathered::default()
+        };
+        let s = judge(&step("command"), &g);
+        assert_eq!(s.readiness, Readiness::Ready, "{s:#?}");
+        let said = s
+            .evidence
+            .iter()
+            .filter(|e| e.detail.as_deref().is_some_and(|d| d.contains("through a variable")))
+            .count();
+        assert_eq!(said, 1, "said once, not once per call: {s:#?}");
+        assert_ne!(s.proof_level, ProofLevel::High);
+        // A named command that does not exist is still blocked.
+        let missing: LineAnalysis =
+            serde_json::from_value(json!({"id": "l", "single_command": true, "commands": [
+                {"name": "Get-Nothing", "type": null, "static_arguments": true, "supports_what_if": false}
+            ]}))
+            .unwrap();
+        let g = Gathered {
+            shell_version: Some("7".into()),
+            lines: vec![("Get-Nothing", Some(&missing))],
+            ..Gathered::default()
+        };
+        assert_eq!(judge(&step("command"), &g).readiness, Readiness::Blocked);
     }
 
     /// KeyJutsu's rating applies either way; only where it matters does an

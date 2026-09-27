@@ -181,6 +181,11 @@ impl Workspace {
     }
 
     /// A plan from a file: a proposal or a stored plan with KeyJutsu's state.
+    /// Where the desktop app saves plans: beside KeyJutsu's other data.
+    pub fn plans_dir() -> std::path::PathBuf {
+        crate::store::default_root().with_file_name("plans")
+    }
+
     pub fn open(text: &str) -> Result<Self, WorkspaceError> {
         let draft = parse_plan(text)?;
         let task = draft.plan().title.clone().unwrap_or_else(|| draft.plan().task_id.clone());
@@ -193,6 +198,21 @@ impl Workspace {
 
     pub fn draft(&self) -> &ValidPlan {
         &self.draft
+    }
+
+    /// Save the draft as it stands, every step's validation findings with
+    /// it, to a new dated file in `dir`, and say where. Something to keep, or
+    /// to hand to whoever is helping with a plan that will not go: it opens
+    /// again with Open plan file…, or `keyjutsu plan validate FILE`. It holds
+    /// the plan's commands and paths, as the agent wrote them; nothing the
+    /// operator typed as a credential is ever in a plan.
+    pub fn save_draft(&self, dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+        std::fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+        let stamp = crate::fingerprint::now_rfc3339().replace(':', "");
+        let file = dir.join(format!("{}-{stamp}.json", self.plan().plan_id));
+        let text = serde_json::to_string_pretty(self.plan()).map_err(|e| e.to_string())?;
+        std::fs::write(&file, text).map_err(|e| format!("could not write {}: {e}", file.display()))?;
+        Ok(file)
     }
 
     pub fn task(&self) -> &str {

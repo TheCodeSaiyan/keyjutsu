@@ -250,3 +250,15 @@ export function confirmationFor(
     phrase: summary.confirmation_phrase,
   };
 }
+
+/**
+ * What to tell the agent when retrying a step, written from what validation
+ * found, so the operator can send it as it is or say more.
+ */
+export function retryGuidance(state: plan.StepState | undefined): string {
+  const found = (state?.evidence ?? [])
+    .filter((e) => e.result === "failed" && e.check !== "artifact")
+    .map((e) => `- ${e.check}: ${e.detail ?? ""}`);
+  if (found.length === 0) return "";
+  return `Validation found this step won't run as it is:\n${[...new Set(found)].join("\n")}\nChange it so it will, without changing what it achieves.`;
+}
