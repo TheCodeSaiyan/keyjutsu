@@ -1164,7 +1164,10 @@ pub fn execute(
                     checkpoint,
                 );
             };
-            match crate::recovery::capture_step(step, &step_hash, &dir, now()) {
+            // Copies of the operator's files are kept encrypted whenever the
+            // run records its checkpoint in the store (ADR 0018).
+            let backups = crate::recovery::Backups { dir: &dir, store: options.checkpoint_store.as_deref() };
+            match crate::recovery::capture_step(step, &step_hash, backups, now()) {
                 Ok(c) => checkpoint.captures.push(c),
                 Err(e) => {
                     save(&checkpoint);

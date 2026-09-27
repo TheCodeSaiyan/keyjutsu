@@ -55,8 +55,22 @@ impl SessionRecord {
     }
 }
 
+/// Keep `record`, with anything that looks like a secret taken out of what
+/// the run printed and of KeyJutsu's diffs first. The store is encrypted, but
+/// that is no reason to keep a token a failing command happened to print:
+/// what history is for does not need it.
 pub fn save(store: &Store, record: &SessionRecord) -> Result<(), String> {
-    store.put(KIND, &record.id, record)
+    let clean = |text: &str| keyjutsu_agent::context::redact(text).0;
+    let mut record = record.clone();
+    if let Outcome::Failed { expected, actual, output, .. } = &mut record.outcome {
+        *expected = clean(expected);
+        *actual = clean(actual);
+        *output = clean(output);
+    }
+    for change in record.git.iter_mut().flat_map(|r| r.keyjutsu.iter_mut()) {
+        change.diff = clean(&change.diff);
+    }
+    store.put(KIND, &record.id, &record)
 }
 
 pub fn load(store: &Store, id: &str) -> Result<SessionRecord, String> {
@@ -101,4 +115,54 @@ pub fn recheck(record: &SessionRecord, now: &EnvironmentFingerprint) -> Result<R
     let drifts = then.drift(now);
     let affected = affected_by_drift(snap.plan(), snap.graph(), &drifts);
     Ok(Recheck { drifts, affected, no_fingerprint: false })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::KeyJutsuChange;
+
+    #[test]
+    fn a_secret_a_failing_command_printed_is_not_kept_in_the_history() {
+        let token = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
+        let dir = std::env::temp_dir().join(format!("kj-history-{}", std::process::id()));
+        let store = Store::open(&dir).unwrap();
+        let record = SessionRecord {
+            id: "s1".into(),
+            started_at: "2026-09-27T00:00:00Z".into(),
+            finished_at: "2026-09-27T00:01:00Z".into(),
+            task: "t".into(),
+            agent: serde_json::from_value(serde_json::json!({"name": "codex", "version": "1"})).unwrap(),
+            snapshot: "{}".into(),
+            checkpoint: None,
+            outcome: Outcome::Failed {
+                step: "push".into(),
+                expected: "exit code 0".into(),
+                actual: format!("exit code 1, token={token}"),
+                output: format!("remote: Invalid credentials for {token}\npassword=hunter2\n"),
+            },
+            git: vec![RepoReport {
+                root: "C:/repo".into(),
+                branch: None,
+                keyjutsu: vec![KeyJutsuChange {
+                    path: ".env".into(),
+                    was_already_changed: false,
+                    status: "??".into(),
+                    diff: format!("+GITHUB_TOKEN={token}\n+API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz\n"),
+                }],
+                untouched: vec![],
+                head_moved: None,
+            }],
+        };
+        save(&store, &record).unwrap();
+        let kept = serde_json::to_string(&load(&store, "s1").unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        for secret in [token, "hunter2", "sk-proj-abcdefghijklmnopqrstuvwxyz"] {
+            assert!(!kept.contains(secret), "{secret} was kept: {kept}");
+        }
+        assert!(
+            kept.contains("Invalid credentials") && kept.contains("[REDACTED"),
+            "the rest is kept: {kept}"
+        );
+    }
 }

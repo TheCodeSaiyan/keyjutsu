@@ -639,6 +639,8 @@ fn plan_run(
         // Record the repositories the plan works in, to tell its changes
         // from the operator's afterwards.
         let git_dir = path.with_file_name("git");
+        // Copies of the operator's changed files are kept encrypted (ADR 0018).
+        let git_store = open_store().ok();
         // Where the shell really is: a profile may have changed folder.
         let start = session.shell_location().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let baseline: Vec<(git::RepoState, PathBuf)> = git::repositories(&start, snapshot.plan())
@@ -646,7 +648,7 @@ fn plan_run(
             .enumerate()
             .filter_map(|(i, repo)| {
                 let copies = git_dir.join(i.to_string());
-                git::record(repo, Some(&copies)).ok().map(|r| (r, copies))
+                git::record(repo, Some(&copies), git_store.as_ref()).ok().map(|r| (r, copies))
             })
             .collect();
         let (tx, rx) = channel();
@@ -679,8 +681,10 @@ fn plan_run(
         // Still on the near side of a boundary (it stopped at one, or the
         // resume was refused): the next run continues from here.
         *locked(&remember.waiting) = finished_checkpoint.boundary.is_some().then(|| checkpoint.clone());
-        let git: Vec<git::RepoReport> =
-            baseline.iter().filter_map(|(before, copies)| git::report(before, copies).ok()).collect();
+        let git: Vec<git::RepoReport> = baseline
+            .iter()
+            .filter_map(|(before, copies)| git::report(before, copies, git_store.as_ref()).ok())
+            .collect();
         // Recorded in the encrypted history, as the CLI records its runs, so
         // a run that worked can become a Technique.
         let finished = fingerprint::now_rfc3339();
@@ -881,6 +885,8 @@ async fn recovery_run(
         // Recovery changes the machine too: one run or recovery at a time,
         // refused before Windows is asked to start a broker for it.
         let held = keyjutsu_core::runlock::RunLock::take()?;
+        // Backups are kept encrypted with the store's key (ADR 0018).
+        let store = open_store()?;
         // An Administrator step's recovery commands run in the elevation
         // broker, started now with one UAC prompt, never in this terminal.
         let broker = if keyjutsu_core::recovery::needs_broker(&snapshot, &items) {
@@ -904,7 +910,7 @@ async fn recovery_run(
             broker.as_ref().map(|b| b as &dyn keyjutsu_core::elevation::ElevatedRunner),
             &snapshot,
             &checkpoint,
-            &recovery_dir(&path),
+            keyjutsu_core::recovery::Backups::sealed(&recovery_dir(&path), &store),
             &items,
             &PerformanceConfig::default(),
             &|_| {},

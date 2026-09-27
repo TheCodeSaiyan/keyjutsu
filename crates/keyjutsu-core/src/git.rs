@@ -90,8 +90,13 @@ pub fn parse_status(raw: &str) -> Vec<(String, String)> {
 
 /// Record the repository at `root`. With `copies`, each changed file's
 /// content is also kept there, named by its hash, so KeyJutsu's diff can be
-/// taken against it later.
-pub fn record(root: &Path, copies: Option<&Path>) -> Result<RepoState, String> {
+/// taken against it later; with `store`, encrypted with its key (ADR 0018),
+/// since a changed file the operator had not committed may be an `.env`.
+pub fn record(
+    root: &Path,
+    copies: Option<&Path>,
+    store: Option<&crate::store::Store>,
+) -> Result<RepoState, String> {
     let status = git(root, &["status", "--porcelain=v1", "-z", "--untracked-files=all"])?;
     if !status.success {
         return Err(format!("git status failed: {}", status.stderr.trim()));
@@ -119,7 +124,11 @@ pub fn record(root: &Path, copies: Option<&Path>) -> Result<RepoState, String> {
                 {
                     let copy = dir.join(&sha);
                     if !copy.exists() {
-                        std::fs::write(&copy, &bytes).map_err(|e| e.to_string())?;
+                        let kept = match store {
+                            Some(s) => s.seal(&sha, &bytes)?,
+                            None => bytes.clone(),
+                        };
+                        std::fs::write(&copy, kept).map_err(|e| e.to_string())?;
                     }
                 }
                 Some(sha)
@@ -177,15 +186,39 @@ fn keyjutsu_diff(
     before: &RepoState,
     earlier: Option<&Dirty>,
     copies: &Path,
+    store: Option<&crate::store::Store>,
     path: &str,
 ) -> String {
     let now = root.join(path);
     let fwd = |p: &Path| p.display().to_string().replace('\\', "/");
     let empty = copies.join("empty");
     let _ = std::fs::write(&empty, b"");
+    // An encrypted copy is opened into a file of its own for git to read,
+    // removed as soon as the diff is taken.
+    let mut opened: Option<PathBuf> = None;
     let base: Option<PathBuf> = match earlier {
         Some(d) => match &d.sha256 {
-            Some(sha) if copies.join(sha).exists() => Some(copies.join(sha)),
+            Some(sha) if copies.join(sha).exists() => {
+                let copy = copies.join(sha);
+                match std::fs::read(&copy) {
+                    Ok(bytes) if crate::store::is_sealed(&bytes) => {
+                        let Some(s) = store else {
+                            return "(the earlier version is encrypted, and the store is not open)".into();
+                        };
+                        let plain = match s.unseal(sha, &bytes) {
+                            Ok(p) => p,
+                            Err(e) => return format!("({e})"),
+                        };
+                        let open = copies.join(format!("{sha}.open"));
+                        if std::fs::write(&open, plain).is_err() {
+                            return "(the earlier version could not be opened for the diff)".into();
+                        }
+                        opened = Some(open.clone());
+                        Some(open)
+                    }
+                    _ => Some(copy),
+                }
+            }
             Some(_) => {
                 return "(the earlier version was too large to keep, so the diff cannot be shown)".into();
             }
@@ -212,6 +245,9 @@ fn keyjutsu_diff(
             }
         },
     };
+    if let Some(open) = opened {
+        let _ = std::fs::remove_file(open);
+    }
     if text.len() > MAX_DIFF {
         let mut cut = MAX_DIFF;
         while !text.is_char_boundary(cut) {
@@ -255,10 +291,14 @@ pub fn check_recorded(before: &RepoState) -> Result<(), String> {
 }
 
 /// Compare the repository now with `before`, recorded just before the run.
-pub fn report(before: &RepoState, copies: &Path) -> Result<RepoReport, String> {
+pub fn report(
+    before: &RepoState,
+    copies: &Path,
+    store: Option<&crate::store::Store>,
+) -> Result<RepoReport, String> {
     check_recorded(before)?;
     let root = PathBuf::from(&before.root);
-    let after = record(&root, None)?;
+    let after = record(&root, None, None)?;
     let earlier: BTreeMap<&str, &Dirty> = before.dirty.iter().map(|d| (d.path.as_str(), d)).collect();
     let now: BTreeMap<&str, &Dirty> = after.dirty.iter().map(|d| (d.path.as_str(), d)).collect();
     let mut keyjutsu = Vec::new();
@@ -274,7 +314,7 @@ pub fn report(before: &RepoState, copies: &Path) -> Result<RepoReport, String> {
                 path: path.to_owned(),
                 was_already_changed: b.is_some(),
                 status: a.map(|d| d.status.clone()).unwrap_or_else(|| "  ".into()),
-                diff: keyjutsu_diff(&root, before, b.copied(), copies, path),
+                diff: keyjutsu_diff(&root, before, b.copied(), copies, store, path),
             }),
         }
     }

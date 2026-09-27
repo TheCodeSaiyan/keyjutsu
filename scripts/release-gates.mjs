@@ -63,6 +63,9 @@ const gates = {
     "without_send_nothing_leaves_the_machine_and_nothing_is_written",
     "the_bundle_names_no_one_and_holds_no_secret",
     "the_preview_names_neither_the_user_nor_the_machine",
+    "a_secret_a_failing_command_printed_is_not_kept_in_the_history",
+    "a_recovery_backup_is_kept_encrypted_and_still_restores",
+    "copies_of_the_operators_changed_files_are_kept_encrypted_and_still_diff",
   ],
   "Execution state machine": [
     "mashing_arbitrary_keys_delivers_exactly_the_staged_command",

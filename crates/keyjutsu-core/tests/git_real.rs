@@ -128,12 +128,12 @@ fn keyjutsus_changes_are_told_apart_from_the_operators_in_a_dirty_repository() {
     ])));
     let roots = repositories(&repo, snap.plan());
     assert_eq!(roots.len(), 1);
-    let before = record(&roots[0], Some(&copies)).unwrap();
+    let before = record(&roots[0], Some(&copies), None).unwrap();
     assert_eq!(before.branch.as_deref(), Some("main"));
     assert_eq!(before.dirty.len(), 3, "{:?}", before.dirty);
 
     assert_eq!(run_in(&repo, &snap), Outcome::Complete);
-    let r = report(&before, &copies).unwrap();
+    let r = report(&before, &copies, None).unwrap();
 
     let mine: Vec<&str> = r.untouched.iter().map(String::as_str).collect();
     assert_eq!(mine, ["c.txt", "u.txt"], "the operator's changes KeyJutsu did not touch");
@@ -151,15 +151,48 @@ fn keyjutsus_changes_are_told_apart_from_the_operators_in_a_dirty_repository() {
     assert!(r.head_moved.is_none());
 }
 
+/// A file the operator had changed and not committed is copied before the
+/// run so KeyJutsu's diff can be told from theirs. It may be an `.env`: the
+/// copy is kept encrypted, and the diff still reads (ADR 0018).
+#[test]
+fn copies_of_the_operators_changed_files_are_kept_encrypted_and_still_diff() {
+    let repo = dirty_repo("encrypted-copies");
+    let secret = "API_KEY=do-not-copy-me-in-plain-text";
+    std::fs::write(repo.join("a.txt"), format!("a.txt line 1\n{secret}\n")).unwrap();
+    let store = keyjutsu_core::store::Store::open(&repo.parent().unwrap().join("store")).unwrap();
+    let copies = repo.parent().unwrap().join("copies");
+    let before = record(&repo, Some(&copies), Some(&store)).unwrap();
+    for f in std::fs::read_dir(&copies).unwrap().flatten() {
+        let bytes = std::fs::read(f.path()).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains(secret), "{} is plain", f.path().display());
+    }
+
+    std::fs::write(repo.join("a.txt"), format!("a.txt line 1\n{secret}\nkeyjutsu-a\n")).unwrap();
+    let r = report(&before, &copies, Some(&store)).unwrap();
+    let a = &r.keyjutsu.iter().find(|k| k.path == "a.txt").unwrap().diff;
+    assert!(a.contains("+keyjutsu-a") && !a.contains(&format!("+{secret}")), "KeyJutsu's part only:\n{a}");
+    assert!(a.contains("a/a.txt") && !a.contains(".open"), "labelled by the file, not the copy:\n{a}");
+    let left: Vec<_> = std::fs::read_dir(&copies).unwrap().flatten().map(|e| e.file_name()).collect();
+    assert!(
+        left.iter().all(|n| !n.to_string_lossy().ends_with(".open")),
+        "the opened copy is gone: {left:?}"
+    );
+
+    // Without the store, the diff says why it cannot be shown.
+    let r = report(&before, &copies, None).unwrap();
+    let a = &r.keyjutsu.iter().find(|k| k.path == "a.txt").unwrap().diff;
+    assert!(a.contains("encrypted"), "{a}");
+}
+
 #[test]
 fn a_commit_made_by_a_step_is_reported_as_keyjutsus() {
     let repo = dirty_repo("commit");
     let copies = repo.parent().unwrap().join("copies");
-    let before = record(&repo, Some(&copies)).unwrap();
+    let before = record(&repo, Some(&copies), None).unwrap();
     // Standing in for an approved commit step.
     std::fs::write(repo.join("b.txt"), "b.txt line 1\ncommitted\n").unwrap();
     git(&repo, &["commit", "-q", "-m", "step", "--", "b.txt"]);
-    let r = report(&before, &copies).unwrap();
+    let r = report(&before, &copies, None).unwrap();
     assert!(r.head_moved.is_some());
     let b = r.keyjutsu.iter().find(|k| k.path == "b.txt").unwrap();
     assert_eq!(b.status, "committed");

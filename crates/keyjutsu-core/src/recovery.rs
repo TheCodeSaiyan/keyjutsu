@@ -178,7 +178,47 @@ fn read_service(name: &str) -> Result<(bool, Option<String>, Option<String>), St
     ))
 }
 
-fn capture_one(c: &Capture, step: &str, index: usize, dir: &Path) -> Result<Captured, String> {
+/// Where a run's file backups are kept, and whether they are encrypted.
+/// The operator's own KeyJutsu keeps them encrypted with the store's key
+/// (ADR 0018): they are copies of the operator's files, secrets and all. The
+/// broker keeps its own plain, in a folder only Administrators can read,
+/// which the operator's key could not protect from the operator anyway.
+#[derive(Clone, Copy, Debug)]
+pub struct Backups<'a> {
+    pub dir: &'a Path,
+    pub store: Option<&'a crate::store::Store>,
+}
+
+impl<'a> Backups<'a> {
+    pub fn plain(dir: &'a Path) -> Self {
+        Self { dir, store: None }
+    }
+
+    pub fn sealed(dir: &'a Path, store: &'a crate::store::Store) -> Self {
+        Self { dir, store: Some(store) }
+    }
+
+    fn write(&self, name: &str, bytes: &[u8]) -> Result<(), String> {
+        std::fs::create_dir_all(self.dir).map_err(|e| e.to_string())?;
+        let out = match self.store {
+            Some(s) => s.seal(name, bytes)?,
+            None => bytes.to_vec(),
+        };
+        std::fs::write(self.dir.join(name), out).map_err(|e| e.to_string())
+    }
+
+    /// A backup as it was taken. An encrypted one needs the store; a plain
+    /// one (the broker's, or one from before ADR 0018) is read as it is.
+    fn read(&self, name: &str) -> Result<Vec<u8>, String> {
+        let bytes = std::fs::read(self.dir.join(name)).map_err(|e| e.to_string())?;
+        if !crate::store::is_sealed(&bytes) {
+            return Ok(bytes);
+        }
+        self.store.ok_or("it is encrypted, and the store is not open")?.unseal(name, &bytes)
+    }
+}
+
+fn capture_one(c: &Capture, step: &str, index: usize, backups: Backups<'_>) -> Result<Captured, String> {
     match c.kind {
         CaptureKind::File => {
             // Exactly the file named: never through a link or junction, which
@@ -195,12 +235,10 @@ fn capture_one(c: &Capture, step: &str, index: usize, dir: &Path) -> Result<Capt
                 });
             };
             let sha = sha256_hex(&bytes);
-            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
             let name = format!("{step}-{index}.bak");
-            let backup = dir.join(&name);
-            std::fs::write(&backup, &bytes).map_err(|e| format!("cannot back up `{}`: {e}", c.target))?;
+            backups.write(&name, &bytes).map_err(|e| format!("cannot back up `{}`: {e}", c.target))?;
             // Verify the copy, not just the write.
-            let copied = std::fs::read(&backup).map_err(|e| e.to_string())?;
+            let copied = backups.read(&name)?;
             if sha256_hex(&copied) != sha {
                 return Err(format!("the backup of `{}` does not match the original", c.target));
             }
@@ -224,11 +262,16 @@ fn capture_one(c: &Capture, step: &str, index: usize, dir: &Path) -> Result<Capt
 }
 
 /// Capture everything `step` declares, or say why it cannot be done.
-pub fn capture_step(step: &Step, step_hash: &str, dir: &Path, at: String) -> Result<StepCapture, String> {
+pub fn capture_step(
+    step: &Step,
+    step_hash: &str,
+    backups: Backups<'_>,
+    at: String,
+) -> Result<StepCapture, String> {
     let captures = step.recovery.as_ref().map(|r| r.capture.as_slice()).unwrap_or_default();
     let mut items = Vec::new();
     for (i, c) in captures.iter().enumerate() {
-        items.push(capture_one(c, &step.id, i, dir)?);
+        items.push(capture_one(c, &step.id, i, backups)?);
     }
     Ok(StepCapture { step: step.id.clone(), step_hash: step_hash.to_owned(), captured_at: at, items })
 }
@@ -368,7 +411,7 @@ pub struct RecoveryResult {
     pub checks: Vec<CheckResult>,
 }
 
-fn restore_one(c: &Captured, dir: &Path) -> CheckResult {
+fn restore_one(c: &Captured, backups: Backups<'_>) -> CheckResult {
     let done = |check: String, ok: bool, detail: String| CheckResult { check, passed: Some(ok), detail };
     match c {
         // Exactly the file named, never through a link or junction: for the
@@ -379,7 +422,7 @@ fn restore_one(c: &Captured, dir: &Path) -> CheckResult {
                 let (Some(backup), Some(want)) = (backup, sha256) else {
                     return done(format!("file {path}"), false, "no backup was recorded".into());
                 };
-                let bytes = match std::fs::read(dir.join(backup)) {
+                let bytes = match backups.read(backup) {
                     Ok(b) => b,
                     Err(e) => return done(format!("file {path}"), false, format!("backup unreadable: {e}")),
                 };
@@ -443,8 +486,8 @@ fn restore_one(c: &Captured, dir: &Path) -> CheckResult {
 }
 
 /// Put back everything in one capture, checking each item.
-pub fn restore_capture(capture: &StepCapture, dir: &Path) -> Vec<CheckResult> {
-    capture.items.iter().map(|i| restore_one(i, dir)).collect()
+pub fn restore_capture(capture: &StepCapture, backups: Backups<'_>) -> Vec<CheckResult> {
+    capture.items.iter().map(|i| restore_one(i, backups)).collect()
 }
 
 /// Carry out a confirmed recovery plan, stopping at the first step whose
@@ -460,7 +503,7 @@ pub fn recover(
     elevated: Option<&dyn crate::elevation::ElevatedRunner>,
     snapshot: &ApprovedSnapshot,
     checkpoint: &Checkpoint,
-    dir: &Path,
+    backups: Backups<'_>,
     items: &[RecoveryItem],
     base: &PerformanceConfig,
     observe: &dyn Fn(&RecoveryResult),
@@ -493,7 +536,7 @@ pub fn recover(
             }
             RecoveryItem::Restore { step: id, .. } => {
                 if let Some(c) = checkpoint.captures.iter().rev().find(|c| &c.step == id) {
-                    checks.extend(c.items.iter().map(|i| restore_one(i, dir)));
+                    checks.extend(c.items.iter().map(|i| restore_one(i, backups)));
                 }
             }
             RecoveryItem::Commands { step: id, .. }

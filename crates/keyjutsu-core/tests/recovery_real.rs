@@ -14,7 +14,7 @@ use keyjutsu_core::execute::{Checkpoint, Driver, ExecuteOptions, ForwardingSink,
 use keyjutsu_core::execution::{ExecutionMode, PerformanceConfig};
 use keyjutsu_core::headless::Collector;
 use keyjutsu_core::plan::{ApprovalBook, ApprovedSnapshot, parse_plan, seal};
-use keyjutsu_core::recovery::{RecoveryItem, plan_recovery, recover, recovery_dir};
+use keyjutsu_core::recovery::{Backups, RecoveryItem, plan_recovery, recover, recovery_dir};
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 use keyjutsu_core::validation::{Options, validate};
 use keyjutsu_core::{Session, SessionOptions};
@@ -214,7 +214,7 @@ fn a_failed_reversible_task_is_recovered_without_touching_anything_else() {
         None,
         &snap,
         &saved,
-        &recovery_dir(&cp),
+        Backups::plain(&recovery_dir(&cp)),
         &items,
         &PerformanceConfig::default(),
         &|_| {},
@@ -265,7 +265,7 @@ fn only_the_steps_the_operator_chooses_are_recovered() {
         None,
         &snap,
         &checkpoint,
-        &recovery_dir(&cp),
+        Backups::plain(&recovery_dir(&cp)),
         &items,
         &PerformanceConfig::default(),
         &|_| {},
@@ -298,7 +298,7 @@ fn a_backup_changed_since_it_was_taken_is_not_used() {
         None,
         &snap,
         &checkpoint,
-        &recovery_dir(&cp),
+        Backups::plain(&recovery_dir(&cp)),
         &items,
         &PerformanceConfig::default(),
         &|_| {},
@@ -356,7 +356,7 @@ fn recovery_commands_run_in_the_terminal_and_are_validated() {
         None,
         &snap,
         &checkpoint,
-        &recovery_dir(&cp),
+        Backups::plain(&recovery_dir(&cp)),
         &items,
         &PerformanceConfig::default(),
         &|_| {},
@@ -485,7 +485,7 @@ fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_prof
         Some(&broker),
         &snap,
         &checkpoint,
-        &dir,
+        Backups::plain(&dir),
         &items,
         &PerformanceConfig::default(),
         &|_| {},
@@ -508,7 +508,7 @@ fn an_administrator_step_is_recovered_through_the_broker_and_never_from_the_prof
         None,
         &snap,
         &checkpoint,
-        &dir,
+        Backups::plain(&dir),
         &items,
         &PerformanceConfig::default(),
         &|_| {},

@@ -198,7 +198,12 @@ pub fn capture(
     let dir = step_dir(root, snapshot, step);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let captured = keyjutsu_core::recovery::capture_step(step, &hash, &dir, at)?;
+    let captured = keyjutsu_core::recovery::capture_step(
+        step,
+        &hash,
+        keyjutsu_core::recovery::Backups::plain(&dir),
+        at,
+    )?;
     let text = serde_json::to_string_pretty(&captured).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("capture.json"), text).map_err(|e| e.to_string())?;
     Ok(captured)
@@ -232,7 +237,8 @@ pub fn restore(root: &Path, snapshot: &ApprovedSnapshot, step: &Step) -> Result<
             return Err(format!("`{target}` was not declared by `{}`, so it is not restored", step.id));
         }
     }
-    let checks = keyjutsu_core::recovery::restore_capture(&captured, &dir);
+    let checks =
+        keyjutsu_core::recovery::restore_capture(&captured, keyjutsu_core::recovery::Backups::plain(&dir));
     if checks.iter().all(|c| c.passed != Some(false)) {
         let _ = std::fs::remove_dir_all(&dir);
     }
