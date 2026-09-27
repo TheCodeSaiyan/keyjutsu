@@ -38,6 +38,12 @@ pub struct Plan {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub execution_preferences: Option<ExecutionPreferences>,
+    /// What the agent needs the operator to decide rather than guess. Left
+    /// out when empty, so a plan without questions serialises, and hashes,
+    /// as it did before they existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<_>", optional)]
+    pub questions: Vec<Question>,
     /// Written only by KeyJutsu. Never present in an agent's proposal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -48,6 +54,33 @@ impl Plan {
     pub fn step(&self, id: &str) -> Option<&Step> {
         self.steps.iter().find(|s| s.id == id)
     }
+
+    pub fn question(&self, id: &str) -> Option<&Question> {
+        self.questions.iter().find(|q| q.id == id)
+    }
+}
+
+/// Something the agent asks the operator instead of guessing (ADR 0020).
+/// Answering it sends the answer back to the agent as guidance; nothing in a
+/// question runs or is approved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "plan/")]
+pub struct Question {
+    pub id: String,
+    /// The step it is about; `None` for the whole plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub step: Option<StepId>,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<_>", optional)]
+    pub options: Vec<String>,
+    /// Whether the operator may also answer in their own words. A question
+    /// without options is always answered that way.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<_>", optional)]
+    pub free_text: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
@@ -722,6 +755,8 @@ pub enum ProvenanceAction {
     Approved,
     /// The operator read a reviewer's concern and decided it needs no change.
     Dismissed,
+    /// The operator answered one of the agent's questions.
+    Answered,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]

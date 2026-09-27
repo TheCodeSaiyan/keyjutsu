@@ -63,6 +63,14 @@
     "execution_preferences": {
       "$ref": "#/$defs/execution_preferences"
     },
+    "questions": {
+      "description": "What the agent needs the operator to decide rather than guess. Each is shown to the operator with its options; an answer goes back to the agent as guidance, and what it sends back is validated and approved like any change. An unanswered question does not block approval.",
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/question"
+      }
+    },
     "keyjutsu": {
       "$ref": "#/$defs/keyjutsu_state"
     }
@@ -816,6 +824,39 @@
         }
       }
     },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "step": {
+          "description": "The step the question is about; absent for the whole plan.",
+          "$ref": "#/$defs/id"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "options": {
+          "description": "Answers the operator can pick. Without any, the operator answers in their own words.",
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "free_text": {
+          "description": "Whether the operator may answer in their own words as well as pick an option.",
+          "type": "boolean"
+        }
+      }
+    },
     "keyjutsu_state": {
       "description": "Written only by KeyJutsu: validation results, assessed risk, hashes and approvals. An agent proposal containing this property is rejected (see proposal.schema.json).",
       "type": "object",
@@ -927,7 +968,8 @@
             "edited",
             "validated",
             "approved",
-            "dismissed"
+            "dismissed",
+            "answered"
           ]
         },
         "at": {

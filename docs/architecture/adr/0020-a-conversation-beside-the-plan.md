@@ -1,6 +1,6 @@
 # 0020: A conversation beside the plan, where what needs you can be answered
 
-Status: accepted, 27 September 2026. Phase 1 is in 0.1.3; phase 2 is to come.
+Status: accepted, 27 September 2026. Phase 1 is in 0.1.3; phase 2 followed.
 
 ## Context
 
@@ -93,6 +93,13 @@ to the plan format.
 - An unanswered question does not block approval by itself; what the plan does
   is judged by validation, as always. The operator can answer "Carry on as
   planned".
+
+As built, a question's options are the agent's words, but what choosing one
+does is fixed: the answer goes to the agent as guidance, redacted like all
+guidance. Questions and their options are held to the same rule as commands,
+so an invisible or reordering character is refused. The question is closed
+once answered, even if the agent's revision asks it again, and no step hash
+covers questions. The CLI has `keyjutsu plan answer`.
 
 ## Consequences
 

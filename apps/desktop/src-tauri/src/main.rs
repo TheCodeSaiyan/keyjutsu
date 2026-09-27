@@ -369,6 +369,12 @@ fn workspace_use_rating(id: String, plans: State<'_, Arc<Plans>>) -> Result<Work
     })
 }
 
+/// Close the agent's question `id` and keep the plan as it is (ADR 0020).
+#[tauri::command]
+fn workspace_carry_on(id: String, plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
+    with_workspace(&plans, |w| w.carry_on(&id, &fingerprint::now_rfc3339()).map_err(|e| e.to_string()))
+}
+
 /// Save the plan open now, with its findings, and show it in Explorer.
 #[tauri::command]
 fn workspace_save(plans: State<'_, Arc<Plans>>) -> Result<String, String> {
@@ -561,6 +567,21 @@ async fn workspace_revise(
 ) -> Result<WorkspaceView, String> {
     agent_request(plans.inner(), agent, move |w, a, h, at| {
         w.revise_plan(a, h, &guidance, at).map(|_| ()).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Answer the agent's question `id`. The answer goes to the agent as
+/// guidance; what it sends back is a draft like any other.
+#[tauri::command]
+async fn workspace_answer(
+    agent: AgentKind,
+    id: String,
+    answer: String,
+    plans: State<'_, Arc<Plans>>,
+) -> Result<WorkspaceView, String> {
+    agent_request(plans.inner(), agent, move |w, a, h, at| {
+        w.answer(a, h, &id, &answer, at).map(|_| ()).map_err(|e| e.to_string())
     })
     .await
 }
@@ -1058,6 +1079,8 @@ fn main() {
             workspace_save,
             workspace_dismiss,
             workspace_use_rating,
+            workspace_carry_on,
+            workspace_answer,
             workspace_insert_step,
             workspace_remove_step,
             workspace_move_step,

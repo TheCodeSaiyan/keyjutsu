@@ -3,4 +3,4 @@
 /**
  * Where an ask came from.
  */
-export type AskFrom = { "kind": "validation", check: string, } | { "kind": "review", who: string, };
+export type AskFrom = { "kind": "validation", check: string, } | { "kind": "review", who: string, } | { "kind": "agent", who: string, };

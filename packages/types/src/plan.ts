@@ -46,6 +46,7 @@ export type { ProposedRisk } from "./generated/plan/ProposedRisk";
 export type { Protocol } from "./generated/plan/Protocol";
 export type { ProvenanceAction } from "./generated/plan/ProvenanceAction";
 export type { ProvenanceEvent } from "./generated/plan/ProvenanceEvent";
+export type { Question } from "./generated/plan/Question";
 export type { Readiness } from "./generated/plan/Readiness";
 export type { Recovery } from "./generated/plan/Recovery";
 export type { RecoveryStrategy } from "./generated/plan/RecoveryStrategy";

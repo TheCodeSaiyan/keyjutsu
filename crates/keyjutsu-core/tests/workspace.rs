@@ -393,3 +393,96 @@ fn an_understated_risk_can_be_answered_by_taking_keyjutsus_rating() {
     );
     assert!(w.use_keyjutsu_rating("nowhere", AT).is_err());
 }
+
+/// `chain()`, with the author asking which service step b should look at.
+fn asking() -> Value {
+    let mut v = chain();
+    v["questions"] = json!([
+        {"id": "which-service", "step": "b", "text": "Which service should b look at?",
+         "options": ["Winmgmt", "Spooler"], "free_text": true}
+    ]);
+    v
+}
+
+/// ADR 0020 phase 2: answering sends the question and the answer to the
+/// agent, and what comes back is adopted like any revision: unvalidated,
+/// with the question closed even if the agent asks it again.
+#[test]
+fn answering_a_question_asks_the_agent_and_closes_it() {
+    let mut w = validated(&asking());
+    let ask = w.view().asks.into_iter().find(|a| matches!(a.from, AskFrom::Agent { .. })).unwrap();
+    assert_eq!(ask.step.as_deref(), Some("b"));
+    assert!(
+        ask.choices.contains(&Choice::Answer { question: "which-service".into(), answer: "Spooler".into() })
+    );
+
+    let mut revised = asking(); // the agent asks again: it is closed all the same
+    revised["steps"][1]["commands"][0]["text"] = json!("Get-Service -Name Spooler");
+    let runner = Replay(RefCell::new(vec![claude_says(&revised, "Looking at Spooler.")]), RefCell::default());
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let change = w.answer(&agents, &claude(), "which-service", "Spooler", AT).unwrap();
+
+    let prompt = &runner.1.borrow()[0].stdin;
+    assert!(prompt.contains("You asked: Which service should b look at?"), "{prompt}");
+    assert!(prompt.contains("The operator answered: Spooler"), "{prompt}");
+    assert_eq!(w.plan().step("b").unwrap().commands[0].text, "Get-Service -Name Spooler");
+    assert!(w.plan().questions.is_empty(), "the question is closed");
+    assert!(change.affected.contains(&"b".to_owned()));
+    assert_eq!(readiness(&w)["b"], None, "the revision is not validated");
+    let events = &w.plan().keyjutsu.as_ref().unwrap().provenance;
+    let answered = events.iter().find(|e| e.action == ProvenanceAction::Answered).unwrap();
+    assert_eq!(answered.step.as_deref(), Some("b"));
+    let said = answered.note.as_deref().unwrap();
+    assert!(said.contains("Which service should b look at?") && said.contains("Spooler"), "{said}");
+    assert!(w.view().asks.iter().all(|a| !matches!(a.from, AskFrom::Agent { .. })));
+    assert!(w.answer(&agents, &claude(), "which-service", "Winmgmt", AT).is_err(), "answered once");
+}
+
+/// Carrying on asks the agent nothing and changes no step, so validation
+/// stands; the decision is still kept.
+#[test]
+fn carrying_on_closes_a_question_and_keeps_validation() {
+    let mut w = validated(&asking());
+    let before = w.plan().steps.clone();
+    w.carry_on("which-service", AT).unwrap();
+    assert!(w.plan().questions.is_empty());
+    assert_eq!(w.plan().steps, before);
+    assert!(readiness(&w).values().all(|r| *r == Some(Readiness::Ready)), "{:?}", readiness(&w));
+    let last = w.plan().keyjutsu.as_ref().unwrap().provenance.last().unwrap();
+    assert_eq!((last.step.as_deref(), last.action), (Some("b"), ProvenanceAction::Answered));
+    assert!(last.note.as_deref().unwrap().contains("carry on as planned"));
+    assert!(w.carry_on("which-service", AT).is_err(), "closed once");
+    assert!(w.carry_on("nothing-asked", AT).is_err());
+}
+
+/// An answer in the operator's own words may be long; the record of it
+/// still fits the plan's note, so the plan stays valid.
+#[test]
+fn a_long_answer_keeps_the_plan_valid() {
+    let mut w = validated(&asking());
+    let runner = Replay(RefCell::new(vec![claude_says(&chain(), "Done.")]), RefCell::default());
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    w.answer(&agents, &claude(), "which-service", &"z".repeat(5000), AT).unwrap();
+    assert!(parse_plan(&serde_json::to_string(w.plan()).unwrap()).is_ok());
+}
+
+/// An empty answer is not sent: the agent would be told nothing.
+#[test]
+fn an_empty_answer_is_not_sent() {
+    let mut w = validated(&asking());
+    let runner = Replay(RefCell::new(vec![claude_says(&chain(), "Done.")]), RefCell::default());
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    assert!(w.answer(&agents, &claude(), "which-service", "  ", AT).is_err());
+    assert!(runner.1.borrow().is_empty(), "the agent was asked");
+    assert_eq!(w.plan().questions.len(), 1, "the question is still open");
+}
+
+/// An open question is not a reason to refuse approval: what the plan does
+/// is judged by validation alone.
+#[test]
+fn an_unanswered_question_does_not_block_approval() {
+    let w = validated(&asking());
+    assert!(w.view().overall.blocking.is_empty(), "{:?}", w.view().overall.blocking);
+    let snap = w.approve(&BTreeMap::new(), None, AT).unwrap();
+    assert_eq!(snap.plan().questions.len(), 1);
+}

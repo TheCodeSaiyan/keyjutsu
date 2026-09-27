@@ -38,7 +38,13 @@ Rules you must follow:
    step uses $KJ_ARTIFACTS['tool.zip']. Declare every host a step contacts in
    \"network\": {\"destinations\": [{\"host\", \"protocol\", \"purpose\",
    \"at_runtime\"}]}.
-9. Say what you are unsure of in the step's reason rather than guessing.";
+9. Where the operator's answer would change the plan (which of two folders,
+   whether to keep something, which of two ways), ask rather than guess: add
+   it to \"questions\" ({\"id\", \"step\" if it is about one, \"text\",
+   \"options\": a few short answers, \"free_text\": true if another answer
+   makes sense}). Meanwhile plan for the likeliest answer and say so in the
+   step's reason. Ask only what you cannot find out read-only, and at most a
+   few questions. Say anything else you are unsure of in the step's reason.";
 
 const COMPACT_FORMAT: &str = r#"The JSON document is a plan:
 {
@@ -60,7 +66,8 @@ const COMPACT_FORMAT: &str = r#"The JSON document is a plan:
     "internal_validation": [{"exit_code": {"equals": 0}} | {"service_state": {"name": "...", "state": "running"}}],
     "recovery": {"strategy": "restore_captured_state" | "commands" | "none", "commands": [{"text": "..."}]}
   }],
-  "edges": [{"from": "step-id", "to": "step-id", "when": <condition>}]
+  "edges": [{"from": "step-id", "to": "step-id", "when": <condition>}],
+  "questions": [{"id": "kebab-id", "step": "step-id", "text": "...", "options": ["...", "..."], "free_text": true}]
 }
 Without edges, steps run in the order listed. Unknown properties are refused."#;
 

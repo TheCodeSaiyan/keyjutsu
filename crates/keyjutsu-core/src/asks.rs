@@ -1,10 +1,13 @@
 //! What needs the operator in a plan, and what they can answer (ADR 0020).
 //!
-//! Each finding validation recorded against a step, and each reviewer's
-//! concern not yet dealt with, becomes an ask: what it is, and the choices
-//! that answer it. The choices come from this module's own table, from the
-//! kind of finding, never from anything an agent wrote; each is one of the
-//! workspace's own operations, so answering can do nothing the operator could
+//! Each finding validation recorded against a step, each question the agent
+//! asked, and each reviewer's concern not yet dealt with, becomes an ask:
+//! what it is, and the choices that answer it. For findings and concerns the
+//! choices come from this module's own table, from the kind of finding, never
+//! from anything an agent wrote. A question's options are the agent's words,
+//! but what choosing one does is fixed here: the answer goes back to the
+//! agent as guidance, and what it returns is a change like any other,
+//! unvalidated and unapproved. So answering can do nothing the operator could
 //! not already do. Free text is always possible besides, as guidance for the
 //! agent or as the operator's note.
 
@@ -34,6 +37,13 @@ pub enum Choice {
     RemoveStep,
     /// A reviewer's concern that needs no change, with the operator's reason.
     Dismiss { note: usize },
+    /// Answer the agent's question `question` with one of its options.
+    Answer { question: String, answer: String },
+    /// Answer the agent's question in the operator's own words.
+    AnswerInOwnWords { question: String },
+    /// Leave the plan as it is: the question is closed, and the agent is not
+    /// asked anything.
+    CarryOn { question: String },
 }
 
 /// Where an ask came from.
@@ -45,6 +55,8 @@ pub enum AskFrom {
     Validation { check: String },
     /// A reviewer's concern, by name.
     Review { who: String },
+    /// A question from the plan's author, by name.
+    Agent { who: String },
 }
 
 /// Something in the plan that needs the operator.
@@ -108,8 +120,8 @@ fn choices_for(check: &str, detail: &str) -> Vec<Choice> {
 }
 
 /// Everything in `plan` that needs the operator: each step's failed findings
-/// (and preconditions nobody could decide), in plan order, then reviewers'
-/// concerns not yet dismissed.
+/// (and preconditions nobody could decide), in plan order, then the agent's
+/// questions, then reviewers' concerns not yet dismissed.
 pub fn asks(plan: &Plan, order: &[&str], notes: &[Note]) -> Vec<Ask> {
     let mut out = Vec::new();
     let states = plan.keyjutsu.as_ref().map(|k| &k.steps);
@@ -134,6 +146,24 @@ pub fn asks(plan: &Plan, order: &[&str], notes: &[Note]) -> Vec<Ask> {
                 choices: choices_for(&e.check, detail),
             });
         }
+    }
+    let author = serde_json::to_value(plan.agent.name)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "The agent".into());
+    for q in &plan.questions {
+        let mut choices: Vec<Choice> =
+            q.options.iter().map(|o| Choice::Answer { question: q.id.clone(), answer: o.clone() }).collect();
+        if q.free_text || q.options.is_empty() {
+            choices.push(Choice::AnswerInOwnWords { question: q.id.clone() });
+        }
+        choices.push(Choice::CarryOn { question: q.id.clone() });
+        out.push(Ask {
+            step: q.step.clone(),
+            from: AskFrom::Agent { who: author.clone() },
+            text: q.text.clone(),
+            choices,
+        });
     }
     for (i, n) in notes.iter().enumerate().filter(|(_, n)| n.review && !n.dismissed) {
         let guidance = format!(
@@ -173,6 +203,9 @@ mod tests {
                 Choice::EditStep => "edit",
                 Choice::RemoveStep => "remove",
                 Choice::Dismiss { .. } => "dismiss",
+                Choice::Answer { .. } => "answer",
+                Choice::AnswerInOwnWords { .. } => "own words",
+                Choice::CarryOn { .. } => "carry on",
             })
             .collect()
     }
@@ -225,6 +258,31 @@ mod tests {
         .unwrap_or_else(|e| panic!("{e}"))
     }
 
+    fn asking(questions: serde_json::Value) -> Plan {
+        let mut p = serde_json::to_value(plan()).unwrap_or_else(|e| panic!("{e}"));
+        p["questions"] = questions;
+        serde_json::from_value(p).unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// Each option is an answer; the operator's own words are offered where
+    /// the agent allows them or gave no options; carrying on is always there.
+    #[test]
+    fn an_agents_question_is_answered_by_its_options() {
+        let p = asking(serde_json::json!([
+            {"id": "where", "step": "a", "text": "Which desktop?", "options": ["OneDrive", "Local"], "free_text": true},
+            {"id": "open", "text": "Open it afterwards?", "options": ["Yes", "No"]},
+            {"id": "name", "text": "What should it be called?"}
+        ]));
+        let asks = asks(&p, &["a"], &[]);
+        assert_eq!(asks.len(), 3, "{asks:?}");
+        assert_eq!(asks[0].from, AskFrom::Agent { who: "codex".into() });
+        assert_eq!(asks[0].step.as_deref(), Some("a"));
+        assert_eq!(kinds(&asks[0].choices), ["answer", "answer", "own words", "carry on"]);
+        assert_eq!(asks[0].choices[1], Choice::Answer { question: "where".into(), answer: "Local".into() });
+        assert_eq!(asks[1].step, None);
+        assert_eq!(kinds(&asks[1].choices), ["answer", "answer", "carry on"], "no free text unless allowed");
+        assert_eq!(kinds(&asks[2].choices), ["own words", "carry on"], "no options: own words");
+    }
     /// Only concerns still open are asked about; the operator's own notes
     /// never are; a concern about the whole plan has no step to edit.
     #[test]

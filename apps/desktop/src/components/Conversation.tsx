@@ -29,6 +29,15 @@ export function Conversation({
   const [text, setText] = useState("");
   const [dismissing, setDismissing] = useState<number | null>(null);
   const [reason, setReason] = useState("");
+  const [answering, setAnswering] = useState<string | null>(null);
+  const [answer, setAnswer] = useState("");
+
+  const sendAnswer = (question: string, text: string) => {
+    if (!primary) return;
+    act("The agent is reconsidering the plan with your answer…", () =>
+      ipc.answer(primary, question, text),
+    );
+  };
 
   const askAgent = (guidance: string) => {
     if (!primary) return;
@@ -63,6 +72,16 @@ export function Conversation({
         setReason("");
         setDismissing(c.note);
         break;
+      case "answer":
+        sendAnswer(c.question, c.answer);
+        break;
+      case "answer_in_own_words":
+        setAnswer("");
+        setAnswering(c.question);
+        break;
+      case "carry_on":
+        act("Noting that…", () => ipc.carryOn(c.question));
+        break;
     }
   };
 
@@ -82,10 +101,17 @@ export function Conversation({
         return "Remove the step";
       case "dismiss":
         return "It's fine";
+      case "answer":
+        return c.answer;
+      case "answer_in_own_words":
+        return "In my own words";
+      case "carry_on":
+        return "Carry on as planned";
     }
   };
 
-  const needsAgent = (c: workspace.Choice) => c.kind === "ask_agent" && !primary;
+  const needsAgent = (c: workspace.Choice) =>
+    (c.kind === "ask_agent" || c.kind === "answer" || c.kind === "answer_in_own_words") && !primary;
 
   return (
     <div className="conversation">
@@ -95,7 +121,8 @@ export function Conversation({
           {asks.map((a, i) => (
             <li key={i} className="ask">
               <p className="small">
-                <strong>{a.from.kind === "review" ? a.from.who : "KeyJutsu"}:</strong> {a.text}
+                <strong>{a.from.kind === "validation" ? "KeyJutsu" : a.from.who}</strong>
+                {a.from.kind === "agent" ? " asks" : ""}: {a.text}
               </p>
               <div className="row choices">
                 {a.choices.map((c, j) => (
@@ -129,6 +156,32 @@ export function Conversation({
                     Dismiss
                   </button>
                   <button type="button" onClick={() => setDismissing(null)}>
+                    Cancel
+                  </button>
+                </form>
+              )}
+              {a.choices.some(
+                (c) => c.kind === "answer_in_own_words" && c.question === answering,
+              ) && (
+                <form
+                  className="row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const question = answering!;
+                    setAnswering(null);
+                    sendAnswer(question, answer.trim());
+                  }}
+                >
+                  <input
+                    aria-label="Your answer"
+                    placeholder="Your answer, sent to the agent"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                  />
+                  <button type="submit" disabled={busy !== null || !answer.trim()}>
+                    Answer
+                  </button>
+                  <button type="button" onClick={() => setAnswering(null)}>
                     Cancel
                   </button>
                 </form>

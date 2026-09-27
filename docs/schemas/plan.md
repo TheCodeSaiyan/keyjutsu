@@ -40,6 +40,7 @@ plan
 ├── steps[]
 ├── edges[]               control flow, optionally conditional
 ├── execution_preferences
+├── questions[]           what the agent asks the operator instead of guessing
 └── keyjutsu              KeyJutsu-owned state (never in a proposal)
 ```
 
@@ -62,6 +63,35 @@ Command text is a single line with no control characters. A newline in a
 staged command would submit part of it, which is exactly the accidental
 submission Performance Mode exists to prevent; the engine refuses the same
 thing independently.
+
+## Questions
+
+Where the operator's answer would change the plan, an agent asks rather than
+guesses:
+
+```json
+"questions": [{
+  "id": "which-desktop", "step": "make-pdf",
+  "text": "Your Desktop is in OneDrive. Should Cat.pdf go there, or in the local Desktop folder?",
+  "options": ["The OneDrive desktop", "The local Desktop folder"], "free_text": true
+}]
+```
+
+`step` is left out for a question about the whole plan. Up to ten questions,
+each with up to six options; without options the operator answers in their
+own words, and `free_text` allows that alongside them.
+
+A question changes nothing by itself. Answering sends the question and the
+answer back to the agent, and what it returns is a change like any other,
+validated and approved before it can run. The question is then closed, and
+the answer is kept in `keyjutsu.provenance` as an `answered` event, as is a
+decision to carry on as planned. An open question does not stop approval, and
+no step hash covers questions, so asking or answering never withdraws an
+approval by itself; only a changed step does. See
+[ADR 0020](../architecture/adr/0020-a-conversation-beside-the-plan.md).
+
+An empty list is left out when a plan is written, so a plan without questions
+reads, and hashes, exactly as it did before questions existed.
 
 ## Graphs and conditions
 
@@ -129,6 +159,8 @@ keyjutsu plan check --stored .\plan.json   # as a stored plan
 | A step waiting on one in a later phase, a step in two phases, or in none | Needs the graph's order |
 | A version range that does not parse, such as `>=7.*` | Grammar beyond a character class |
 | KeyJutsu state recorded for a step that does not exist | Cross-references |
+| A question id used twice, or a question about a step that does not exist | Uniqueness and cross-references |
+| An invisible or reordering character in a command, a question or its options | A character class the schema would have to repeat on every text |
 
 Every problem in a plan is reported at once, not just the first, so an agent
 asked to revise a plan sees everything that is wrong in one go.
@@ -195,6 +227,7 @@ decide which approvals a change withdraws: change step 3, and steps 4, 5 and
 | `valid/restart-boundary.json` | passes: two phases across a Windows restart |
 | `valid/credential-login.json` | passes: a token asked for, then used on standard input |
 | `valid/staged-download.json` | passes: an artifact staged and used as `$KJ_ARTIFACTS['jq.exe']` (its hash is a placeholder) |
+| `valid/questions-for-the-operator.json` | passes: the agent asks which desktop, and whether to open the PDF |
 | `invalid/agent-claims-readiness.json` | schema: a proposal carries the KeyJutsu-owned section |
 | `invalid/free-form-condition.json` | schema: a condition is an expression string |
 | `invalid/embedded-newline.json` | schema: a command contains a carriage return |
@@ -204,12 +237,16 @@ decide which approvals a change withdraws: change step 3, and steps 4, 5 and
 | `invalid/artifact-over-plain-http.json` | schema: an artifact from a remote host over plain HTTP |
 | `invalid/future-major-version.json` | version: 2.0 |
 | `invalid/two-keys-in-one-condition.json` | schema: a condition object has two keys |
+| `invalid/question-with-too-many-options.json` | schema: a question with seven options |
 | `structure-invalid/cycle.json` | structure: a cycle |
 | `structure-invalid/edge-to-missing-step.json` | structure: an edge to `verfy` |
 | `structure-invalid/condition-on-later-step.json` | structure: a branch asks about a step after it |
 | `structure-invalid/phases-out-of-order.json` | structure: phase order contradicts the graph |
 | `structure-invalid/bad-version-range.json` | structure: `>=7.*` |
 | `structure-invalid/duplicate-step-id.json` | structure: `wsl-path` twice |
+| `structure-invalid/duplicate-question-id.json` | structure: `which-desktop` twice |
+| `structure-invalid/question-about-missing-step.json` | structure: a question about `make-pfd` |
+| `structure-invalid/hidden-character-in-question.json` | structure: an option ends in U+202E |
 
 `pnpm schemas:check` requires the structure-invalid fixtures to *pass* the
 schema, which is what shows the Rust checks are catching something the schema
