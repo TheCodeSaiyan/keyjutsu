@@ -1,6 +1,6 @@
 # 0018: Copies of files are kept encrypted; plans and snapshots stay readable
 
-Status: proposed, 27 September 2026.
+Status: accepted, 27 September 2026.
 
 ## Context
 
@@ -51,7 +51,7 @@ history).
    protect from the operator anyway.
 3. **Leave it.** Record the gap as a deviation.
 
-## Decision (proposed)
+## Decision
 
 Option 2. The copies are the only thing on the list that holds data
 KeyJutsu did not show the operator, and they are copies the operator did

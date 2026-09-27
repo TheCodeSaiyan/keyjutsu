@@ -128,6 +128,7 @@ it is, and the row says which part is not.
 | A stray key restarts the machine or resumes past a boundary. | KeyJutsu never restarts Windows; resuming needs `RESUME` typed on the plain console, and without a confirmation nothing resumes. | Held (the gate test fails with the requirement removed). |
 | Someone reads the history on disk, or on a copied disk. | Records are AES-256-GCM encrypted; the key is DPAPI-protected for this user on this machine. | Held (`the_store_is_encrypted_and_records_cannot_be_swapped` looks for plaintext in the files). An attacker running as the same user can still ask DPAPI; that is Windows' boundary. |
 | A token a failing command printed, or one in a file KeyJutsu changed, is kept in the history, where anyone who gets past DPAPI finds it. | Before a session is recorded, what the run printed on failure and KeyJutsu's diffs are redacted with the same patterns used for everything sent to an agent; the rest is kept, so the failure still reads. | Held for recognisable secrets (`a_secret_a_failing_command_printed_is_not_kept_in_the_history`). Unrecognisable ones are kept, as for agents (invariant 2). |
+| Copies of the operator's files that KeyJutsu makes (recovery backups, the Git copies it diffs against) are read from the disk; one may be an `.env`. | They are encrypted with the store's key, bound to what each copy is of, and read back through it; a copy from another account's or machine's store does not open ([ADR 0018](docs/architecture/adr/0018-file-contents-kept-encrypted.md)). Snapshots, checkpoints and plans stay readable files, integrity-checked, holding commands and paths, never credentials. The broker's own backups stay plain in its Administrators-only folder. | Held (`a_recovery_backup_is_kept_encrypted_and_still_restores`, `copies_of_the_operators_changed_files_are_kept_encrypted_and_still_diff` look for the contents on disk). Copies made before ADR 0018 stay plain until removed. |
 | A record is swapped for another, or altered. | Each record's kind and id are its associated data; the tag covers everything. | Held (same test; fails with the binding removed). |
 | A Technique runs because it worked before. | Using one only makes a draft, compared with its known-good environments and validated and approved here. | Held (`a_successful_session_becomes_a_technique_…`, `an_incompatible_technique_…`). |
 | A parameter value smuggles code into a command. | Values match the parameter's pattern and never contain quotes, `$`, separators, pipes, redirection, backticks, braces or line breaks. | Held (`parameter_values_are_data_not_code`; fails with the floor removed). |
@@ -163,7 +164,7 @@ There are eight gates. Each is a list of named tests in
 `scripts/release-gates.mjs`, run by `pnpm release:gates` and in CI after the
 full suite. A test that is missing fails its gate, so renaming or deleting one
 cannot quietly take it out. All eight pass: broker security
-(20 tests), plan integrity (16), secret handling (13), the execution state
+(20 tests), plan integrity (16), secret handling (15), the execution state
 machine (18), schema validation (7), supported-shell compatibility (8),
 critical rollback (16) and the credential boundary (6).
 

@@ -19,6 +19,14 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 const MAGIC: &[u8; 4] = b"KJE1";
+const COPY_MAGIC: &[u8; 4] = b"KJC1";
+
+/// Whether `bytes` are a copy [`Store::seal`] made. Copies made before
+/// ADR 0018, and the broker's own (kept where only Administrators can read),
+/// are plain.
+pub fn is_sealed(bytes: &[u8]) -> bool {
+    bytes.starts_with(COPY_MAGIC)
+}
 
 /// `%LOCALAPPDATA%\KeyJutsu\store`, or `KEYJUTSU_STORE` when set (tests
 /// use it to keep their sessions out of the operator's history).
@@ -120,6 +128,42 @@ impl Store {
                 format!("{kind}/{id} could not be decrypted: it was altered or is not this record")
             })?;
         serde_json::from_slice(&plain).map(Some).map_err(|e| e.to_string())
+    }
+
+    /// The contents of a file KeyJutsu copies (a recovery backup, a Git
+    /// copy), encrypted like a record and bound to `label`, what the copy is
+    /// of, so one copy cannot be passed off as another (ADR 0018).
+    pub fn seal(&self, label: &str, plain: &[u8]) -> Result<Vec<u8>, String> {
+        let mut nonce = [0u8; 12];
+        getrandom::fill(&mut nonce).map_err(|e| e.to_string())?;
+        let sealed = self
+            .cipher
+            .encrypt(Nonce::from_slice(&nonce), Payload { msg: plain, aad: &Self::copy_aad(label) })
+            .map_err(|_| "encryption failed".to_owned())?;
+        let mut out = Vec::with_capacity(4 + 12 + sealed.len());
+        out.extend_from_slice(COPY_MAGIC);
+        out.extend_from_slice(&nonce);
+        out.extend_from_slice(&sealed);
+        Ok(out)
+    }
+
+    /// What [`Store::seal`] kept as `label`.
+    pub fn unseal(&self, label: &str, sealed: &[u8]) -> Result<Vec<u8>, String> {
+        if !is_sealed(sealed) || sealed.len() < 16 {
+            return Err(format!("the copy of {label} is not a KeyJutsu copy"));
+        }
+        self.cipher
+            .decrypt(
+                Nonce::from_slice(&sealed[4..16]),
+                Payload { msg: &sealed[16..], aad: &Self::copy_aad(label) },
+            )
+            .map_err(|_| {
+                format!("the copy of {label} could not be decrypted: it was altered, or is not that copy")
+            })
+    }
+
+    fn copy_aad(label: &str) -> Vec<u8> {
+        format!("keyjutsu.copy/1/{label}").into_bytes()
     }
 
     /// The ids of every record of `kind`, sorted.

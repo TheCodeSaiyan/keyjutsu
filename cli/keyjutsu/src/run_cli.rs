@@ -338,6 +338,8 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     let discreet_run = args.discreet;
     let (plan_for_git, git_dir_c, baseline_c, start_c) =
         (snapshot.plan().clone(), git_dir.clone(), baseline.clone(), start.clone());
+    // Copies of the operator's changed files are kept encrypted (ADR 0018).
+    let git_store = store.clone();
     let controller: console::Controller = Box::new(move |session, events| {
         let here = session.shell_location().unwrap_or(start_c);
         // Isolation means nothing if the shell is not in the isolated tree.
@@ -357,7 +359,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         }
         let mut recorded = Vec::new();
         for (i, repo) in git::repositories(&here, &plan_for_git).iter().enumerate() {
-            match git::record(repo, Some(&git_dir_c.join(i.to_string()))) {
+            match git::record(repo, Some(&git_dir_c.join(i.to_string())), Some(&git_store)) {
                 Ok(r) => recorded.push(r),
                 Err(e) => eprintln!("keyjutsu: cannot record {} before the run: {e}", repo.display()),
             }
@@ -414,7 +416,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
     let mut git_reports = Vec::new();
     let baseline = baseline.lock().map(|b| b.clone()).unwrap_or_default();
     for (i, before) in baseline.iter().enumerate() {
-        match git::report(before, &git_dir.join(i.to_string())) {
+        match git::report(before, &git_dir.join(i.to_string()), Some(&store)) {
             Ok(r) => {
                 print_git(&r, args.snapshot);
                 git_reports.push(r);

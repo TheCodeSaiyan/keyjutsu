@@ -19,9 +19,11 @@ pub fn diff(snapshot: &Path) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // The copies it compares against are encrypted with the store's key.
+    let store = keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root()).ok();
     let mut failed = false;
     for (i, before) in baseline.iter().enumerate() {
-        match git::report(before, &dir.join(i.to_string())) {
+        match git::report(before, &dir.join(i.to_string()), store.as_ref()) {
             Ok(r) => {
                 println!("# {}", r.root);
                 if r.keyjutsu.is_empty() {

@@ -14,7 +14,7 @@ use keyjutsu_core::elevation::ElevatedRunner;
 use keyjutsu_core::execute::Driver;
 use keyjutsu_core::execution::PerformanceConfig;
 use keyjutsu_core::plan::ApprovedSnapshot;
-use keyjutsu_core::recovery::{RecoveryItem, RecoveryResult, plan_recovery, recover, recovery_dir};
+use keyjutsu_core::recovery::{Backups, RecoveryItem, RecoveryResult, plan_recovery, recover, recovery_dir};
 use keyjutsu_core::terminal::{ProfileMode, ShellKind};
 
 use crate::{console, run_cli};
@@ -167,7 +167,7 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
                 runner,
                 &snap,
                 &cp,
-                &dir,
+                Backups::sealed(&dir, &store),
                 &found,
                 &PerformanceConfig::default(),
                 &|_| {},
@@ -190,7 +190,7 @@ pub fn run(args: RecoverArgs<'_>) -> ExitCode {
             None,
             &snapshot,
             &checkpoint,
-            &dir,
+            Backups::sealed(&dir, &store),
             &items,
             &PerformanceConfig::default(),
             &|_| {},
