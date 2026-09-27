@@ -162,7 +162,7 @@ fn powershell() -> Result<PathBuf, String> {
 }
 
 fn run_ps(script: &str, limit: Duration) -> Result<String, String> {
-    let mut c = std::process::Command::new(powershell()?);
+    let mut c = keyjutsu_terminal::shell::command(powershell()?);
     c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
     c.arg(keyjutsu_terminal::shell::encode_powershell_command(script));
     let done = keyjutsu_validation::process::run(c, "", limit).map_err(|e| e.to_string())?;

@@ -30,8 +30,8 @@ use std::path::Path;
 use keyjutsu_plan::ValidPlan;
 use keyjutsu_plan::condition::{Facts, StepResult, Truth, evaluate};
 use keyjutsu_plan::model::{
-    Actor, ActorKind, Check, Condition, FactValue, KeyJutsuState, Plan, ProvenanceAction, ProvenanceEvent,
-    Readiness, ServiceState, ShellName, StepState,
+    Actor, ActorKind, Check, Condition, EffectKind, FactValue, KeyJutsuState, Plan, ProvenanceAction,
+    ProvenanceEvent, Readiness, ServiceState, ShellName, StepState,
 };
 use keyjutsu_plan::version::{Constraint, Version};
 use keyjutsu_terminal::{ShellKind, shell};
@@ -169,6 +169,31 @@ fn collect_tools(c: &Condition, out: &mut BTreeSet<String>) {
 
 fn describe(c: &Condition) -> String {
     serde_json::to_string(c).unwrap_or_default()
+}
+
+/// A path as Windows compares it: back slashes, no trailing one, any case.
+fn normal(path: &str) -> String {
+    path.replace('/', "\\").trim_end_matches('\\').to_lowercase()
+}
+
+/// The earlier step, of those in `earlier`, that declares it creates or
+/// changes `path`, or a file inside it: after that step, `path` exists,
+/// though it may not yet. Validation looks at the machine as it is now; a
+/// plan that makes a file and then uses it is not wrong for that.
+fn provided_by<'a>(plan: &'a keyjutsu_plan::Plan, earlier: &BTreeSet<&str>, path: &str) -> Option<&'a str> {
+    let want = normal(path);
+    plan.steps
+        .iter()
+        .filter(|s| earlier.contains(s.id.as_str()))
+        .find(|s| {
+            s.expected_effects.iter().any(|e| {
+                matches!(e.kind, EffectKind::FileCreated | EffectKind::FileModified) && {
+                    let made = normal(&e.target);
+                    made == want || made.starts_with(&format!("{want}\\"))
+                }
+            })
+        })
+        .map(|s| s.id.as_str())
 }
 
 /// Validate every step of `plan` against this machine.
@@ -349,11 +374,31 @@ pub fn validate(plan: &ValidPlan, options: Options) -> Report {
             })
             .collect();
 
+        // Every step that runs before this one, and what they will have made.
+        let earlier: BTreeSet<&str> = plan
+            .graph()
+            .ids()
+            .iter()
+            .filter(|x| plan.graph().descendants(x).contains(&s.id))
+            .map(String::as_str)
+            .collect();
+        let mut deferred = Vec::new();
+
         let mut pre_false = plan_false.clone();
         let mut pre_unknown = plan_unknown.clone();
         for c in &s.preconditions {
             match evaluate(c, &facts) {
                 Truth::True => {}
+                // Not there yet, but an earlier step makes it: decided just
+                // before this step runs, when it must hold.
+                Truth::False if matches!(c, Condition::PathExists { path } if provided_by(p, &earlier, path).is_some()) => {
+                    if let Condition::PathExists { path } = c {
+                        let by = provided_by(p, &earlier, path).unwrap_or_default();
+                        deferred.push(format!(
+                            "{path} does not exist yet; `{by}` creates it first, and it is checked again just before this step runs"
+                        ));
+                    }
+                }
                 Truth::False => pre_false.push(describe(c)),
                 // A condition on an earlier step's outcome is decided at run time.
                 Truth::Unknown(_) if !c.referenced_steps().is_empty() => {}
@@ -379,13 +424,49 @@ pub fn validate(plan: &ValidPlan, options: Options) -> Report {
             }
         }
 
+        // A dry run that fails for want of something an earlier step makes
+        // shows nothing about this step; it is not a failure of it.
+        let made_earlier: Vec<(String, &str)> = p
+            .steps
+            .iter()
+            .filter(|e| earlier.contains(e.id.as_str()))
+            .flat_map(|e| {
+                e.expected_effects
+                    .iter()
+                    .filter(|x| matches!(x.kind, EffectKind::FileCreated | EffectKind::FileModified))
+                    .map(move |x| (x.target.clone(), e.id.as_str()))
+            })
+            .collect();
+        dry_runs.retain(|(text, w): &(&str, powershell::WhatIf)| {
+            let errors = normal(&w.errors.join(" "));
+            match made_earlier.iter().find(|(target, _)| errors.contains(&normal(target))) {
+                Some((target, by)) => {
+                    deferred.push(format!(
+                        "`{text}` could not be dry-run yet: it needs {target}, which `{by}` creates first"
+                    ));
+                    false
+                }
+                None => true,
+            }
+        });
+        let working_directory_exists = s.working_directory.as_ref().map(|d| {
+            Path::new(d).is_dir()
+                || provided_by(p, &earlier, d).is_some_and(|by| {
+                    deferred.push(format!(
+                        "the working directory {d} does not exist yet; `{by}` creates it first"
+                    ));
+                    true
+                })
+        });
+
         let gathered = Gathered {
             shell_version: version,
             shell_version_ok,
             lines,
             support_lines: support,
             tools: tool_findings,
-            working_directory_exists: s.working_directory.as_ref().map(|d| Path::new(d).is_dir()),
+            working_directory_exists,
+            deferred,
             preconditions_false: pre_false,
             preconditions_unknown: pre_unknown,
             elevated,

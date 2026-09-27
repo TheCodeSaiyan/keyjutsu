@@ -22,7 +22,14 @@ pub enum RunError {
 
 /// Run `command`, feed it `stdin`, and give up after `limit`. Output is read
 /// on its own threads so a chatty child cannot fill a pipe and hang.
+/// How every program here is made: with no console window (see
+/// [keyjutsu_terminal::shell::command]).
+pub use keyjutsu_terminal::shell::command;
+
 pub fn run(mut command: Command, stdin: &str, limit: Duration) -> Result<Finished, RunError> {
+    // Never a console window of its own: from the desktop app, which has
+    // none, each program started would otherwise flash one up.
+    keyjutsu_terminal::shell::no_window(&mut command);
     let program = format!("{:?}", command.get_program());
     let mut child = command
         .stdin(Stdio::piped())
@@ -126,7 +133,7 @@ mod tests {
 
     #[test]
     fn a_process_that_overruns_is_stopped() {
-        let mut c = Command::new("cmd");
+        let mut c = keyjutsu_terminal::shell::command("cmd");
         c.args(["/D", "/C", "ping -n 30 127.0.0.1 >NUL"]);
         let started = Instant::now();
         let r = run(c, "", Duration::from_millis(500));
@@ -136,7 +143,7 @@ mod tests {
 
     #[test]
     fn output_and_status_come_back() {
-        let mut c = Command::new("cmd");
+        let mut c = keyjutsu_terminal::shell::command("cmd");
         c.args(["/D", "/C", "echo hello& exit 3"]);
         let r = run(c, "", Duration::from_secs(10)).unwrap();
         assert!(!r.success);

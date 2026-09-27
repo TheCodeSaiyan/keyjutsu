@@ -41,6 +41,10 @@ pub struct Gathered<'a> {
     /// Required tools: name, whether found, version if read, constraint result.
     pub tools: Vec<ToolFinding>,
     pub working_directory_exists: Option<bool>,
+    /// What could not be decided yet because an earlier step makes it first:
+    /// a precondition, a working directory, a dry run. Decided again just
+    /// before the step runs.
+    pub deferred: Vec<String>,
     /// Preconditions that were false, and facts preconditions needed but nobody had.
     pub preconditions_false: Vec<String>,
     pub preconditions_unknown: Vec<String>,
@@ -293,7 +297,7 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
                 "artifact",
                 Readiness::NeedsReview,
                 format!(
-                    "{} is not pinned: stage it with `keyjutsu plan stage --pin` and review the hash",
+                    "{} is not pinned yet: download it with Stage downloads in the app (or `keyjutsu plan stage --pin`), which records its hash, then validate again",
                     a.name
                 ),
             ),
@@ -383,6 +387,10 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
     }
 
     // Preconditions.
+    for d in &g.deferred {
+        v.record("preconditions", EvidenceResult::NotApplicable, d.clone());
+        v.uncertainty.push(format!("Decided just before it runs: {d}"));
+    }
     for c in &g.preconditions_false {
         v.fail("preconditions", Readiness::Blocked, format!("does not hold: {c}"));
     }
@@ -409,7 +417,23 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
     // Risk.
     if let Some(risk) = &g.risk {
         let proposed = step.proposed_risk.as_ref().map(|p| p.level);
+        // KeyJutsu's rating is the one that counts either way. An agent that
+        // rated a step lower is worth a second look only where the rating
+        // matters: something High or Critical it called less. Below that,
+        // it is said and KeyJutsu's rating applies.
         if let Some(p) = proposed
+            && p < risk.level
+            && risk.level < RiskLevel::High
+        {
+            v.pass(
+                "risk",
+                format!(
+                    "{:?}, KeyJutsu's rating, which applies (the agent said {p:?}): {}",
+                    risk.level,
+                    risk.reasons.join("; ")
+                ),
+            );
+        } else if let Some(p) = proposed
             && p < risk.level
         {
             v.fail(
@@ -527,6 +551,31 @@ mod tests {
         let s = judge(&step("command"), &g);
         assert_eq!(s.readiness, Readiness::Invalid);
         assert_eq!(s.proof_level, ProofLevel::Low);
+    }
+
+    /// KeyJutsu's rating applies either way; only where it matters does an
+    /// agent's lower rating need a second look.
+    #[test]
+    fn an_agent_rating_below_keyjutsus_needs_review_only_at_high_or_critical() {
+        let rated = |agent: &str, keyjutsu: RiskLevel| {
+            let mut s = step("command");
+            s.proposed_risk = serde_json::from_value(json!({"level": agent, "rationale": "r"})).unwrap();
+            let g = Gathered {
+                shell_version: Some("7".into()),
+                risk: Some(Assessment { level: keyjutsu, reasons: vec!["why".into()] }),
+                ..Gathered::default()
+            };
+            judge(&s, &g)
+        };
+        let normal = rated("low", RiskLevel::Normal);
+        assert_eq!(normal.readiness, Readiness::Ready, "{normal:#?}");
+        assert!(
+            normal.evidence.iter().any(|e| e.check == "risk"
+                && e.detail.as_deref().is_some_and(|d| d.contains("the agent said Low")))
+        );
+        assert_eq!(rated("low", RiskLevel::High).readiness, Readiness::NeedsReview);
+        assert_eq!(rated("normal", RiskLevel::Critical).readiness, Readiness::NeedsReview);
+        assert_eq!(rated("high", RiskLevel::High).readiness, Readiness::Ready);
     }
 
     fn credential_step(shell: &str) -> Step {

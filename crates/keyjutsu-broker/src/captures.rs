@@ -293,7 +293,7 @@ mod tests {
         let base = std::env::temp_dir().join(format!("kj-root-{}", std::process::id()));
         let elsewhere = base.join("elsewhere");
         std::fs::create_dir_all(&elsewhere).unwrap();
-        let made = std::process::Command::new("cmd")
+        let made = keyjutsu_core::terminal::shell::command("cmd")
             .args(["/d", "/c", "mklink", "/J"])
             .arg(base.join("KeyJutsu"))
             .arg(&elsewhere)

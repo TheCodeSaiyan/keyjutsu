@@ -614,7 +614,9 @@ pub fn launch(
         broker_exe.display().to_string().replace('\'', "''"),
         quoted.join(",")
     );
-    let status = std::process::Command::new("powershell.exe")
+    // The PowerShell that asks for elevation has no window of its own; the
+    // UAC prompt is Windows' own.
+    let status = keyjutsu_core::terminal::shell::command("powershell.exe")
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", &script])
         .status()
         .map_err(|e| e.to_string())?;

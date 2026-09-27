@@ -114,7 +114,7 @@ pub fn describe(kind: Boundary) -> &'static str {
 }
 
 fn run(program: &str, args: &[&str]) -> Option<String> {
-    let mut c = std::process::Command::new(program);
+    let mut c = keyjutsu_terminal::shell::command(program);
     c.args(args);
     let out = keyjutsu_validation::process::run(c, "", Duration::from_secs(30)).ok()?;
     let text = out.stdout.trim().to_owned();

@@ -66,6 +66,31 @@ pub struct ShellInfo {
     pub version: Option<String>,
 }
 
+/// A command for `program` that starts with no window of its own (see
+/// [`no_window`]). The only way KeyJutsu makes one: `Command::new` is
+/// disallowed elsewhere (`clippy.toml`), so no program start can forget.
+pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[allow(clippy::disallowed_methods)]
+    let mut c = Command::new(program);
+    no_window(&mut c);
+    c
+}
+
+/// Start `command` with no window of its own. The desktop app has no
+/// console, so Windows would give every console program it starts (a
+/// PowerShell check, git, an agent) a console window that flashes up and
+/// closes. The program still gets a console, just an invisible one, so it
+/// behaves as before.
+pub fn no_window(command: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 /// Find a shell's executable. Returns `None` when it is not installed.
 pub fn locate(kind: ShellKind) -> Option<PathBuf> {
     let system_root = std::env::var_os("SystemRoot").map(PathBuf::from);
@@ -113,7 +138,7 @@ fn first_on_path(dirs: impl Iterator<Item = PathBuf>, exe: &str, except: Option<
 /// profile, so it costs a few hundred milliseconds per PowerShell.
 pub fn detect_version(kind: ShellKind, program: &Path) -> Option<String> {
     let output = match kind {
-        ShellKind::Pwsh | ShellKind::WindowsPowershell => Command::new(program)
+        ShellKind::Pwsh | ShellKind::WindowsPowershell => crate::shell::command(program)
             .args([
                 "-NoLogo",
                 "-NoProfile",
@@ -123,7 +148,7 @@ pub fn detect_version(kind: ShellKind, program: &Path) -> Option<String> {
             ])
             .output()
             .ok()?,
-        ShellKind::Cmd => Command::new(program).args(["/D", "/C", "ver"]).output().ok()?,
+        ShellKind::Cmd => crate::shell::command(program).args(["/D", "/C", "ver"]).output().ok()?,
     };
     if !output.status.success() {
         return None;

@@ -480,6 +480,31 @@ function StepPanel({
           ))}
         </ul>
       )}
+      {state?.assessed_risk &&
+        state.evidence.some((e) => e.check === "risk" && e.result === "failed") && (
+          <div className="row">
+            <button
+              disabled={busy !== null}
+              onClick={() =>
+                act("Using KeyJutsu's rating…", () =>
+                  ipc.replaceStep({
+                    ...step,
+                    proposed_risk: {
+                      level: state.assessed_risk!,
+                      rationale: `KeyJutsu's rating, accepted by the operator: ${state.risk_reasons.join("; ")}`,
+                    },
+                  }),
+                )
+              }
+            >
+              Use KeyJutsu&apos;s rating
+            </button>
+            <span className="small muted">
+              The agent rated it lower. This records that you accept KeyJutsu&apos;s rating, then it
+              is validated again.
+            </span>
+          </div>
+        )}
 
       <p className="eyebrow muted">Recovery</p>
       <p className="small">

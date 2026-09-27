@@ -1,2 +1,10 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+
+# Every program KeyJutsu starts goes through keyjutsu_terminal::shell::command,
+# which starts it without a console window: from the desktop app, which has no
+# console, a plain Command::new flashes one up for every PowerShell check,
+# git call and agent it runs.
+disallowed-methods = [
+  { path = "std::process::Command::new", reason = "use keyjutsu_terminal::shell::command, which starts the program without a console window" },
+]

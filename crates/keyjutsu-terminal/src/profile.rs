@@ -361,7 +361,7 @@ impl PowerShellProfileReport {
 /// Inspect the profile scripts `program` would load. Asks the shell for its
 /// `$PROFILE` paths without loading them.
 pub fn inspect_powershell_profile(program: &Path) -> PowerShellProfileReport {
-    let paths = std::process::Command::new(program)
+    let paths = crate::shell::command(program)
         .args([
             "-NoLogo",
             "-NoProfile",

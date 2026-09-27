@@ -90,6 +90,8 @@ const gates = {
     "a_second_run_is_refused_while_one_changes_the_machine",
     "one_run_at_a_time_and_the_next_once_it_ends",
     "an_update_waits_while_a_run_changes_the_machine",
+    "a_step_that_uses_what_an_earlier_step_makes_is_checked_when_it_runs",
+    "a_precondition_nothing_provides_is_still_blocked_and_one_broken_since_stops_the_run",
   ],
   "Schema validation": [
     "valid_fixtures_parse_as_proposals_and_as_plans",
@@ -123,6 +125,7 @@ const gates = {
     "a_step_whose_recovery_cannot_be_prepared_does_not_run",
     "an_administrator_step_is_recovered_through_the_broker_and_never_from_the_profile",
     "an_administrator_steps_capture_is_the_brokers_not_the_profiles",
+    "an_agent_rating_below_keyjutsus_needs_review_only_at_high_or_critical",
     "a_wildcard_in_a_command_that_changes_things_is_critical_whatever_it_matches_today",
     "a_command_that_changes_whatever_a_pipeline_yields_is_critical",
     "cmd_deletes_are_high_and_with_a_wildcard_critical",

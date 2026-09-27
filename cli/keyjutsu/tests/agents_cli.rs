@@ -3,6 +3,7 @@
 //! spend their quota on a test.
 
 #![allow(clippy::unwrap_used)] // Helpers outside #[test] functions may unwrap too.
+#![allow(clippy::disallowed_methods)] // Tests start programs directly; no window matters here.
 
 use std::process::{Command, Output};
 
