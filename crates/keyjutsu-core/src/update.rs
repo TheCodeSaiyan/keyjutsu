@@ -145,7 +145,7 @@ pub fn pick(releases: &serde_json::Value, channel: Channel, current: &str) -> Op
                 version,
                 tag: tag.to_owned(),
                 prerelease,
-                notes: r["body"].as_str().unwrap_or_default().to_owned(),
+                notes: what_changed(r["body"].as_str().unwrap_or_default()),
                 installer,
                 installer_url,
                 sums_url,
@@ -153,6 +153,14 @@ pub fn pick(releases: &serde_json::Value, channel: Channel, current: &str) -> Op
         }
     }
     best
+}
+
+/// What changed, from a release page: the notes written for that version,
+/// without the install section every release page carries after them.
+fn what_changed(body: &str) -> String {
+    let body = body.replace("\r\n", "\n");
+    let cut = body.find("\n## Install\n").unwrap_or(body.len());
+    body[..cut].trim().to_owned()
 }
 
 fn powershell() -> Result<PathBuf, String> {
@@ -339,6 +347,13 @@ mod tests {
             pick(&json!([bare, release("v0.2.0", false, false)]), Channel::Stable, "0.1.0").unwrap().version,
             "0.2.0"
         );
+    }
+
+    #[test]
+    fn an_update_shows_what_changed_not_how_to_install() {
+        let page = "## Fixed\r\n\r\n- A thing.\r\n\r\n## Install\r\n\r\nIn PowerShell: irm … | iex\r\n\r\n## The small print\r\n\r\nSigned.";
+        assert_eq!(what_changed(page), "## Fixed\n\n- A thing.");
+        assert_eq!(what_changed("Only notes."), "Only notes.");
     }
 
     #[test]
