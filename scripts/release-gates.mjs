@@ -52,6 +52,7 @@ const gates = {
     "a_shared_technique_arrives_as_an_untrusted_draft",
     "an_imported_technique_cannot_claim_trust_or_hide_what_it_runs",
     "parameter_values_are_data_not_code",
+    "questions_change_no_step_hash_and_are_absent_when_there_are_none",
   ],
   "Secret handling": [
     "a_secret_in_pasted_context_never_reaches_the_agent",

@@ -76,6 +76,15 @@ pub enum Problem {
         step: String,
         code_point: String,
     },
+    DuplicateQuestionId {
+        question: String,
+    },
+    /// A question, or one of its options, contains such a character: what
+    /// the operator picks must be what the agent is told they picked.
+    HiddenCharacterInQuestion {
+        question: String,
+        code_point: String,
+    },
 }
 
 /// Characters that change how a command reads without being seen: controls,
@@ -124,6 +133,13 @@ impl fmt::Display for Problem {
             Problem::HiddenCharacter { step, code_point } => write!(
                 f,
                 "step `{step}` has a command containing {code_point}, which is invisible or reorders the text, so the command would not read as it runs"
+            ),
+            Problem::DuplicateQuestionId { question } => {
+                write!(f, "question id `{question}` is used more than once")
+            }
+            Problem::HiddenCharacterInQuestion { question, code_point } => write!(
+                f,
+                "question `{question}` contains {code_point}, which is invisible or reorders the text, so it would not read as it is"
             ),
         }
     }
@@ -335,6 +351,7 @@ pub fn analyse(plan: &Plan) -> Result<PlanGraph, Vec<Problem>> {
 
     check_versions(plan, &mut problems);
     check_hidden_characters(plan, &mut problems);
+    check_questions(plan, &index, &mut problems);
 
     if let Some(state) = &plan.keyjutsu {
         for step in state.steps.keys() {
@@ -409,6 +426,27 @@ fn check_hidden_characters(plan: &Plan, problems: &mut Vec<Problem>) {
         if let Some(c) = texts.flat_map(|c| c.text.chars()).find(|c| is_hidden(*c)) {
             problems.push(Problem::HiddenCharacter {
                 step: step.id.clone(),
+                code_point: format!("U+{:04X}", u32::from(c)),
+            });
+        }
+    }
+}
+
+fn check_questions(plan: &Plan, steps: &HashMap<String, usize>, problems: &mut Vec<Problem>) {
+    let mut seen = BTreeSet::new();
+    for q in &plan.questions {
+        if !seen.insert(q.id.as_str()) {
+            problems.push(Problem::DuplicateQuestionId { question: q.id.clone() });
+        }
+        if let Some(step) = &q.step
+            && !steps.contains_key(step)
+        {
+            problems.push(Problem::UnknownStep { place: format!("question `{}`", q.id), step: step.clone() });
+        }
+        let texts = std::iter::once(&q.text).chain(&q.options);
+        if let Some(c) = texts.flat_map(|t| t.chars()).find(|c| is_hidden(*c)) {
+            problems.push(Problem::HiddenCharacterInQuestion {
+                question: q.id.clone(),
                 code_point: format!("U+{:04X}", u32::from(c)),
             });
         }

@@ -370,6 +370,31 @@ enum PlanCommand {
         #[arg(long)]
         out: std::path::PathBuf,
     },
+    /// List the questions an agent asked in a plan, or answer one. An answer
+    /// goes to the agent, and what it sends back is written unvalidated.
+    Answer {
+        /// The plan the agent asked in.
+        file: std::path::PathBuf,
+        /// The question's id. Without it, the plan's open questions are listed.
+        #[arg(long)]
+        question: Option<String>,
+        /// Your answer: one of the question's options, or your own words.
+        #[arg(long, conflicts_with = "carry_on", requires = "question")]
+        answer: Option<String>,
+        /// Close the question and keep the plan as it is. Nothing is sent.
+        #[arg(long, requires = "question")]
+        carry_on: bool,
+        /// Which agent to send the answer to: codex, claude, gemini, copilot or cursor.
+        #[arg(long)]
+        agent: Option<String>,
+        /// Actually send the answer. Without it, KeyJutsu shows what would be
+        /// sent and stops.
+        #[arg(long)]
+        send: bool,
+        /// Where to write the plan afterwards.
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+    },
     /// Ask a second agent to challenge a plan. It cannot change it.
     Review {
         /// The plan to review.
@@ -636,6 +661,17 @@ fn main() -> ExitCode {
                 agent: &agent.agent,
                 send: agent.send,
                 out: &out,
+            })
+        }
+        Command::Plan(PlanCommand::Answer { file, question, answer, carry_on, agent, send, out }) => {
+            agent_cli::answer(agent_cli::Answer {
+                file: &file,
+                question: question.as_deref(),
+                answer: answer.as_deref(),
+                carry_on,
+                agent: agent.as_deref(),
+                send,
+                out: out.as_deref(),
             })
         }
         Command::Plan(PlanCommand::Review { file, task, agent, record }) => {

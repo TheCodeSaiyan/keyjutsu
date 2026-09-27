@@ -68,6 +68,11 @@ export const ipc = {
   /** A reviewer's concern that needs no change, and why; kept with the plan. */
   dismiss: (index: number, reason: string) =>
     invoke<workspace.WorkspaceView>("workspace_dismiss", { index, reason }),
+  /** Answer the agent's question; what it sends back is a draft like any other. */
+  answer: (agent: agent.AgentKind, id: string, answer: string) =>
+    invoke<workspace.WorkspaceView>("workspace_answer", { agent, id, answer }),
+  /** Close the agent's question and keep the plan as it is. */
+  carryOn: (id: string) => invoke<workspace.WorkspaceView>("workspace_carry_on", { id }),
   propose: (task: string, agent: agent.AgentKind, context: string) =>
     invoke<workspace.WorkspaceView>("workspace_propose", { task, agent, context }),
   replaceStep: (step: plan.Step) =>

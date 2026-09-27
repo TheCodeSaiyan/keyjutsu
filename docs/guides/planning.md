@@ -125,6 +125,14 @@ For a second opinion, **Ask for review** in the app, or:
 keyjutsu plan review spooler.json --agent codex --send
 ```
 
+When the agent can't find something out for itself (which of two folders,
+whether to keep a file), it asks rather than guesses. Its questions appear
+under **What needs you**, each option a button, with **In my own words** where
+the agent allows it and **Carry on as planned** to leave the plan as it is.
+Your answer goes back to the agent, and what it sends back is checked like
+any change. From the CLI, `keyjutsu plan answer spooler.json` lists them. An
+unanswered question doesn't stop you approving the plan.
+
 The reviewer can't change the plan. Its concerns appear under **What needs
 you**, beside the steps they're about, each with **Ask the agent to address
 it**, **It's fine** or **Edit the step**. **It's fine** asks for your reason

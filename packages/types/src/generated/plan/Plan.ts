@@ -5,11 +5,18 @@ import type { Edge } from "./Edge";
 import type { ExecutionPreferences } from "./ExecutionPreferences";
 import type { KeyJutsuState } from "./KeyJutsuState";
 import type { Phase } from "./Phase";
+import type { Question } from "./Question";
 import type { Step } from "./Step";
 import type { Target } from "./Target";
 import type { ToolRequirement } from "./ToolRequirement";
 
 export type Plan = { schema_version: string, plan_id: string, task_id: string, title?: string, target: Target, agent: Agent, environment_assumptions: Array<Assumption>, requirements: Array<ToolRequirement>, phases: Array<Phase>, steps: Array<Step>, edges: Array<Edge>, execution_preferences?: ExecutionPreferences, 
+/**
+ * What the agent needs the operator to decide rather than guess. Left
+ * out when empty, so a plan without questions serialises, and hashes,
+ * as it did before they existed.
+ */
+questions?: Array<Question>, 
 /**
  * Written only by KeyJutsu. Never present in an agent's proposal.
  */

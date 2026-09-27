@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "plan-cat-pdf",
+  "task_id": "task-cat-pdf",
+  "title": "Put a photo of a cat in a PDF on the desktop",
+  "target": {
+    "id": "local",
+    "kind": "local_windows"
+  },
+  "agent": {
+    "name": "claude_code",
+    "version": "2.1.282"
+  },
+  "steps": [
+    {
+      "id": "make-pdf",
+      "title": "Print the photo to a PDF",
+      "objective": "Cat.pdf exists on the desktop.",
+      "reason": "The desktop is redirected to OneDrive here, so the likeliest place is the OneDrive desktop; the question below settles it.",
+      "kind": "command",
+      "shell": {
+        "kind": "pwsh"
+      },
+      "commands": [
+        {
+          "text": "Start-Process -FilePath C:/Users/Public/Pictures/cat.jpg -Verb Print"
+        }
+      ],
+      "privilege": "standard"
+    }
+  ],
+  "questions": [
+    {
+      "id": "which-desktop",
+      "step": "make-pdf",
+      "text": "Your Desktop is in OneDrive. Should Cat.pdf go there, or in the local Desktop folder?",
+      "options": ["The OneDrive desktop", "The local Desktop folder\u202e"],
+      "free_text": true
+    },
+    {
+      "id": "open-afterwards",
+      "text": "Should the PDF be opened once it is made?",
+      "options": ["Yes", "No"]
+    }
+  ]
+}

@@ -29,6 +29,15 @@ export function Conversation({
   const [text, setText] = useState("");
   const [dismissing, setDismissing] = useState<number | null>(null);
   const [reason, setReason] = useState("");
+  const [answering, setAnswering] = useState<string | null>(null);
+  const [answer, setAnswer] = useState("");
+
+  const sendAnswer = (question: string, text: string) => {
+    if (!primary) return;
+    act("The agent is reconsidering the plan with your answer…", () =>
+      ipc.answer(primary, question, text),
+    );
+  };
 
   const askAgent = (guidance: string) => {
     if (!primary) return;
@@ -63,6 +72,16 @@ export function Conversation({
         setReason("");
         setDismissing(c.note);
         break;
+      case "answer":
+        sendAnswer(c.question, c.answer);
+        break;
+      case "answer_in_own_words":
+        setAnswer("");
+        setAnswering(c.question);
+        break;
+      case "carry_on":
+        act("Noting that…", () => ipc.carryOn(c.question));
+        break;
     }
   };
 
@@ -82,69 +101,101 @@ export function Conversation({
         return "Remove the step";
       case "dismiss":
         return "It's fine";
+      case "answer":
+        return c.answer;
+      case "answer_in_own_words":
+        return "In my own words";
+      case "carry_on":
+        return "Carry on as planned";
     }
   };
 
-  const needsAgent = (c: workspace.Choice) => c.kind === "ask_agent" && !primary;
+  const needsAgent = (c: workspace.Choice) =>
+    (c.kind === "ask_agent" || c.kind === "answer" || c.kind === "answer_in_own_words") && !primary;
 
   return (
     <div className="conversation">
       {asks.length === 0 && <p className="small muted">Nothing here needs you.</p>}
-      <ul className="asks">
-        {asks.map((a, i) => (
-          <li key={i} className="ask">
-            <p className="small">
-              <strong>{a.from.kind === "review" ? a.from.who : "KeyJutsu"}:</strong> {a.text}
-            </p>
-            <div className="row choices">
-              {a.choices.map((c, j) => (
-                <button
-                  key={j}
-                  disabled={busy !== null || needsAgent(c)}
-                  title={needsAgent(c) ? "Open this plan with an agent to ask it" : undefined}
-                  onClick={() => choose(c)}
+      {asks.length > 0 && (
+        <ul className="asks">
+          {asks.map((a, i) => (
+            <li key={i} className="ask">
+              <p className="small">
+                <strong>{a.from.kind === "validation" ? "KeyJutsu" : a.from.who}</strong>
+                {a.from.kind === "agent" ? " asks" : ""}: {a.text}
+              </p>
+              <div className="row choices">
+                {a.choices.map((c, j) => (
+                  <button
+                    key={j}
+                    disabled={busy !== null || needsAgent(c)}
+                    title={needsAgent(c) ? "Open this plan with an agent to ask it" : undefined}
+                    onClick={() => choose(c)}
+                  >
+                    {label(c)}
+                  </button>
+                ))}
+              </div>
+              {a.choices.some((c) => c.kind === "dismiss" && c.note === dismissing) && (
+                <form
+                  className="row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const note = dismissing!;
+                    setDismissing(null);
+                    act("Noting that…", () => ipc.dismiss(note, reason.trim()));
+                  }}
                 >
-                  {label(c)}
-                </button>
-              ))}
-            </div>
-            {a.choices.some((c) => c.kind === "dismiss" && c.note === dismissing) && (
-              <form
-                className="row"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const note = dismissing!;
-                  setDismissing(null);
-                  act("Noting that…", () => ipc.dismiss(note, reason.trim()));
-                }}
-              >
-                <input
-                  aria-label="Why it needs no change"
-                  placeholder="Why it needs no change (kept with the plan)"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-                <button type="submit" disabled={busy !== null}>
-                  Dismiss
-                </button>
-                <button type="button" onClick={() => setDismissing(null)}>
-                  Cancel
-                </button>
-              </form>
-            )}
-          </li>
-        ))}
-      </ul>
+                  <input
+                    aria-label="Why it needs no change"
+                    placeholder="Why it needs no change (kept with the plan)"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                  <button type="submit" disabled={busy !== null}>
+                    Dismiss
+                  </button>
+                  <button type="button" onClick={() => setDismissing(null)}>
+                    Cancel
+                  </button>
+                </form>
+              )}
+              {a.choices.some(
+                (c) => c.kind === "answer_in_own_words" && c.question === answering,
+              ) && (
+                <form
+                  className="row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const question = answering!;
+                    setAnswering(null);
+                    sendAnswer(question, answer.trim());
+                  }}
+                >
+                  <input
+                    aria-label="Your answer"
+                    placeholder="Your answer, sent to the agent"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                  />
+                  <button type="submit" disabled={busy !== null || !answer.trim()}>
+                    Answer
+                  </button>
+                  <button type="button" onClick={() => setAnswering(null)}>
+                    Cancel
+                  </button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       <label className="small">
         {step ? "Reply about this step" : "Reply about the plan"}
         <textarea
-          rows={2}
+          rows={3}
           value={text}
-          placeholder={
-            step
-              ? "Tell the agent what to change in this step, or keep a note"
-              : "Tell the agent what to change in the plan, or keep a note"
-          }
+          placeholder="What to change, or a note"
           onChange={(e) => setText(e.target.value)}
         />
       </label>
@@ -170,9 +221,11 @@ export function Conversation({
           Keep as a note
         </button>
       </div>
-      <p className="small muted">
-        What the agent sends back comes back unvalidated and unapproved, like any change.
-      </p>
+      {text.trim() && (
+        <p className="small muted">
+          What the agent sends back comes back unvalidated and unapproved, like any change.
+        </p>
+      )}
     </div>
   );
 }

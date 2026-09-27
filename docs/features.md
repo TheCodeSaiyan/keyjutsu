@@ -39,6 +39,13 @@ things (tokens, keys, private keys, `password=` lines) are redacted from
 everything sent: the task, pasted text, files, your guidance and the plan
 itself.
 
+Where the agent can't find something out for itself, it asks rather than
+guesses: which of two folders, whether to keep a file. Its questions, what
+validation found and a second agent's concerns all appear under **What needs
+you**, beside the step they're about, with the answers that fit. KeyJutsu
+chooses what each answer does; an answer to the agent is only ever guidance,
+and what it sends back is checked and approved like any change.
+
 At the last live check, Codex, Claude Code and GitHub Copilot passed.
 Gemini's plan mode can be switched off silently in its own settings, so
 KeyJutsu refuses its answer whenever it falls back out of read-only mode.
@@ -194,7 +201,7 @@ waiting, and asks before it crosses the boundary, as the CLI does.
 
 ## Checked against its own rules
 
-The eight release gates are named lists of tests, 112 in all,
+The eight release gates are named lists of tests, 113 in all,
 run by `pnpm release:gates`, in CI, and on the tagged commit before a release
 is published; a renamed or deleted test fails its gate. Untrusted inputs are fuzzed as part of the ordinary suite: plans,
 snapshots, broker requests and terminal output. Fuzzing the terminal scanner

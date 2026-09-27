@@ -108,6 +108,15 @@ step failed: the agent is also shown what it printed, redacted, to diagnose
 from. `--task` gives the task if the plan's title doesn't say it well enough;
 `--send` as above.
 
+### `keyjutsu plan answer FILE`
+
+Lists the questions the agent asked in the plan, with their options. To
+answer one, `--question ID --answer TEXT --agent AGENT --out FILE`: the
+question and your answer go to the agent, and what it sends back is written
+unvalidated, to validate and approve like any change. `--carry-on` in place of
+`--answer` closes the question and keeps the plan as it is, asking nothing.
+Either way the decision is kept in the plan's provenance. `--send` as above.
+
 ### `keyjutsu plan review FILE --agent AGENT`
 
 Asks a second agent to challenge the plan. It can't change it. `--record FILE`

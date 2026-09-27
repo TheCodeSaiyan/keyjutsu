@@ -162,6 +162,29 @@ pub struct Workspace {
     problems: Vec<String>,
 }
 
+/// The plan allows 4,000 characters in a provenance note. What goes in one
+/// is two texts the operator or an agent wrote, a concern and a reason or a
+/// question and an answer, each of which may be nearly that long, so each
+/// keeps up to 1,500.
+fn clip(text: &str) -> String {
+    if text.chars().count() <= 1500 {
+        text.to_owned()
+    } else {
+        format!("{}…", text.chars().take(1499).collect::<String>())
+    }
+}
+
+/// The record that the operator answered question `q`.
+fn answered(q: &keyjutsu_plan::model::Question, answer: &str, at: &str) -> ProvenanceEvent {
+    ProvenanceEvent {
+        step: q.step.clone(),
+        actor: operator(),
+        action: ProvenanceAction::Answered,
+        at: at.into(),
+        note: Some(format!("asked: {} — answered: {}", clip(&q.text), clip(answer))),
+    }
+}
+
 fn operator() -> Actor {
     Actor { kind: ActorKind::Operator, agent: None }
 }
@@ -260,15 +283,6 @@ impl Workspace {
             snapshot_hash: None,
             provenance: Vec::new(),
         });
-        // The plan allows 4,000 characters in a note; the concern and the
-        // reason may each be nearly that, so each keeps up to 1,500.
-        let clip = |text: &str| {
-            if text.chars().count() <= 1500 {
-                text.to_owned()
-            } else {
-                format!("{}…", text.chars().take(1499).collect::<String>())
-            }
-        };
         let reason = reason.trim();
         state.provenance.push(ProvenanceEvent {
             step: note.step.clone(),
@@ -532,6 +546,72 @@ impl Workspace {
             self.note(&who, &p.summary, None, at);
         }
         Ok(change)
+    }
+
+    /// Answer the agent's question `id` with `answer`: the question and the
+    /// answer go back to the agent as guidance for the whole plan, and what
+    /// it returns is adopted like any revision, unvalidated and unapproved.
+    /// The question is closed whatever the agent sends back, so it is never
+    /// asked twice, and the answer is kept in the plan's provenance.
+    pub fn answer<R: Runner>(
+        &mut self,
+        agents: &Agents<'_, R>,
+        agent: &AgentHandle,
+        id: &str,
+        answer: &str,
+        at: &str,
+    ) -> Result<PlanDiff, WorkspaceError> {
+        let answer = answer.trim();
+        if answer.is_empty() {
+            return Err(WorkspaceError::Plan("an answer needs some text".into()));
+        }
+        let question = self.open_question(id)?;
+        let guidance = format!(
+            "You asked: {}\nThe operator answered: {answer}\n\
+             Revise the plan to follow this answer, and leave question \"{id}\" out of \"questions\".",
+            question.text
+        );
+        let p = agents.revise_plan(agent, &self.task, self.draft.plan(), &guidance, at)?;
+        let mut next = p.plan.into_plan();
+        next.questions.retain(|q| q.id != id);
+        if let Some(state) = next.keyjutsu.as_mut() {
+            state.provenance.push(answered(&question, answer, at));
+        }
+        self.note("You", &format!("{}: {answer}", question.text), question.step.as_deref(), at);
+        let change = self.adopt(next, None, at)?;
+        let who = agent_name(self.plan());
+        if !p.summary.is_empty() {
+            self.note(&who, &p.summary, question.step.as_deref(), at);
+        }
+        Ok(change)
+    }
+
+    /// Close the agent's question `id` without asking the agent anything:
+    /// the plan stays as it is, and the decision is kept in its provenance.
+    /// No step changes, so nothing goes back to validation.
+    pub fn carry_on(&mut self, id: &str, at: &str) -> Result<(), WorkspaceError> {
+        let question = self.open_question(id)?;
+        let mut plan = self.draft.plan().clone();
+        plan.questions.retain(|q| q.id != id);
+        plan.keyjutsu
+            .get_or_insert_with(|| KeyJutsuState {
+                revision: None,
+                steps: BTreeMap::new(),
+                snapshot_hash: None,
+                provenance: Vec::new(),
+            })
+            .provenance
+            .push(answered(&question, "carry on as planned", at));
+        self.draft = ValidPlan::revalidate(plan, false)?;
+        Ok(())
+    }
+
+    fn open_question(&self, id: &str) -> Result<keyjutsu_plan::model::Question, WorkspaceError> {
+        self.draft
+            .plan()
+            .question(id)
+            .cloned()
+            .ok_or_else(|| WorkspaceError::Plan(format!("there is no open question `{id}`")))
     }
 
     /// Ask another agent to challenge the plan. It changes no step.

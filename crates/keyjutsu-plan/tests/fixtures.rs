@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
+use keyjutsu_plan::hash::step_hashes;
 use keyjutsu_plan::{PlanError, Problem, parse_plan, parse_proposal};
 
 fn dir(kind: &str) -> PathBuf {
@@ -100,6 +101,18 @@ fn structure_invalid_fixtures_report_the_right_problem() {
             |p| matches!(p, Problem::HiddenCharacter { step, code_point } if step == "list-logs" && code_point == "U+202E"),
         ),
         ("phases-out-of-order.json", |p| matches!(p, Problem::PhaseOrder { .. })),
+        (
+            "question-about-missing-step.json",
+            |p| matches!(p, Problem::UnknownStep { place, step } if place == "question `which-desktop`" && step == "make-pfd"),
+        ),
+        (
+            "duplicate-question-id.json",
+            |p| matches!(p, Problem::DuplicateQuestionId { question } if question == "which-desktop"),
+        ),
+        (
+            "hidden-character-in-question.json",
+            |p| matches!(p, Problem::HiddenCharacterInQuestion { question, code_point } if question == "which-desktop" && code_point == "U+202E"),
+        ),
     ];
     let files = fixtures("structure-invalid");
     assert_eq!(files.len(), expected.len(), "every structure fixture needs an expectation");
@@ -184,4 +197,27 @@ fn oversized_and_non_json_input_is_refused() {
     // Deep nesting hits serde_json's recursion limit rather than the stack.
     let deep = format!("{}{}", "[".repeat(10_000), "]".repeat(10_000));
     assert!(matches!(parse_proposal(&deep), Err(PlanError::Json { .. })));
+}
+
+/// Questions are for the operator; approval never binds to them. A plan
+/// without any is written exactly as before they existed, so a stored plan
+/// or snapshot reads back unchanged, and adding them changes no step's hash.
+#[test]
+fn questions_change_no_step_hash_and_are_absent_when_there_are_none() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/examples/check-a-service.json");
+    let text = std::fs::read_to_string(path).unwrap();
+    let plan = parse_plan(&text).unwrap();
+    let hashes = step_hashes(plan.plan(), plan.graph());
+    // Recorded with the plan model as it was before questions were added.
+    assert_eq!(hashes["look"], "34dd709059fcac26b38393069d7891267e661dc91ea8f52120796733396a3728");
+    assert_eq!(hashes["when"], "51089285f18fbd060aa30a0ebad6d060c121022396f6fc5c5fc6c39c37ca9bc4");
+    assert!(!plan.to_json().contains("\"questions\""), "an empty list is left out");
+
+    let mut asked: serde_json::Value = serde_json::from_str(&text).unwrap();
+    asked["questions"] = serde_json::json!([
+        {"id": "which", "step": "look", "text": "Which service?", "options": ["Winmgmt", "Spooler"]}
+    ]);
+    let asked = parse_proposal(&asked.to_string()).unwrap();
+    assert_eq!(asked.plan().questions.len(), 1);
+    assert_eq!(step_hashes(asked.plan(), asked.graph()), hashes);
 }

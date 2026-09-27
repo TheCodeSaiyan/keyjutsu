@@ -271,3 +271,29 @@ fn an_answer_from_outside_the_read_only_mode_is_discarded() {
     assert!(matches!(&err, AgentError::NotReadOnly(why) if why.contains("experimental")), "{err}");
     assert_eq!(runner.seen.borrow().len(), 1, "not asked again in the same mode");
 }
+
+/// ADR 0020 phase 2: the agent is told it may ask, and a proposal that asks
+/// keeps its questions. One whose question hides a character is sent back,
+/// like any other refusal.
+#[test]
+fn an_agent_may_ask_instead_of_guessing() {
+    let mut asking = plan_doc();
+    asking["questions"] = json!([
+        {"id": "restart-or-reinstall", "step": "fix", "text": "Restart the service, or reinstall Docker Desktop?",
+         "options": ["Restart it", "Reinstall"]}
+    ]);
+    let mut hidden = asking.clone();
+    hidden["questions"][0]["options"][1] = json!("Reinstall\u{202E}");
+    let runner = Replay::new(vec![claude_says(&hidden), claude_says(&asking)]);
+    let p =
+        agents(&runner).propose(&handle(AgentKind::ClaudeCode), "fix docker", &empty_context(), AT).unwrap();
+
+    assert_eq!(p.attempts, 2);
+    let q = &p.plan.plan().questions;
+    assert_eq!(q.len(), 1);
+    assert_eq!((q[0].id.as_str(), q[0].step.as_deref()), ("restart-or-reinstall", Some("fix")));
+    assert_eq!(q[0].options, ["Restart it", "Reinstall"]);
+    let seen = runner.seen.borrow();
+    assert!(seen[0].stdin.contains("ask rather than guess"), "the agent is told it may ask");
+    assert!(seen[1].stdin.contains("U+202E"), "the hidden character is named when it is sent back");
+}

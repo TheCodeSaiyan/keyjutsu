@@ -165,6 +165,7 @@ pub fn propose(
                 out.display()
             );
             println!("Next: keyjutsu plan validate {}", out.display());
+            show_questions(out, p.plan.plan());
             write_plan(out, p.plan.plan())
         }
         Err(e) => {
@@ -183,6 +184,120 @@ fn load(file: &Path) -> Result<Plan, ExitCode> {
         eprintln!("{}: {e}", file.display());
         ExitCode::FAILURE
     })
+}
+
+/// The agent's open questions in `plan`, saved at `file`, and how to answer.
+fn show_questions(file: &Path, plan: &Plan) {
+    if plan.questions.is_empty() {
+        return;
+    }
+    println!();
+    println!("The agent asks:");
+    for q in &plan.questions {
+        let about = q.step.as_deref().map(|s| format!(" (step `{s}`)")).unwrap_or_default();
+        println!("  {}{about}: {}", q.id, q.text);
+        for o in &q.options {
+            println!("    - {o}");
+        }
+        if q.free_text || q.options.is_empty() {
+            println!("    - or your own answer");
+        }
+    }
+    println!(
+        "Answer with: keyjutsu plan answer {} --question ID --answer \"...\" --agent NAME --send --out FILE",
+        file.display()
+    );
+    println!("or keep the plan as it is with --carry-on. An open question does not stop approval.");
+}
+
+pub struct Answer<'a> {
+    pub file: &'a Path,
+    pub question: Option<&'a str>,
+    pub answer: Option<&'a str>,
+    pub carry_on: bool,
+    pub agent: Option<&'a str>,
+    pub send: bool,
+    pub out: Option<&'a Path>,
+}
+
+pub fn answer(args: Answer<'_>) -> ExitCode {
+    let Answer { file, question, answer, carry_on, agent, send, out } = args;
+    let text = match std::fs::read_to_string(file) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("keyjutsu: cannot read {}: {e}", file.display());
+            return ExitCode::from(2);
+        }
+    };
+    let mut w = match keyjutsu_core::workspace::Workspace::open(&text) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("{}: {e}", file.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    let Some(id) = question else {
+        if w.plan().questions.is_empty() {
+            println!("No open questions in {}.", file.display());
+        } else {
+            show_questions(file, w.plan());
+        }
+        return ExitCode::SUCCESS;
+    };
+    let Some(asked) = w.plan().question(id).cloned() else {
+        eprintln!("keyjutsu: {} has no open question `{id}`", file.display());
+        return ExitCode::FAILURE;
+    };
+    let Some(out) = out else {
+        eprintln!("keyjutsu: say where to write the plan afterwards with --out FILE");
+        return ExitCode::from(2);
+    };
+    let at = fingerprint::now_rfc3339();
+    if carry_on {
+        return match w.carry_on(id, &at) {
+            Ok(()) => {
+                println!("Closed `{id}`; the plan is otherwise unchanged. Written to {}.", out.display());
+                write_plan(out, w.plan())
+            }
+            Err(e) => {
+                eprintln!("keyjutsu: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    let Some(answer) = answer.map(str::trim).filter(|a| !a.is_empty()) else {
+        eprintln!("keyjutsu: give an answer with --answer, or close the question with --carry-on");
+        return ExitCode::from(2);
+    };
+    let Some(agent) = agent else {
+        eprintln!("keyjutsu: say which agent to send the answer to with --agent");
+        return ExitCode::from(2);
+    };
+    let agent = match handle(agent) {
+        Ok(a) => a,
+        Err(c) => return c,
+    };
+    println!("Answering `{id}` with {} {}.", agent.kind.display_name(), agent.version);
+    println!("  asked:  {}", asked.text);
+    println!("  answer: {answer}");
+    if !send {
+        println!();
+        println!("Nothing was sent. Add --send to send this request.");
+        return ExitCode::SUCCESS;
+    }
+    let runner = ProcessRunner::default();
+    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2 };
+    match w.answer(&agents, &agent, id, answer, &at) {
+        Ok(_) => {
+            println!("Revised; written to {}. Validate it again before approving.", out.display());
+            show_questions(out, w.plan());
+            write_plan(out, w.plan())
+        }
+        Err(e) => {
+            eprintln!("keyjutsu: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 pub struct Revise<'a> {

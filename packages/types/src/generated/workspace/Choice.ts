@@ -4,4 +4,4 @@
  * One answer to an ask. The window carries it out with the workspace
  * operation it names.
  */
-export type Choice = { "kind": "stage_downloads" } | { "kind": "use_key_jutsu_rating" } | { "kind": "ask_agent", label: string, guidance: string, } | { "kind": "validate_again" } | { "kind": "edit_step" } | { "kind": "remove_step" } | { "kind": "dismiss", note: number, };
+export type Choice = { "kind": "stage_downloads" } | { "kind": "use_key_jutsu_rating" } | { "kind": "ask_agent", label: string, guidance: string, } | { "kind": "validate_again" } | { "kind": "edit_step" } | { "kind": "remove_step" } | { "kind": "dismiss", note: number, } | { "kind": "answer", question: string, answer: string, } | { "kind": "answer_in_own_words", question: string, } | { "kind": "carry_on", question: string, };
