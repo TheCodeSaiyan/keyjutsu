@@ -38,7 +38,7 @@ cannot be downloaded without signing in to GitHub, so no updater, and not
    per-machine install, a UAC prompt anyway, since the files are in Program
    Files.
 2. **Check when asked, and hand over to the signed installer.** "Check for
-   updates" in the app, and `keyjutsu update`, ask GitHub for the newest
+   updates" in the app, and a new update command in the CLI, ask GitHub for the newest
    release on the operator's channel, show its version and notes, and on
    the operator's word download the installer, check it exactly as
    `install.ps1` does (`SHA256SUMS`, then its signature, which must be
