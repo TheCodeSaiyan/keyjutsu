@@ -160,3 +160,29 @@ describe("retryGuidance", () => {
     expect(retryGuidance(undefined)).toBe("");
   });
 });
+
+describe("a step's own mode", () => {
+  const base = {
+    id: "s",
+    title: "T",
+    objective: "O",
+    kind: "command",
+    commands: [{ text: "Get-Date" }],
+    visible_validation: [],
+    tool_requirements: [],
+    depends_on: [],
+    preconditions: [],
+    expected_effects: [],
+    internal_validation: [],
+    artifacts: [],
+  } as unknown as plan.Step;
+
+  it("is shown in the form, and set or cleared by it", () => {
+    expect(formFromStep(base).mode).toBe("");
+    const typed = stepFromForm(base, { ...formFromStep(base), mode: "user_input" });
+    expect(typed.execution_mode).toBe("user_input");
+    expect(formFromStep(typed).mode).toBe("user_input");
+    const cleared = stepFromForm(typed, { ...formFromStep(typed), mode: "" });
+    expect(cleared.execution_mode).toBeUndefined();
+  });
+});

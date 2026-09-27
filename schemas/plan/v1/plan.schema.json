@@ -920,7 +920,15 @@
           }
         },
         "action": {
-          "enum": ["authored", "challenged", "revised", "edited", "validated", "approved"]
+          "enum": [
+            "authored",
+            "challenged",
+            "revised",
+            "edited",
+            "validated",
+            "approved",
+            "dismissed"
+          ]
         },
         "at": {
           "type": "string",

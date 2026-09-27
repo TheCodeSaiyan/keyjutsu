@@ -893,6 +893,45 @@ button.text-danger {
   border-left: 3px solid var(--kj-info);
 }
 
+.conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.conversation textarea {
+  width: 100%;
+}
+
+.asks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--kj-info);
+  border-radius: var(--r-md);
+}
+
+.ask p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ask .choices {
+  flex-wrap: wrap;
+}
+
 .plan-column {
   display: flex;
   flex-direction: column;

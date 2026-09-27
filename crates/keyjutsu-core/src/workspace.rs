@@ -40,6 +40,9 @@ pub struct Note {
     pub step: Option<String>,
     /// A reviewer's finding, rather than something the author said.
     pub review: bool,
+    /// A reviewer's finding the operator decided needs no change.
+    #[serde(default)]
+    pub dismissed: bool,
     pub at: String,
 }
 
@@ -105,6 +108,8 @@ pub struct WorkspaceView {
     pub last_change: Option<PlanDiff>,
     /// Things validation itself could not do.
     pub problems: Vec<String>,
+    /// What needs the operator, with the choices that answer it (ADR 0020).
+    pub asks: Vec<crate::asks::Ask>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -219,12 +224,80 @@ impl Workspace {
         &self.task
     }
 
+    /// Accept KeyJutsu's own risk rating for step `id`, where the agent rated
+    /// it lower: the step's proposed risk becomes KeyJutsu's, which sends it
+    /// back to validation like any edit.
+    pub fn use_keyjutsu_rating(&mut self, id: &str, at: &str) -> Result<PlanDiff, WorkspaceError> {
+        let state = self.draft.plan().keyjutsu.as_ref().and_then(|k| k.steps.get(id));
+        let level = state.and_then(|s| s.assessed_risk).ok_or_else(|| {
+            WorkspaceError::Plan(format!("`{id}` has no rating from KeyJutsu yet: validate first"))
+        })?;
+        let reasons = state.map(|s| s.risk_reasons.join("; ")).unwrap_or_default();
+        let mut step =
+            self.draft.plan().step(id).cloned().ok_or_else(|| WorkspaceError::UnknownStep(id.into()))?;
+        step.proposed_risk = Some(keyjutsu_plan::model::ProposedRisk {
+            level,
+            rationale: format!("KeyJutsu's rating, accepted by the operator: {reasons}"),
+        });
+        self.replace_step(step, at)
+    }
+
+    /// Mark reviewer's concern `index` as needing no change, for `reason`,
+    /// and record that in the plan's provenance, where Save plan and the
+    /// history keep it. Nothing in the plan changes, so nothing goes back to
+    /// validation.
+    pub fn dismiss(&mut self, index: usize, reason: &str, at: &str) -> Result<(), WorkspaceError> {
+        let note = self
+            .notes
+            .get(index)
+            .filter(|n| n.review && !n.dismissed)
+            .cloned()
+            .ok_or_else(|| WorkspaceError::Plan("there is no such concern to dismiss".into()))?;
+        let mut plan = self.draft.plan().clone();
+        let state = plan.keyjutsu.get_or_insert_with(|| KeyJutsuState {
+            revision: None,
+            steps: BTreeMap::new(),
+            snapshot_hash: None,
+            provenance: Vec::new(),
+        });
+        // The plan allows 4,000 characters in a note; the concern and the
+        // reason may each be nearly that, so each keeps up to 1,500.
+        let clip = |text: &str| {
+            if text.chars().count() <= 1500 {
+                text.to_owned()
+            } else {
+                format!("{}…", text.chars().take(1499).collect::<String>())
+            }
+        };
+        let reason = reason.trim();
+        state.provenance.push(ProvenanceEvent {
+            step: note.step.clone(),
+            actor: operator(),
+            action: ProvenanceAction::Dismissed,
+            at: at.into(),
+            note: Some(format!(
+                "{}'s concern: {}{}",
+                note.who,
+                clip(&note.text),
+                if reason.is_empty() {
+                    String::new()
+                } else {
+                    format!(" — dismissed because: {}", clip(reason))
+                }
+            )),
+        });
+        self.draft = ValidPlan::revalidate(plan, false)?;
+        self.notes[index].dismissed = true;
+        Ok(())
+    }
+
     pub fn note(&mut self, who: &str, text: &str, step: Option<&str>, at: &str) {
         self.notes.push(Note {
             who: who.into(),
             text: text.into(),
             step: step.map(str::to_owned),
             review: false,
+            dismissed: false,
             at: at.into(),
         });
     }
@@ -487,6 +560,7 @@ impl Workspace {
                 text: f.message.clone(),
                 step: f.step.clone(),
                 review: true,
+                dismissed: false,
                 at: at.into(),
             });
         }
@@ -613,6 +687,11 @@ impl Workspace {
             notes: self.notes.clone(),
             last_change: self.last_change.clone(),
             problems: self.problems.clone(),
+            asks: crate::asks::asks(
+                plan,
+                &self.draft.graph().topological_order().collect::<Vec<_>>(),
+                &self.notes,
+            ),
         }
     }
 

@@ -11,10 +11,11 @@ import {
   stepFromForm,
   summaryLine,
   type StepForm,
-  retryGuidance,
+  STEP_MODES,
 } from "../plan";
 import { ordinal } from "../labels";
 import { ipc } from "../ipc";
+import { Conversation } from "./Conversation";
 
 interface Props {
   view: workspace.WorkspaceView;
@@ -27,6 +28,10 @@ interface Props {
   act(label: string, request: () => Promise<workspace.WorkspaceView>): void;
   onApprove(): void;
   onArm(): void;
+  /** How the plan will run: the same choice as the Terminal's Performance panel. */
+  mode: string;
+  modes: { value: string; label: string; hint: string }[];
+  onMode(mode: string): void;
 }
 
 /**
@@ -166,6 +171,23 @@ export function PlanWorkspace(props: Props) {
             >
               Validate
             </button>
+            <label
+              className="small run-mode"
+              title={props.modes.find((m) => m.value === props.mode)?.hint}
+            >
+              Runs in{" "}
+              <select
+                value={props.mode}
+                disabled={busy !== null}
+                onChange={(e) => props.onMode(e.target.value)}
+              >
+                {props.modes.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             {sealed ? (
               <button
                 className="primary arm"
@@ -244,7 +266,6 @@ function AgentPanel({
   busy: string | null;
   act: Props["act"];
 }) {
-  const [guidance, setGuidance] = useState("");
   const reviewers = installed.filter((a) => a.kind !== primary);
   const [reviewer, setReviewer] = useState<agent.AgentKind | undefined>(undefined);
   const chosenReviewer = reviewer ?? reviewers[0]?.kind;
@@ -285,36 +306,19 @@ function AgentPanel({
                 : ""}
             </strong>
             <span>{n.text}</span>
+            {n.dismissed && <span className="small muted">Dismissed by you</span>}
           </li>
         ))}
       </ol>
-      <label className="small">
-        Guidance
-        <textarea
-          rows={3}
-          value={guidance}
-          onChange={(e) => setGuidance(e.target.value)}
-          placeholder="Don't replace the whole file; patch the one property."
-        />
-      </label>
+      <p className="eyebrow muted">What needs you in the plan</p>
+      <Conversation
+        asks={view.asks.filter((a) => a.step === undefined)}
+        step={undefined}
+        primary={primary}
+        busy={busy}
+        act={act}
+      />
       <div className="stack">
-        <button
-          disabled={busy !== null || !primary || !guidance.trim()}
-          onClick={() =>
-            act("The agent is reconsidering the plan…", () => ipc.revise(primary!, guidance.trim()))
-          }
-        >
-          Ask agent to reconsider the plan
-        </button>
-        <button
-          disabled={busy !== null || !guidance.trim()}
-          onClick={() => {
-            act("Saving note…", () => ipc.note(guidance.trim(), null));
-            setGuidance("");
-          }}
-        >
-          Keep as a note
-        </button>
         <label className="small">
           Reviewer
           <select
@@ -365,10 +369,7 @@ function StepPanel({
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<StepForm>(() => formFromStep(step));
-  const [retrying, setRetrying] = useState(false);
-  const [guidance, setGuidance] = useState("");
   const state = view.plan.keyjutsu?.steps[step.id];
-  const concerns = view.notes.filter((n) => n.review && n.step === step.id);
 
   if (editing) {
     return (
@@ -425,6 +426,19 @@ function StepPanel({
             />
           </label>
         )}
+        <label className="small">
+          How this step runs
+          <select
+            value={form.mode}
+            onChange={(e) => setForm({ ...form, mode: e.target.value as StepForm["mode"] })}
+          >
+            {STEP_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <p className="muted small">
           Saving sends this step and everything after it back to validation. Approval is never
           carried over.
@@ -458,6 +472,11 @@ function StepPanel({
           <p className="eyebrow muted">Command{step.commands.length > 1 ? "s" : ""}</p>
           <pre className="code">{step.commands.map((c) => c.text).join("\n")}</pre>
         </>
+      )}
+      {step.execution_mode && (
+        <p className="small muted">
+          This step always runs as: {STEP_MODES.find((m) => m.value === step.execution_mode)?.label}
+        </p>
       )}
       {step.kind === "manual" && (
         <p className="small">You do this yourself, outside the terminal, then press Enter.</p>
@@ -493,6 +512,16 @@ function StepPanel({
         </p>
       )}
 
+      <p className="eyebrow muted">What needs you</p>
+      <Conversation
+        asks={view.asks.filter((a) => a.step === step.id)}
+        step={step}
+        primary={primary}
+        busy={busy}
+        act={act}
+        onEdit={() => setEditing(true)}
+      />
+
       <p className="eyebrow muted">Risk</p>
       <p className="small">
         {riskLabel(summary.risk)}
@@ -505,31 +534,6 @@ function StepPanel({
           ))}
         </ul>
       )}
-      {state?.assessed_risk &&
-        state.evidence.some((e) => e.check === "risk" && e.result === "failed") && (
-          <div className="row">
-            <button
-              disabled={busy !== null}
-              onClick={() =>
-                act("Using KeyJutsu's rating…", () =>
-                  ipc.replaceStep({
-                    ...step,
-                    proposed_risk: {
-                      level: state.assessed_risk!,
-                      rationale: `KeyJutsu's rating, accepted by the operator: ${state.risk_reasons.join("; ")}`,
-                    },
-                  }),
-                )
-              }
-            >
-              Use KeyJutsu&apos;s rating
-            </button>
-            <span className="small muted">
-              The agent rated it lower. This records that you accept KeyJutsu&apos;s rating, then it
-              is validated again.
-            </span>
-          </div>
-        )}
 
       <p className="eyebrow muted">Recovery</p>
       <p className="small">
@@ -546,91 +550,32 @@ function StepPanel({
         <pre className="code">{step.recovery.commands.map((c) => c.text).join("\n")}</pre>
       )}
 
-      {concerns.length > 0 && (
-        <>
-          <p className="eyebrow muted">Review</p>
-          <ul className="small plain">
-            {concerns.map((c, i) => (
-              <li key={i}>
-                <strong>{c.who}:</strong> {c.text}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {retrying ? (
-        <div className="retry">
-          <label className="small">
-            What should change?
-            <textarea rows={3} value={guidance} onChange={(e) => setGuidance(e.target.value)} />
-          </label>
-          <p className="muted small">
-            The agent gets the task, the plan, this guidance and what validation and review found
-            about this step. Only this step can change, and it comes back unvalidated and
-            unapproved.
-          </p>
-          <div className="row">
-            <button
-              disabled={busy !== null || !primary || !guidance.trim()}
-              onClick={() => {
-                act("The agent is revising this step…", () =>
-                  ipc.retryStep(primary!, step.id, guidance.trim()),
-                );
-                setRetrying(false);
-              }}
-            >
-              Send to agent
-            </button>
-            <button onClick={() => setRetrying(false)}>Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <div className="stack">
-          <button disabled={busy !== null} onClick={() => setEditing(true)}>
-            Edit
-          </button>
-          {step.artifacts.some((a) => !a.sha256) && (
-            <button
-              disabled={busy !== null}
-              title="Download what this step needs once, record its hash, and keep it for the run"
-              onClick={() => act("Downloading and checking artifacts…", () => ipc.stage())}
-            >
-              Stage downloads
-            </button>
-          )}
+      <div className="stack">
+        <button disabled={busy !== null} onClick={() => setEditing(true)}>
+          Edit
+        </button>
+        <div className="row">
           <button
-            disabled={busy !== null || !primary}
-            onClick={() => {
-              setGuidance(retryGuidance(state));
-              setRetrying(true);
-            }}
+            disabled={busy !== null}
+            onClick={() => act("Moving…", () => ipc.moveStep(step.id, true))}
           >
-            Retry step with agent
+            Move up
           </button>
-          <div className="row">
-            <button
-              disabled={busy !== null}
-              onClick={() => act("Moving…", () => ipc.moveStep(step.id, true))}
-            >
-              Move up
-            </button>
-            <button
-              disabled={busy !== null}
-              onClick={() => act("Moving…", () => ipc.moveStep(step.id, false))}
-            >
-              Move down
-            </button>
-            <button
-              className="text-danger"
-              disabled={busy !== null}
-              onClick={() => act("Removing…", () => ipc.removeStep(step.id))}
-            >
-              Remove
-            </button>
-          </div>
+          <button
+            disabled={busy !== null}
+            onClick={() => act("Moving…", () => ipc.moveStep(step.id, false))}
+          >
+            Move down
+          </button>
+          <button
+            className="text-danger"
+            disabled={busy !== null}
+            onClick={() => act("Removing…", () => ipc.removeStep(step.id))}
+          >
+            Remove
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -62,6 +62,12 @@ export const ipc = {
   openPlan: (text: string) => invoke<workspace.WorkspaceView>("workspace_open", { text }),
   /** Save the open plan, with its findings, to a new file; returns where. */
   savePlan: () => invoke<string>("workspace_save"),
+  /** Take KeyJutsu's own risk rating for a step. */
+  useKeyJutsuRating: (id: string) =>
+    invoke<workspace.WorkspaceView>("workspace_use_rating", { id }),
+  /** A reviewer's concern that needs no change, and why; kept with the plan. */
+  dismiss: (index: number, reason: string) =>
+    invoke<workspace.WorkspaceView>("workspace_dismiss", { index, reason }),
   propose: (task: string, agent: agent.AgentKind, context: string) =>
     invoke<workspace.WorkspaceView>("workspace_propose", { task, agent, context }),
   replaceStep: (step: plan.Step) =>
