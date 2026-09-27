@@ -161,7 +161,7 @@ if (stale.length) {
 }
 // The default members hold every gate's tests. The desktop crate is left out
 // because building it needs the installer's staged binaries beside it.
-const run = spawnSync("cargo", ["test", "--no-fail-fast", "--", ...names], {
+const run = spawnSync("cargo", ["test", "--locked", "--no-fail-fast", "--", ...names], {
   encoding: "utf8",
   maxBuffer: 64 * 1024 * 1024,
   shell: false,

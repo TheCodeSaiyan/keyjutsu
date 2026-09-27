@@ -34,9 +34,16 @@ irm https://github.com/TheCodeSaiyan/keyjutsu/releases/latest/download/install.p
 It downloads the installer, checks it against the release's `SHA256SUMS`
 and refuses if it differs, checks its signature, and then runs it: the same
 installer, with the same questions. Or download the installer yourself and
-double-click it. The installer isn't signed yet, so Windows shows "Windows
-protected your PC": choose **More info**, then **Run anyway**. Then approve the
-UAC prompt.
+double-click it. The installer and every program in it are signed by
+TheCodeSaiyan Ltd, and timestamped. Windows may still show "Windows protected
+your PC" for a download it hasn't seen often: choose **More info**, check the
+publisher is TheCodeSaiyan Ltd, then **Run anyway**. Then approve the UAC
+prompt.
+
+Each release also lists everything it ships in `KeyJutsu_VERSION_sbom.cdx.json`
+(a CycloneDX software bill of materials): every Rust crate and npm package,
+with its version, its licence and the hash the lock file pins, checked
+against `SHA256SUMS` like the installer.
 
 If the machine has no WebView2 runtime, the installer fetches it from
 Microsoft, which needs the network. Windows 11 normally has it already; the

@@ -22,11 +22,13 @@ Double-click `KeyJutsu_0.1.0_x64-setup.exe`.
 
 ### 2. Get past the warning
 
-Windows shows a blue box: **Windows protected your PC**. It shows this for
-programs that aren't signed yet. Signing is a kind of stamp that says who
-made a program, and KeyJutsu doesn't have one yet.
+KeyJutsu's installer is signed: it carries a stamp that says who made it,
+TheCodeSaiyan Ltd, which Windows checks.
 
-Choose **More info**, then **Run anyway**.
+Windows may still show a blue box: **Windows protected your PC**. It shows
+this for programs it hasn't seen many people download yet, signed or not.
+Choose **More info**, check it says **TheCodeSaiyan Ltd**, then **Run
+anyway**.
 
 ### 3. Say yes to Windows
 

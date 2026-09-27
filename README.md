@@ -18,9 +18,8 @@ approve it. Only then does anything run, one keystroke of yours at a time,
 with each step checked after it runs.
 
 > **Status: early.** Everything described here works, and the release
-> gates pass. Early means there's no published release or signed installer
-> yet, and the gaps the [threat model](THREAT_MODEL.md#not-covered) lists are
-> real.
+> gates pass. Early means there's no published release yet, and the gaps
+> the [threat model](THREAT_MODEL.md#not-covered) lists are real.
 
 ## Start here
 
