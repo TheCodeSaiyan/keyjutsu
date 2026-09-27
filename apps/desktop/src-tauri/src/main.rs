@@ -348,6 +348,19 @@ fn workspace_view(plans: State<'_, Arc<Plans>>) -> Option<WorkspaceView> {
     locked(&plans.workspace).as_ref().map(Workspace::view)
 }
 
+/// Save the plan open now, with its findings, and show it in Explorer.
+#[tauri::command]
+fn workspace_save(plans: State<'_, Arc<Plans>>) -> Result<String, String> {
+    let file = locked(&plans.workspace)
+        .as_ref()
+        .ok_or("there is no plan open")?
+        .save_draft(&Workspace::plans_dir())?;
+    let mut select = std::ffi::OsString::from("/select,");
+    select.push(&file);
+    let _ = keyjutsu_core::terminal::shell::command("explorer.exe").arg(select).spawn();
+    Ok(file.display().to_string())
+}
+
 #[tauri::command]
 fn workspace_open(text: String, plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
     let w = Workspace::open(&text).map_err(|e| e.to_string())?;
@@ -1021,6 +1034,7 @@ fn main() {
             workspace_open,
             workspace_propose,
             workspace_replace_step,
+            workspace_save,
             workspace_insert_step,
             workspace_remove_step,
             workspace_move_step,
