@@ -77,8 +77,15 @@ try {
         default { throw "The installer's signature does not verify ($($signature.Status)); nothing was installed." }
     }
 
-    $arguments = if ($Silent) { @('/S') } else { @() }
-    $run = Start-Process -FilePath $exe -ArgumentList $arguments -Wait -PassThru
+    $start = @{ FilePath = $exe; PassThru = $true }
+    if ($Silent) { $start.ArgumentList = @('/S') }
+    $run = Start-Process @start
+    # Wait for the installer alone. Start-Process -Wait also waits for
+    # everything it starts, so KeyJutsu opened from its Finish page kept this
+    # terminal waiting until the app was closed. Reading the handle first
+    # keeps the exit code once the process has gone.
+    $null = $run.Handle
+    $run.WaitForExit()
     if ($run.ExitCode -ne 0) { throw "The installer exited with $($run.ExitCode)." }
     Write-Host 'Installed. Open a new terminal and run: keyjutsu doctor'
 } finally {
