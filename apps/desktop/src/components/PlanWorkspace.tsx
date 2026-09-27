@@ -11,6 +11,7 @@ import {
   stepFromForm,
   summaryLine,
   type StepForm,
+  retryGuidance,
 } from "../plan";
 import { ordinal } from "../labels";
 import { ipc } from "../ipc";
@@ -589,7 +590,22 @@ function StepPanel({
           <button disabled={busy !== null} onClick={() => setEditing(true)}>
             Edit
           </button>
-          <button disabled={busy !== null || !primary} onClick={() => setRetrying(true)}>
+          {step.artifacts.some((a) => !a.sha256) && (
+            <button
+              disabled={busy !== null}
+              title="Download what this step needs once, record its hash, and keep it for the run"
+              onClick={() => act("Downloading and checking artifacts…", () => ipc.stage())}
+            >
+              Stage downloads
+            </button>
+          )}
+          <button
+            disabled={busy !== null || !primary}
+            onClick={() => {
+              setGuidance(retryGuidance(state));
+              setRetrying(true);
+            }}
+          >
             Retry step with agent
           </button>
           <div className="row">

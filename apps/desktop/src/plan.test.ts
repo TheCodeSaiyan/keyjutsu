@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { plan } from "@keyjutsu/types";
 import {
   boundaryStep,
+  retryGuidance,
   formFromStep,
   idFor,
   linesToCommands,
@@ -132,5 +133,30 @@ describe("outcomes", () => {
     }
     // A restart or sign-out closes the app: it offers to continue when it opens again.
     expect(boundaryStep("windows_restart")).toContain("open KeyJutsu");
+  });
+});
+
+describe("retryGuidance", () => {
+  const state = (evidence: { check: string; result: string; detail?: string }[]) =>
+    ({ evidence }) as unknown as plan.StepState;
+
+  it("writes what validation found, once each, for the agent", () => {
+    const g = retryGuidance(
+      state([
+        { check: "commands", result: "failed", detail: "`magick` was not found" },
+        { check: "commands", result: "failed", detail: "`magick` was not found" },
+        { check: "syntax", result: "passed", detail: "parses" },
+      ]),
+    );
+    expect(g).toContain("- commands: `magick` was not found");
+    expect(g.match(/magick/g)?.length).toBe(1);
+    expect(g).not.toContain("parses");
+  });
+
+  it("leaves out what staging fixes, and is empty when nothing failed", () => {
+    expect(
+      retryGuidance(state([{ check: "artifact", result: "failed", detail: "not pinned yet" }])),
+    ).toBe("");
+    expect(retryGuidance(undefined)).toBe("");
   });
 });
