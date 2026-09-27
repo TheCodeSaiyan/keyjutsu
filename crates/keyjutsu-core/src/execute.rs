@@ -745,6 +745,33 @@ pub fn changed_since_approval(
     })
 }
 
+/// What a precondition is judged on just before its step: what earlier
+/// steps did, and the file system as it is now. Tool versions and services
+/// were judged at validation, which the operator approved, and are not
+/// asked again; a named fact nobody collects stays undecided. Only a
+/// definite "no" stops the step.
+struct NowFacts<'a> {
+    known: &'a KnownFacts,
+}
+
+impl keyjutsu_plan::condition::Facts for NowFacts<'_> {
+    fn step_result(&self, step: &str) -> Option<StepResult> {
+        self.known.step_result(step)
+    }
+    fn fact(&self, name: &str) -> Option<keyjutsu_plan::model::FactValue> {
+        self.known.fact(name)
+    }
+    fn tool_version(&self, _: &str) -> Option<String> {
+        None
+    }
+    fn path_exists(&self, path: &str) -> Option<bool> {
+        Some(Path::new(path).exists())
+    }
+    fn service_state(&self, _: &str) -> Option<keyjutsu_plan::model::ServiceState> {
+        None
+    }
+}
+
 /// The steps in `affected` that have not already run.
 fn still_to_run(affected: Vec<String>, checkpoint: &Checkpoint) -> Vec<String> {
     affected.into_iter().filter(|s| !checkpoint.runs.iter().any(|r| &r.step == s)).collect()
@@ -1112,6 +1139,26 @@ pub fn execute(
                 Outcome::Blocked { reason: "the shell did not return to its prompt".into() },
                 checkpoint,
             );
+        }
+        // Its preconditions, judged again now: validation saw the machine
+        // before anything ran, so one that needs a file an earlier step makes
+        // was left until here, and one that held then may not now.
+        for c in &step.preconditions {
+            if matches!(
+                keyjutsu_plan::condition::evaluate(c, &NowFacts { known: &facts }),
+                keyjutsu_plan::condition::Truth::False
+            ) {
+                save(&checkpoint);
+                return finish(
+                    Outcome::Blocked {
+                        reason: format!(
+                            "step `{id}` did not start: its precondition {} does not hold now",
+                            serde_json::to_string(c).unwrap_or_default()
+                        ),
+                    },
+                    checkpoint,
+                );
+            }
         }
         // A critical step approved more than an hour ago is confirmed again,
         // just before it runs: judged now, not when the run began, so a long

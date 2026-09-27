@@ -158,6 +158,18 @@ hands it (`Get-ChildItem … | Remove-Item`): what it touches is decided when
 it runs, not when you read it. The dry run shows what the wildcard matches
 now; naming each file with `-LiteralPath` keeps the step to exactly those.
 
+If the agent rated a step lower than KeyJutsu does, KeyJutsu's rating is the
+one that counts, and the step says so. Where KeyJutsu rates it high or
+critical, the step waits for your review; **Use KeyJutsu's rating** accepts
+it.
+
+Validation looks at the machine as it is now, before anything has run. A step
+that needs a file an earlier step makes (step one prints `Cat.pdf`, step two
+opens it) would fail that check, so when the earlier step declares it creates
+the file, the check is left until just before the step runs, and the step
+says so. Every step's preconditions are checked again at that moment, so one
+that no longer holds stops the run before the step starts.
+
 ### 5. Approve it
 
 **Approve plan** in the app, or:

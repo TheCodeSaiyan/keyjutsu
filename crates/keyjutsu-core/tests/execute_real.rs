@@ -984,3 +984,62 @@ fn an_administrator_steps_capture_is_the_brokers_not_the_profiles() {
         "nothing was captured in the operator's profile"
     );
 }
+
+/// A plan that makes a file and then uses it: validation cannot see the file
+/// yet, so the check is left until just before the step, where it holds.
+/// The Cat.pdf plan from a first real run: step one prints the PDF, step two
+/// opens it, and step two was blocked because the PDF did not exist yet.
+#[test]
+fn a_step_that_uses_what_an_earlier_step_makes_is_checked_when_it_runs() {
+    let dir = scratch("made-then-used");
+    let made = fwd(&dir.join("made.txt"));
+    let copy = fwd(&dir.join("copy.txt"));
+    let mut make = step("make", &format!("Set-Content -LiteralPath {made} -Value hello"));
+    make["expected_effects"] = json!([{"kind": "file_created", "target": made}]);
+    let mut use_it = step("use", &format!("Copy-Item -LiteralPath {made} -Destination {copy}"));
+    use_it["depends_on"] = json!(["make"]);
+    use_it["preconditions"] = json!([{"path_exists": {"path": made}}]);
+    let v = plan(json!([make, use_it]), json!([]));
+
+    // Validation leaves the check until the step runs, and says so.
+    let draft = parse_plan(&v.to_string()).unwrap();
+    let report = validate(&draft, Options::default());
+    let st = &report.steps["use"];
+    assert_eq!(st.readiness, keyjutsu_core::plan::model::Readiness::Ready, "{st:#?}");
+    assert!(st.remaining_uncertainty.iter().any(|u| u.contains("`make` creates it first")), "{st:#?}");
+
+    let snap = approve(&v);
+    let t = terminal();
+    let (outcome, _, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    t.session.close();
+    assert_eq!(outcome, Outcome::Complete);
+    assert_eq!(std::fs::read_to_string(dir.join("copy.txt")).unwrap().trim(), "hello");
+}
+
+/// Nothing earlier makes it: still blocked at validation. And a
+/// precondition that held at approval but not when its step is reached
+/// stops the run before the step starts.
+#[test]
+fn a_precondition_nothing_provides_is_still_blocked_and_one_broken_since_stops_the_run() {
+    let dir = scratch("precondition-broken");
+    let needed = fwd(&dir.join("needed.txt"));
+    let mut uses = step("use", &format!("Get-Content -LiteralPath {needed}"));
+    uses["preconditions"] = json!([{"path_exists": {"path": needed}}]);
+    let v = plan(json!([step("first", "Get-Date"), uses.clone()]), json!([]));
+    let draft = parse_plan(&v.to_string()).unwrap();
+    let report = validate(&draft, Options { dry_run: false, ..Options::default() });
+    assert_eq!(report.steps["use"].readiness, keyjutsu_core::plan::model::Readiness::Blocked);
+
+    // Held when approved; gone by the time the step is reached.
+    std::fs::write(dir.join("needed.txt"), "x").unwrap();
+    let snap = approve(&v);
+    std::fs::remove_file(dir.join("needed.txt")).unwrap();
+    let t = terminal();
+    let (outcome, checkpoint, _) = run(&t, &snap, &mode(ExecutionMode::Direct), None);
+    t.session.close();
+    assert!(
+        matches!(&outcome, Outcome::Blocked { reason } if reason.contains("`use` did not start") && reason.contains("does not hold now")),
+        "{outcome:?}"
+    );
+    assert!(checkpoint.runs.iter().all(|r| r.step != "use"), "the step never ran");
+}
