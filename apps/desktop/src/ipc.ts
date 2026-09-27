@@ -60,6 +60,8 @@ export const ipc = {
   agents: () => invoke<agent.AgentInfo[]>("agents_list"),
   workspace: () => invoke<workspace.WorkspaceView | null>("workspace_view"),
   openPlan: (text: string) => invoke<workspace.WorkspaceView>("workspace_open", { text }),
+  /** Save the open plan, with its findings, to a new file; returns where. */
+  savePlan: () => invoke<string>("workspace_save"),
   propose: (task: string, agent: agent.AgentKind, context: string) =>
     invoke<workspace.WorkspaceView>("workspace_propose", { task, agent, context }),
   replaceStep: (step: plan.Step) =>

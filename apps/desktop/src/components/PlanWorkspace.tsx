@@ -40,6 +40,8 @@ export function PlanWorkspace(props: Props) {
   const validatedOnce = everValidated(view.plan);
   const installed = (agents ?? []).filter((a) => a.path !== null);
   const [agentKind, setAgentKind] = useState<agent.AgentKind | undefined>(undefined);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const primary = agentKind ?? installed[0]?.kind;
 
   // A selection that no longer exists (the step was removed) falls back to
@@ -149,6 +151,16 @@ export function PlanWorkspace(props: Props) {
             )}
             <button
               disabled={busy !== null}
+              title="Save this plan, with what validation found for every step, to keep or to hand to someone helping"
+              onClick={() => {
+                setSaveError(null);
+                ipc.savePlan().then(setSaved, (e: unknown) => setSaveError(String(e)));
+              }}
+            >
+              Save plan
+            </button>
+            <button
+              disabled={busy !== null}
               onClick={() => act("Validating…", () => ipc.validate())}
             >
               Validate
@@ -182,6 +194,18 @@ export function PlanWorkspace(props: Props) {
             </p>
           )}
         </footer>
+        {saved && (
+          <p role="status" className="small">
+            Saved to <code>{saved}</code>, with what validation found for every step. Open it again
+            with Open plan file…. It holds the plan&apos;s commands and paths: read it before you
+            send it to anyone.
+          </p>
+        )}
+        {saveError && (
+          <p role="alert" className="error">
+            {saveError}
+          </p>
+        )}
       </section>
 
       <section className="step-column" aria-label="Selected step">
