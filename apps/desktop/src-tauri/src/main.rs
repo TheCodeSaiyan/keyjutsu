@@ -252,7 +252,12 @@ fn terminal_key(id: u32, chord: KeyChord, sessions: State<'_, Arc<Sessions>>) ->
 
 #[tauri::command]
 fn terminal_resize(id: u32, size: TerminalSize, sessions: State<'_, Arc<Sessions>>) -> Result<(), String> {
-    sessions.get(id)?.0.resize(size).map_err(message)
+    let (session, sink) = sessions.get(id)?;
+    session.resize(size).map_err(message)?;
+    if let Some(r) = locked(&sink.recorder).as_ref() {
+        r.resize(size.cols, size.rows);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -651,8 +656,8 @@ async fn workspace_approve(
 fn plan_run(
     id: u32,
     config: PerformanceConfig,
-    // The terminal's size, when the operator chose to record the run.
-    record: Option<TerminalSize>,
+    // Record the run (ADR 0021).
+    record: bool,
     on_event: Channel<RunMessage>,
     sessions: State<'_, Arc<Sessions>>,
     plans: State<'_, Arc<Plans>>,
@@ -770,8 +775,15 @@ fn plan_run(
             .collect();
         let (tx, rx) = channel();
         *locked(&sink.forward) = Some(tx);
-        let recorder =
-            record.map(|size| Arc::new(keyjutsu_core::recording::Recorder::new(size.cols, size.rows)));
+        // The size and the screen as the shell has them, not as the window
+        // last reported them: arming resizes the window, and a recording made
+        // for the wrong size replays in the wrong places.
+        let recorder = record.then(|| {
+            let (size, screen) = session.screen();
+            let r = Arc::new(keyjutsu_core::recording::Recorder::new(size.cols, size.rows));
+            r.output(&screen);
+            r
+        });
         *locked(&sink.recorder) = recorder.clone();
         let started = fingerprint::now_rfc3339();
         let (outcome, finished_checkpoint) = execute(

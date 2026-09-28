@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { recording } from "@keyjutsu/types";
-import { paletteColour, Player, screenRows } from "./render";
+import { areas, paletteColour, Player, screenRows, sizeOf } from "./render";
 
 const theme = {
   background: "#000000",
@@ -56,5 +56,45 @@ describe("the replay", () => {
     await p.advanceTo(0);
     expect(screenRows(p.term, theme)[0][0].fg).toBe("#010203");
     p.dispose();
+  });
+
+  it("replays each part at the size it was drawn for", async () => {
+    const long = "x".repeat(30);
+    const events: recording.Event[] = [
+      { at: 0, kind: "resize", data: "40x3" },
+      { at: 0, kind: "output", data: long },
+    ];
+    const p = new Player({ width: 20, height: 3, title: "t", events });
+    await p.advanceTo(0);
+    const rows = screenRows(p.term, theme);
+    expect(
+      rows[0]
+        .map((r) => r.text)
+        .join("")
+        .trimEnd(),
+    ).toBe(long);
+    expect(
+      rows[1]
+        .map((r) => r.text)
+        .join("")
+        .trim(),
+    ).toBe("");
+    p.dispose();
+    expect(sizeOf("120x30")).toEqual({ cols: 120, rows: 30 });
+    expect(sizeOf("wide")).toBeNull();
+  });
+
+  it("finds how much of the screen was drawn on, and the most it had", async () => {
+    const found = await areas({
+      width: 80,
+      height: 10,
+      title: "t",
+      events: [
+        { at: 0, kind: "output", data: "PS> hi\r\nsecond line" },
+        { at: 0.5, kind: "resize", data: "100x10" },
+      ],
+    });
+    expect(found.used).toEqual({ cols: 11, rows: 2 });
+    expect(found.whole).toEqual({ cols: 100, rows: 10 });
   });
 });

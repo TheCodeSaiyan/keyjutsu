@@ -72,15 +72,17 @@ function resolve(rgb: boolean, palette: boolean, value: number, theme: ITheme, f
 }
 
 /** The screen as it is now: each row as runs of one style. */
-export function screenRows(term: Terminal, theme: ITheme): Run[][] {
+export function screenRows(term: Terminal, theme: ITheme, area?: Area): Run[][] {
   const buffer = term.buffer.active;
   const fgDefault = theme.foreground ?? "#cccccc";
   const bgDefault = theme.background ?? "#0c0c0c";
   const rows: Run[][] = [];
-  for (let y = 0; y < term.rows; y++) {
+  const rowCount = Math.min(term.rows, area?.rows ?? term.rows);
+  const colCount = Math.min(term.cols, area?.cols ?? term.cols);
+  for (let y = 0; y < rowCount; y++) {
     const line = buffer.getLine(buffer.viewportY + y);
     const runs: Run[] = [];
-    for (let x = 0; line && x < term.cols; x++) {
+    for (let x = 0; line && x < colCount; x++) {
       const cell = line.getCell(x) as Cell | undefined;
       if (!cell || cell.getWidth() === 0) continue;
       let fg = resolve(cell.isFgRGB(), cell.isFgPalette(), cell.getFgColor(), theme, fgDefault);
@@ -126,19 +128,80 @@ export class Player {
     return this.rec.events.length ? this.rec.events[this.rec.events.length - 1].at : 0;
   }
 
-  /** Write everything recorded up to `at` seconds. */
+  /** Write everything recorded up to `at` seconds, at the size it was drawn for. */
   async advanceTo(at: number): Promise<void> {
     let data = "";
+    const flush = async () => {
+      if (data) await new Promise<void>((done) => this.term.write(data, done));
+      data = "";
+    };
     while (this.next < this.rec.events.length && this.rec.events[this.next].at <= at) {
       const e = this.rec.events[this.next++];
       if (e.kind === "output") data += e.data;
+      if (e.kind === "resize") {
+        const size = sizeOf(e.data);
+        if (size) {
+          // What came before was drawn for the old size.
+          await flush();
+          this.term.resize(size.cols, size.rows);
+        }
+      }
     }
-    if (data) await new Promise<void>((done) => this.term.write(data, done));
+    await flush();
   }
 
   dispose(): void {
     this.term.dispose();
   }
+}
+
+/** A part of the screen, from the top left, in cells. */
+export interface Area {
+  cols: number;
+  rows: number;
+}
+
+/** The size a resize event gives: `COLSxROWS`. */
+export function sizeOf(data: string): Area | null {
+  const m = /^(\d+)x(\d+)$/.exec(data.trim());
+  return m ? { cols: Number(m[1]), rows: Number(m[2]) } : null;
+}
+
+/**
+ * How much of the screen the recording ever used, and the most it ever had:
+ * so an export can be cut to what was drawn on rather than the whole window
+ * the terminal happened to fill.
+ */
+export async function areas(rec: recording.Recording): Promise<{ used: Area; whole: Area }> {
+  const player = new Player(rec);
+  const whole = { cols: rec.width, rows: rec.height };
+  const used = { cols: 1, rows: 1 };
+  const look = () => {
+    const t = player.term;
+    whole.cols = Math.max(whole.cols, t.cols);
+    whole.rows = Math.max(whole.rows, t.rows);
+    const buffer = t.buffer.active;
+    for (let y = 0; y < t.rows; y++) {
+      const line = buffer.getLine(buffer.viewportY + y);
+      const text = line?.translateToString(true) ?? "";
+      if (text.trim()) {
+        used.rows = Math.max(used.rows, y + 1);
+        used.cols = Math.max(used.cols, text.length);
+      }
+    }
+  };
+  // Every tenth of a second, and at the end.
+  for (let at = 0; at <= player.duration; at += 0.1) {
+    await player.advanceTo(at);
+    look();
+  }
+  await player.advanceTo(Infinity);
+  look();
+  player.dispose();
+  return {
+    used: { cols: Math.min(used.cols, whole.cols), rows: Math.min(used.rows, whole.rows) },
+    whole,
+  };
 }
 
 /** The size of one cell, and the font, for painting. */
@@ -163,16 +226,13 @@ export function measure(ctx: CanvasRenderingContext2D, family: string, sizePx: n
   };
 }
 
-/** The canvas size a recording is painted at. */
-export function canvasSize(
-  rec: recording.Recording,
-  m: Metrics,
-): { width: number; height: number } {
+/** The canvas size an area is painted at. */
+export function canvasSize(area: Area, m: Metrics): { width: number; height: number } {
   // Video encoders want even sizes.
   const even = (n: number) => n + (n % 2);
   return {
-    width: even(rec.width * m.cellWidth + 2 * m.padding),
-    height: even(rec.height * m.cellHeight + 2 * m.padding),
+    width: even(area.cols * m.cellWidth + 2 * m.padding),
+    height: even(area.rows * m.cellHeight + 2 * m.padding),
   };
 }
 

@@ -299,6 +299,10 @@ pub fn run_recorded(
             }
             Ok(Event::Resize(cols, rows)) => {
                 let _ = session.resize(TerminalSize { rows, cols });
+                // A recording is replayed at the size each part was drawn for.
+                if let Some(r) = &sink.recorder {
+                    r.resize(cols, rows);
+                }
             }
             _ => {}
         }

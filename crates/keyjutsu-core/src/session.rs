@@ -212,6 +212,19 @@ impl Session {
         self.inner.recent.lock().map(|mut r| r.mark()).unwrap_or(0)
     }
 
+    /// The terminal's size as the shell has it, and what redraws its screen
+    /// as it is now: what a recording starts from (ADR 0021).
+    pub fn screen(&self) -> (TerminalSize, String) {
+        self.inner
+            .recent
+            .lock()
+            .map(|r| {
+                let (rows, cols) = r.size();
+                (TerminalSize { rows, cols }, r.formatted())
+            })
+            .unwrap_or((TerminalSize::default(), String::new()))
+    }
+
     /// What the shell printed since `mark`, as the terminal shows it: from
     /// the line the cursor was on, with a line the shell redrew read once.
     /// No more than the last `max_chars` characters of it.

@@ -306,6 +306,9 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     assert!(recording.starts_with("{\"") && recording.contains("\"version\":2"), "{recording}");
     assert!(recording.contains("\"start:hello\"") && recording.contains("\"end:hello:ok\""), "{recording}");
     assert!(recording.contains("run-ok"), "what the step printed is in it:\n{recording}");
+    // At the size the shell drew for: this pseudo-console's, not a default.
+    let header = recording.lines().next().unwrap();
+    assert!(header.contains("\"width\":120") && header.contains("\"height\":30"), "{header}");
 }
 
 #[test]

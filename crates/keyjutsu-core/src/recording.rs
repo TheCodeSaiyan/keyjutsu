@@ -24,6 +24,14 @@ pub const IDLE_LIMIT: f64 = 2.0;
 pub enum EventKind {
     Output,
     Marker,
+    /// The terminal changed size: `COLSxROWS`, as asciicast writes it.
+    Resize,
+}
+
+/// The size a resize event gives, as `(cols, rows)`.
+pub fn size_of(data: &str) -> Option<(u16, u16)> {
+    let (cols, rows) = data.split_once('x')?;
+    Some((cols.trim().parse().ok()?, rows.trim().parse().ok()?))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
@@ -87,6 +95,12 @@ impl Recorder {
         self.push(EventKind::Marker, format!("start:{step}"));
     }
 
+    /// The terminal is now `cols` by `rows`: everything after is drawn for
+    /// that size, so a replay must change size here too.
+    pub fn resize(&self, cols: u16, rows: u16) {
+        self.push(EventKind::Resize, format!("{cols}x{rows}"));
+    }
+
     pub fn step_finished(&self, step: &str, succeeded: bool) {
         self.push(EventKind::Marker, format!("end:{step}:{}", if succeeded { "ok" } else { "failed" }));
     }
@@ -119,9 +133,28 @@ impl Recording {
         spans
     }
 
-    /// From the start of step `first` to the end of step `last`. What was
-    /// drawn before `first` is replayed at once, so the cut opens on the
-    /// screen as it was, not a blank one.
+    /// The screen as it was just before event `index`: its size, and what
+    /// redraws it from a cleared one.
+    fn screen_before(&self, index: usize) -> (u16, u16, String) {
+        let mut screen = crate::transcript::Transcript::new(self.height, self.width);
+        for e in &self.events[..index] {
+            match e.kind {
+                EventKind::Output => screen.feed(&e.data),
+                EventKind::Resize => {
+                    if let Some((cols, rows)) = size_of(&e.data) {
+                        screen.resize(rows, cols);
+                    }
+                }
+                EventKind::Marker => {}
+            }
+        }
+        let (rows, cols) = screen.size();
+        (cols, rows, screen.formatted())
+    }
+
+    /// From the start of step `first` to the end of step `last`. The cut
+    /// opens on the screen as it was at that moment, at the size it had,
+    /// not a blank one and not everything before it replayed.
     pub fn cut(&self, first: &str, last: &str) -> Result<Recording, String> {
         let start = self
             .marker_index(|m| m == format!("start:{first}"))
@@ -137,17 +170,10 @@ impl Recording {
         }
         let end = end_of_last.filter(|&e| e >= started_last).unwrap_or(self.events.len() - 1);
         let t0 = self.events[start].at;
-        let before: String = self.events[..start]
-            .iter()
-            .filter(|e| e.kind == EventKind::Output)
-            .map(|e| e.data.as_str())
-            .collect();
-        let mut events = Vec::new();
-        if !before.is_empty() {
-            events.push(Event { at: 0.0, kind: EventKind::Output, data: before });
-        }
+        let (width, height, screen) = self.screen_before(start);
+        let mut events = vec![Event { at: 0.0, kind: EventKind::Output, data: screen }];
         events.extend(self.events[start..=end].iter().map(|e| Event { at: e.at - t0, ..e.clone() }));
-        Ok(Recording { events, ..self.clone() })
+        Ok(Recording { width, height, events, title: self.title.clone() })
     }
 
     /// Pauses longer than `max` seconds shortened to `max`.
@@ -249,12 +275,21 @@ impl Recording {
             })
             .map_or(self.events.len(), |(i, _)| i);
         let mut screen = crate::transcript::Transcript::new(self.height, self.width);
-        for e in self.events[..start].iter().filter(|e| e.kind == EventKind::Output) {
-            screen.feed(&e.data);
+        let play = |screen: &mut crate::transcript::Transcript, e: &Event| match e.kind {
+            EventKind::Output => screen.feed(&e.data),
+            EventKind::Resize => {
+                if let Some((cols, rows)) = size_of(&e.data) {
+                    screen.resize(rows, cols);
+                }
+            }
+            EventKind::Marker => {}
+        };
+        for e in &self.events[..start] {
+            play(&mut screen, e);
         }
         let mark = screen.mark();
-        for e in self.events[start..end].iter().filter(|e| e.kind == EventKind::Output) {
-            screen.feed(&e.data);
+        for e in &self.events[start..end] {
+            play(&mut screen, e);
         }
         Some(screen.since(mark, max_chars))
     }
@@ -267,6 +302,7 @@ impl Recording {
             let code = match e.kind {
                 EventKind::Output => "o",
                 EventKind::Marker => "m",
+                EventKind::Resize => "r",
             };
             // Three decimal places, as asciinema writes them.
             let at = (e.at * 1000.0).round() / 1000.0;
@@ -295,6 +331,7 @@ impl Recording {
             let kind = match code {
                 "o" => EventKind::Output,
                 "m" => EventKind::Marker,
+                "r" => EventKind::Resize,
                 _ => continue,
             };
             events.push(Event { at, kind, data: data.to_owned() });
@@ -457,9 +494,14 @@ mod tests {
     /// A cut opens on the screen as it was: what came before is replayed at
     /// once, and the step's own events keep their pace.
     #[test]
-    fn a_cut_replays_what_came_before_then_keeps_the_steps_pace() {
+    fn a_cut_opens_on_the_screen_as_it_was_then_keeps_the_steps_pace() {
         let c = sample().cut("say", "say").unwrap();
-        assert_eq!(c.events[0], ev(0.0, EventKind::Output, "PS> Get-Date\r\nMonday\r\nPS> "));
+        let opening = &c.events[0];
+        assert_eq!((opening.at, opening.kind), (0.0, EventKind::Output));
+        let mut shown = crate::transcript::Transcript::new(c.height, c.width);
+        shown.feed(&opening.data);
+        let text = shown.since(0, 1000);
+        assert!(text.contains("Get-Date") && text.contains("Monday"), "{text}");
         assert_eq!(c.events[1], ev(0.0, EventKind::Marker, "start:say"));
         assert!((c.events[2].at - 0.2).abs() < 1e-9);
         assert_eq!(c.events.last().unwrap().data, "end:say:failed");
@@ -504,6 +546,35 @@ mod tests {
         assert!(text.contains("Write-Output hi") && text.contains("hi"), "{text}");
         assert!(!text.contains("Monday"), "{text}");
         assert!(sample().step_text("nowhere", 1000).is_none());
+    }
+
+    /// Drawn for one size and replayed at another, a terminal's output lands
+    /// in the wrong places: a recording follows every change of size, and a
+    /// cut opens at the size the terminal had then.
+    #[test]
+    fn a_recording_follows_the_terminals_size() {
+        let rec = Recorder::new(20, 5);
+        rec.output("PS> ");
+        rec.resize(60, 5);
+        rec.step_started("wide");
+        rec.output(
+            "Write-Output 'a line longer than twenty columns'\r\na line longer than twenty columns\r\n",
+        );
+        rec.step_finished("wide", true);
+        let r = rec.finish("t");
+        let text = r.step_text("wide", 1000).unwrap();
+        assert!(text.contains("a line longer than twenty columns\n") || text.ends_with("columns"), "{text}");
+        assert!(!text.contains("colum\nns"), "not wrapped at twenty: {text}");
+        let c = r.cut("wide", "wide").unwrap();
+        assert_eq!((c.width, c.height), (60, 5), "the cut opens at the size then");
+        let cast = r.to_cast();
+        assert!(cast.contains("\"r\",\"60x5\""), "{cast}");
+        // Times are kept to the millisecond, as asciinema keeps them.
+        let back = Recording::from_cast(&cast).unwrap();
+        let what = |r: &Recording| r.events.iter().map(|e| (e.kind, e.data.clone())).collect::<Vec<_>>();
+        assert_eq!(what(&back), what(&r));
+        assert_eq!(size_of("120x30"), Some((120, 30)));
+        assert_eq!(size_of("nonsense"), None);
     }
 
     #[test]
