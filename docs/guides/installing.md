@@ -11,7 +11,7 @@ and `keyjutsu doctor` has told you whether this machine is ready.
   Files for every user, and that needs one UAC prompt. The reason is the
   elevation broker: it is started as Administrator, so it has to live where
   only Administrators can replace it.
-- **The installer,** `KeyJutsu_0.1.7_x64-setup.exe`, from the
+- **The installer,** `KeyJutsu_0.1.8_x64-setup.exe`, from the
   [latest release](https://github.com/TheCodeSaiyan/keyjutsu/releases/latest).
   Until the first release is published, build it: `pnpm desktop:build`, from
   a clone with Rust and Node installed, leaves it in
@@ -59,7 +59,7 @@ the 77 seconds the install took.
   folder, or the empty space inside one, then opens the desktop app with its
   terminal already in that folder.
 
-A silent install, `KeyJutsu_0.1.7_x64-setup.exe /S`, answers yes to both.
+A silent install, `KeyJutsu_0.1.8_x64-setup.exe /S`, answers yes to both.
 
 ### 3. Open a new terminal
 
@@ -76,7 +76,7 @@ On a clean Windows 11 with two agents installed and nothing else, this is what
 you see:
 
 ```text
-KeyJutsu 0.1.7
+KeyJutsu 0.1.8
 
   [ok  ] Windows                          Windows 11 Enterprise 24H2
   [ok  ] Architecture                     x64
@@ -144,7 +144,7 @@ opened.
 
 ## Trying it without installing
 
-Each release also has `KeyJutsu_0.1.7_x64-portable.zip`: the app and the
+Each release also has `KeyJutsu_0.1.8_x64-portable.zip`: the app and the
 CLI, with nothing to install. Unzip the folder anywhere you can write to and
 run `keyjutsu-desktop.exe`, or `keyjutsu.exe` from a terminal.
 
