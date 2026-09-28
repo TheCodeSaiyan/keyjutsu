@@ -90,6 +90,24 @@ pub enum PlanError {
     Invalid { problems: Vec<Problem> },
 }
 
+impl PlanError {
+    /// The error with every problem it found, for a person to act on: the
+    /// short form says how many, this says which and where.
+    pub fn explain(&self) -> String {
+        let details: Vec<String> = match self {
+            PlanError::Schema { violations } => violations
+                .iter()
+                .map(|v| {
+                    format!("{}: {}", if v.at.is_empty() { "(document)" } else { v.at.as_str() }, v.message)
+                })
+                .collect(),
+            PlanError::Invalid { problems } => problems.iter().map(ToString::to_string).collect(),
+            _ => Vec::new(),
+        };
+        if details.is_empty() { self.to_string() } else { format!("{self}: {}", details.join("; ")) }
+    }
+}
+
 /// A plan that passed every gate, with its graph.
 #[derive(Debug, Clone)]
 pub struct ValidPlan {
