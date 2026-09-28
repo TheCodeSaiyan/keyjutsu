@@ -875,7 +875,7 @@ export function App() {
                       ? "The shell has exited. Open a new terminal to continue."
                       : !ready
                         ? "Waiting for the shell's first prompt…"
-                        : "Arming hands the keyboard to the performance. Ctrl+Alt+Shift+K disarms; Ctrl+Shift+K opens the controls."}
+                        : "Arming hands the keyboard to the performance. Ctrl+Alt+Shift+K disarms; Ctrl+Shift+K opens the controls; Ctrl+C stops a command that is running."}
                   </p>
                   {notice && (
                     <p role="status" className="notice">

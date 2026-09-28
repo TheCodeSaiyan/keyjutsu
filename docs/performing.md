@@ -55,7 +55,8 @@ pauses the performance.
 
 **The disarm chord** works in every state. It's recognised before anything
 else looks at the key, and it erases whatever was half-typed, so the line you
-get back is empty. Neither the CLI nor the app offers a setting to change it
+get back is empty. It doesn't stop a command that's already running: that
+carries on until it ends, and Ctrl+C stops it, as it would anywhere. Neither the CLI nor the app offers a setting to change it
 yet; the engine underneath already refuses any binding without Ctrl, Alt or
 the Windows key, because ordinary typing could trigger it. Esc isn't the
 disarm on purpose: people press it by reflex.

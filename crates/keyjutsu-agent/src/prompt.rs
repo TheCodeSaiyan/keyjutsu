@@ -49,7 +49,12 @@ Rules you must follow:
    set free_text. Say anything else you are unsure of in the step's reason.
 10. Leave out execution_mode and execution_preferences: the operator chooses
    how the plan runs. The one exception is a credential step's
-   \"user_input\" (rule 6).";
+   \"user_input\" (rule 6).
+11. Every step runs in the one shell the whole plan shares. Never use exit
+   in a command: it ends that shell, and the plan with it; to fail a step,
+   throw. Never use Start-Process -Wait: it waits for everything the program
+   starts, and a browser or installer that leaves helpers running never lets
+   the step finish; use $p = Start-Process ... -PassThru; $p.WaitForExit().";
 
 const COMPACT_FORMAT: &str = r#"The JSON document is a plan:
 {
@@ -230,6 +235,7 @@ mod tests {
             assert!(p.contains("Never include a \"keyjutsu\" property"));
             assert!(p.contains("no expression or script form"));
             assert!(p.contains("Leave out execution_mode"), "the operator chooses how it runs");
+            assert!(p.contains("Never use Start-Process -Wait"), "it hangs on helpers");
         }
     }
 

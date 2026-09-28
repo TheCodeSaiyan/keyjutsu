@@ -78,7 +78,14 @@ export function Overlay({ snapshot, paused, onResume, onDisarm }: Props) {
           Disarm
         </button>
       </div>
-      <p className="hint">Ctrl+Shift+K · controls &nbsp; Ctrl+Alt+Shift+K · disarm</p>
+      <p className="hint">
+        Ctrl+Shift+K · controls &nbsp; Ctrl+Alt+Shift+K · disarm &nbsp; Ctrl+C · stop a running
+        command
+      </p>
+      <p className="hint">
+        Disarming takes the keyboard back; a command already running carries on until it ends or you
+        press Ctrl+C.
+      </p>
     </div>
   );
 }
