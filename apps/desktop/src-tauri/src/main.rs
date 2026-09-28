@@ -410,11 +410,14 @@ async fn workspace_propose(
     let plans = plans.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let handle = handle(agent)?;
-        let items = if context.trim().is_empty() {
-            Vec::new()
-        } else {
-            vec![ContextItem::Text { label: "pasted".into(), text: context }]
-        };
+        // What the agent writes for: this machine's versions and folders.
+        let mut items = vec![ContextItem::Text {
+            label: "this machine".into(),
+            text: keyjutsu_core::machine::describe(&keyjutsu_core::machine::facts()),
+        }];
+        if !context.trim().is_empty() {
+            items.push(ContextItem::Text { label: "pasted".into(), text: context });
+        }
         let prepared = prepare(&items).map_err(|e| e.to_string())?;
         let runner = ProcessRunner::default();
         let w = Workspace::propose(&agents(&runner), &handle, &task, &prepared, &fingerprint::now_rfc3339())

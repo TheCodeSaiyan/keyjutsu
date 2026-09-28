@@ -130,7 +130,12 @@ pub fn propose(
         Ok(a) => a,
         Err(c) => return c,
     };
-    let mut items: Vec<ContextItem> = files.iter().cloned().map(ContextItem::File).collect();
+    // What the agent writes for: this machine's versions and folders.
+    let mut items = vec![ContextItem::Text {
+        label: "this machine".into(),
+        text: keyjutsu_core::machine::describe(&keyjutsu_core::machine::facts()),
+    }];
+    items.extend(files.iter().cloned().map(ContextItem::File));
     if let Some(f) = folder {
         items.push(ContextItem::Folder(f.to_path_buf()));
     }

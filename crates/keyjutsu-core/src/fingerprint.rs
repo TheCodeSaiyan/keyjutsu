@@ -48,8 +48,19 @@ pub fn collect(plan: Option<&Plan>) -> EnvironmentFingerprint {
         .into_iter()
         .map(|s| FingerprintEntry { name: shell_name(s.kind).into(), path: Some(s.path), version: s.version })
         .collect();
-    let names = plan.map(named_executables).unwrap_or_default();
-    // One PowerShell lookup reads every tool's file version at once.
+    let tools = tools(plan.map(named_executables).unwrap_or_default());
+    EnvironmentFingerprint {
+        os,
+        build: windows.build.unwrap_or_default(),
+        architecture: readiness::architecture(),
+        shells,
+        tools,
+    }
+}
+
+/// Where each of `names` resolves on PATH, with its file version. One
+/// PowerShell lookup reads every version at once; no tool is run.
+pub fn tools(names: Vec<String>) -> Vec<FingerprintEntry> {
     let versions = shell::locate(ShellKind::Pwsh)
         .or_else(|| shell::locate(ShellKind::WindowsPowershell))
         .filter(|_| !names.is_empty())
@@ -57,7 +68,7 @@ pub fn collect(plan: Option<&Plan>) -> EnvironmentFingerprint {
             let refs: Vec<&str> = names.iter().map(String::as_str).collect();
             keyjutsu_validation::powershell::analyse(&ps, &[], &refs, &[]).ok()
         });
-    let tools = names
+    names
         .into_iter()
         .map(|name| {
             let version = versions
@@ -71,14 +82,7 @@ pub fn collect(plan: Option<&Plan>) -> EnvironmentFingerprint {
                 version,
             }
         })
-        .collect();
-    EnvironmentFingerprint {
-        os,
-        build: windows.build.unwrap_or_default(),
-        architecture: readiness::architecture(),
-        shells,
-        tools,
-    }
+        .collect()
 }
 
 /// The current time in RFC 3339, UTC, to the second.
