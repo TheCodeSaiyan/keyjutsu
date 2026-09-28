@@ -2,5 +2,7 @@
 // `cargo test`. Do not edit by hand; run `pnpm types:index`.
 export type { Event } from "./generated/recording/Event";
 export type { EventKind } from "./generated/recording/EventKind";
+export type { Export } from "./generated/recording/Export";
+export type { GuideStep } from "./generated/recording/GuideStep";
 export type { Recording } from "./generated/recording/Recording";
 export type { StepSpan } from "./generated/recording/StepSpan";

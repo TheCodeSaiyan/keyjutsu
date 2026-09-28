@@ -44,10 +44,15 @@ use tauri::ipc::Channel;
 struct ChannelSink {
     channel: Channel<TerminalMessage>,
     forward: Mutex<Option<Sender<SessionEvent>>>,
+    /// What the terminal draws, while a run is recorded (ADR 0021).
+    recorder: Mutex<Option<Arc<keyjutsu_core::recording::Recorder>>>,
 }
 
 impl SessionSink for ChannelSink {
     fn output(&self, text: &str) {
+        if let Some(r) = locked(&self.recorder).as_ref() {
+            r.output(text);
+        }
         let _ = self.channel.send(TerminalMessage::Output { data: text.to_owned() });
     }
 
@@ -211,7 +216,8 @@ fn terminal_open(
     sessions: State<'_, Arc<Sessions>>,
 ) -> Result<u32, String> {
     let options = session_options(&request, LAUNCH_FOLDER.get().cloned());
-    let sink = Arc::new(ChannelSink { channel: on_message, forward: Mutex::new(None) });
+    let sink =
+        Arc::new(ChannelSink { channel: on_message, forward: Mutex::new(None), recorder: Mutex::new(None) });
     let session = Session::open(options, sink.clone()).map_err(message)?;
     let id = sessions.next.fetch_add(1, Ordering::SeqCst) + 1;
     sessions.open.lock().map_err(|e| e.to_string())?.insert(id, (session, sink));
@@ -631,6 +637,8 @@ async fn workspace_approve(
 fn plan_run(
     id: u32,
     config: PerformanceConfig,
+    // The terminal's size, when the operator chose to record the run.
+    record: Option<TerminalSize>,
     on_event: Channel<RunMessage>,
     sessions: State<'_, Arc<Sessions>>,
     plans: State<'_, Arc<Plans>>,
@@ -748,6 +756,9 @@ fn plan_run(
             .collect();
         let (tx, rx) = channel();
         *locked(&sink.forward) = Some(tx);
+        let recorder =
+            record.map(|size| Arc::new(keyjutsu_core::recording::Recorder::new(size.cols, size.rows)));
+        *locked(&sink.recorder) = recorder.clone();
         let started = fingerprint::now_rfc3339();
         let (outcome, finished_checkpoint) = execute(
             &held,
@@ -757,10 +768,25 @@ fn plan_run(
             &options,
             &fingerprint::now_rfc3339,
             &|event| {
+                if let Some(r) = &recorder {
+                    match &event {
+                        keyjutsu_core::execute::ExecutionEvent::StepStarting { step, .. } => {
+                            r.step_started(step)
+                        }
+                        keyjutsu_core::execute::ExecutionEvent::StepFinished { step, run } => {
+                            r.step_finished(step, run.succeeded)
+                        }
+                        keyjutsu_core::execute::ExecutionEvent::ElevatedOutput { text, .. } => {
+                            r.output(&text.replace('\n', "\r\n"))
+                        }
+                        _ => {}
+                    }
+                }
                 let _ = on_event.send(RunMessage::Execution { event });
             },
         );
         *locked(&sink.forward) = None;
+        *locked(&sink.recorder) = None;
         *locked(&remember.failed) = match &outcome {
             keyjutsu_core::execute::Outcome::Failed { step, expected, actual, output } => Some(Failed {
                 step: step.clone(),
@@ -795,7 +821,13 @@ fn plan_run(
             git: git.clone(),
         };
         let session = open_store()
-            .and_then(|s| keyjutsu_core::history::save(&s, &record))
+            .and_then(|s| {
+                keyjutsu_core::history::save(&s, &record)?;
+                if let Some(r) = &recorder {
+                    keyjutsu_core::history::save_recording(&s, &record.id, &r.finish(&record.task))?;
+                }
+                Ok(())
+            })
             .map(|()| record.id.clone())
             .ok();
         // Free before the window hears the run is over, so a run started at
@@ -810,6 +842,83 @@ fn plan_run(
         });
     });
     Ok(())
+}
+
+/// The recording of run `session`, from step `first` to step `last` (the
+/// whole run if neither is given), ready to export (ADR 0021).
+#[tauri::command]
+async fn recording_export(
+    session: String,
+    first: Option<String>,
+    last: Option<String>,
+) -> Result<keyjutsu_core::recording::Export, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = open_store()?;
+        let record = keyjutsu_core::history::load(&store, &session)?;
+        let whole =
+            keyjutsu_core::history::load_recording(&store, &session)?.ok_or("this run was not recorded")?;
+        keyjutsu_core::recording::prepare_export(&record, &whole, first.as_deref(), last.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Where exports go: a folder of their own under Videos.
+fn exports_dir() -> PathBuf {
+    std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("Videos")
+        .join("KeyJutsu")
+}
+
+/// A name for a file or folder KeyJutsu writes, from anything: letters,
+/// digits, `.`, `-` and `_`, and never `..`.
+fn safe_name(name: &str) -> Result<String, String> {
+    let clean: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') { c } else { '-' })
+        .take(100)
+        .collect();
+    let clean = clean.trim_matches(['.', '-']).to_owned();
+    if clean.is_empty() || clean.contains("..") {
+        Err(format!("`{name}` is not a name to save under"))
+    } else {
+        Ok(clean)
+    }
+}
+
+/// Save one exported file: the request's body is the file, its `folder` and
+/// `name` headers say where under the exports folder. Returns its path.
+#[tauri::command]
+fn recording_save(request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("the file was not sent as bytes".into());
+    };
+    let header = |k: &str| {
+        request
+            .headers()
+            .get(k)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+            .ok_or(format!("no {k} given"))
+    };
+    let folder = exports_dir().join(safe_name(&header("folder")?)?);
+    std::fs::create_dir_all(&folder).map_err(|e| format!("cannot make {}: {e}", folder.display()))?;
+    let path = folder.join(safe_name(&header("name")?)?);
+    std::fs::write(&path, bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    Ok(path.display().to_string())
+}
+
+/// Show an export's folder in Explorer.
+#[tauri::command]
+fn recording_reveal(folder: String) -> Result<(), String> {
+    let path = exports_dir().join(safe_name(&folder)?);
+    keyjutsu_core::terminal::shell::command("explorer.exe")
+        .arg(&path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Open one of KeyJutsu's own download links in the default browser. The
@@ -1083,6 +1192,9 @@ fn main() {
             workspace_dismiss,
             workspace_use_rating,
             workspace_carry_on,
+            recording_export,
+            recording_save,
+            recording_reveal,
             workspace_answer,
             workspace_insert_step,
             workspace_remove_step,

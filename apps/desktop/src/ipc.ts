@@ -3,6 +3,7 @@ import type {
   agent,
   history,
   plan,
+  recording,
   recovery,
   technique,
   update,
@@ -109,11 +110,24 @@ export const ipc = {
   approve: (confirmations: Record<string, string>) =>
     invoke<Sealed>("workspace_approve", { confirmations }),
 
-  runPlan: (id: number, config: PerformanceConfig, onEvent: (m: RunMessage) => void) => {
+  /** Run the sealed plan; `record` is the terminal's size when the run is recorded. */
+  runPlan: (
+    id: number,
+    config: PerformanceConfig,
+    record: TerminalSize | null,
+    onEvent: (m: RunMessage) => void,
+  ) => {
     const channel = new Channel<RunMessage>();
     channel.onmessage = onEvent;
-    return invoke<void>("plan_run", { id, config, onEvent: channel });
+    return invoke<void>("plan_run", { id, config, record, onEvent: channel });
   },
+  /** A recorded run, cut from `first` to `last` (the whole run if neither), ready to export. */
+  recordingExport: (session: string, first: string | null, last: string | null) =>
+    invoke<recording.Export>("recording_export", { session, first, last }),
+  /** Save one exported file under Videos\KeyJutsu\`folder`; returns where. */
+  recordingSave: (folder: string, name: string, bytes: Uint8Array) =>
+    invoke<string>("recording_save", bytes, { headers: { folder, name } }),
+  recordingReveal: (folder: string) => invoke<void>("recording_reveal", { folder }),
   /** What the operator typed for a critical step, or null to decline. Rust compares it. */
   confirm: (typed: string | null) => invoke<void>("plan_confirm", { typed }),
   /** A run stopped at a restart or other boundary, waiting to continue. */

@@ -32,6 +32,9 @@ interface Props {
   mode: string;
   modes: { value: string; label: string; hint: string }[];
   onMode(mode: string): void;
+  /** Record the run, to export it later (ADR 0021). */
+  record: boolean;
+  onRecord(record: boolean): void;
 }
 
 /**
@@ -187,6 +190,18 @@ export function PlanWorkspace(props: Props) {
                   </option>
                 ))}
               </select>
+            </label>
+            <label
+              className="small run-mode"
+              title="Keep what the terminal draws, to export as a video, a GIF or a step-by-step guide"
+            >
+              <input
+                type="checkbox"
+                checked={props.record}
+                disabled={busy !== null}
+                onChange={(e) => props.onRecord(e.target.checked)}
+              />{" "}
+              Record
             </label>
             {sealed ? (
               <button

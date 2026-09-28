@@ -308,6 +308,81 @@ impl Recording {
     }
 }
 
+/// A step as the guide describes it: from the plan, and what it printed.
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "recording/")]
+pub struct GuideStep {
+    pub step: String,
+    pub title: String,
+    pub objective: String,
+    #[ts(optional)]
+    pub reason: Option<String>,
+    pub commands: Vec<String>,
+    /// What it printed, as the terminal showed it, redacted.
+    pub printed: String,
+    #[ts(optional)]
+    pub succeeded: Option<bool>,
+}
+
+/// A run's recording, cut and made ready to export: redacted, with long
+/// pauses shortened, as asciicast too, and each step for the guide.
+#[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "recording/")]
+pub struct Export {
+    pub title: String,
+    pub recording: Recording,
+    pub cast: String,
+    /// Kinds of secret taken out, with counts, never the values.
+    pub redactions: Vec<String>,
+    pub steps: Vec<GuideStep>,
+}
+
+/// Run `record`'s recording `whole`, from step `first` to step `last` (the
+/// whole run if neither is given; the run's first or last step for the one
+/// left out), ready to export.
+pub fn prepare_export(
+    record: &crate::history::SessionRecord,
+    whole: &Recording,
+    first: Option<&str>,
+    last: Option<&str>,
+) -> Result<Export, String> {
+    let spans = whole.steps();
+    let cut = match (first, last) {
+        (None, None) => whole.clone(),
+        (f, l) => {
+            let f = f.map(str::to_owned).or_else(|| spans.first().map(|s| s.step.clone()));
+            let l = l.map(str::to_owned).or_else(|| spans.last().map(|s| s.step.clone()));
+            match (f, l) {
+                (Some(f), Some(l)) => whole.cut(&f, &l)?,
+                _ => return Err("the recording has no steps".into()),
+            }
+        }
+    };
+    let (clean, redactions) = cut.redacted();
+    let recording = clean.limit_idle(IDLE_LIMIT);
+    let snapshot = record.snapshot()?;
+    let plan = snapshot.plan();
+    let steps = recording
+        .steps()
+        .into_iter()
+        .map(|span| {
+            let step = plan.step(&span.step);
+            GuideStep {
+                title: step.map_or_else(|| span.step.clone(), |s| s.title.clone()),
+                objective: step.map(|s| s.objective.clone()).unwrap_or_default(),
+                reason: step.and_then(|s| s.reason.clone()),
+                commands: step
+                    .map(|s| s.commands.iter().map(|c| c.text.clone()).collect())
+                    .unwrap_or_default(),
+                printed: recording.step_text(&span.step, 4000).unwrap_or_default(),
+                succeeded: span.succeeded,
+                step: span.step,
+            }
+        })
+        .collect();
+    Ok(Export { title: record.task.clone(), cast: recording.to_cast(), recording, redactions, steps })
+}
+
 /// Just enough of a terminal's escape-sequence grammar to tell what is drawn
 /// from what only moves the cursor or sets colours.
 #[derive(Clone, Copy)]

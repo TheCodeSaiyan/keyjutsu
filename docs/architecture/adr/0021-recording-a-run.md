@@ -61,7 +61,9 @@ Option 3.
 - One new dependency for GIF encoding (`gifenc`), and `@xterm/headless` from
   the terminal library already used.
 - A recording is only as long as the run; an export of video plays in real
-  time with pauses shortened, so a long run takes a while to export.
+  time with pauses shortened, so a long run takes a while to export. Windows
+  slows a window that is hidden or minimised, and with it the replay, so the
+  export asks for the window to stay in view.
 - The guide's text comes from the plan (title, objective, reason, commands)
   and the recording (what each step printed), redacted; its pictures are the
   last frame of each step, or a GIF of it.
