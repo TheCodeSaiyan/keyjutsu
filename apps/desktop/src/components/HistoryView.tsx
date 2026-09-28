@@ -7,6 +7,8 @@ interface Props {
   busy: boolean;
   /** Called after a Technique is saved, to show it. */
   onPromoted(): void;
+  /** Export a recorded run. */
+  onExport(session: string): void;
 }
 
 /**
@@ -14,7 +16,7 @@ interface Props {
  * completed can become a Technique: a plan to use again, with the values
  * that change from one use to the next made into parameters.
  */
-export function HistoryView({ busy, onPromoted }: Props) {
+export function HistoryView({ busy, onPromoted, onExport }: Props) {
   const [sessions, setSessions] = useState<history.SessionSummary[] | null>(null);
   const [selected, setSelected] = useState<history.SessionRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +62,7 @@ export function HistoryView({ busy, onPromoted }: Props) {
                 <strong>{s.task}</strong>
                 <span className="small muted">
                   {s.outcome} · {s.finished_at.replace("T", " ").replace("Z", "")}
+                  {s.recorded ? " · recorded" : ""}
                 </span>
               </button>
             </li>
@@ -71,6 +74,9 @@ export function HistoryView({ busy, onPromoted }: Props) {
             <p className="small muted">
               Session <code>{selected.id}</code> · {selected.outcome.kind}
             </p>
+            {sessions?.find((s) => s.id === selected.id)?.recorded && (
+              <button onClick={() => onExport(selected.id)}>Export the recording…</button>
+            )}
             <ol className="small">
               {(selected.checkpoint?.runs ?? []).map((r) => (
                 <li key={r.step}>

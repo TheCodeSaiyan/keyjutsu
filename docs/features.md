@@ -182,7 +182,13 @@ worked can become a Technique, with parameters, to use again. A Technique
 never runs because it worked before: it makes a draft that's validated and
 approved here, with a note of which steps are on unfamiliar ground.
 
-[Reusing a plan that worked](guides/techniques.md)
+A run can also be recorded, when you tick **Record**, and exported as a
+soundless video, a GIF, an asciicast or a step-by-step guide: the whole run,
+some of its steps, or each step on its own, with secrets taken out and a
+preview first.
+
+[Reusing a plan that worked](guides/techniques.md) ·
+[Recording a run](guides/running-a-plan.md#recording-a-run)
 
 ## Diagnostics you read before sharing
 

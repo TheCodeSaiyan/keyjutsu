@@ -26,3 +26,4 @@ the code looks the way it does stays readable.
 | [0018](0018-file-contents-kept-encrypted.md) | Copies of files are kept encrypted; plans and snapshots stay readable | Accepted |
 | [0019](0019-updates-through-the-signed-installer.md) | Updates come through the signed installer, when the operator asks | Accepted |
 | [0020](0020-a-conversation-beside-the-plan.md) | A conversation beside the plan, where what needs you can be answered | Accepted |
+| [0021](0021-recording-a-run.md) | Recording a run, and exporting it as video, GIF or a guide | Accepted |

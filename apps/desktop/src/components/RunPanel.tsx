@@ -18,6 +18,9 @@ interface Props {
   task: string;
   /** Called after a Technique is saved from this run, to show it. */
   onPromoted(): void;
+  /** The run was recorded, so it can be exported. */
+  recorded: boolean;
+  onExport(session: string): void;
   onBack(): void;
 }
 
@@ -36,6 +39,8 @@ export function RunPanel({
   onFix,
   task,
   onPromoted,
+  recorded,
+  onExport,
   onBack,
 }: Props) {
   const [items, setItems] = useState<recovery.RecoveryItem[] | null>(null);
@@ -89,6 +94,9 @@ export function RunPanel({
           )}
         </div>
       ))}
+      {recorded && done.session && (
+        <button onClick={() => onExport(done.session!)}>Export the recording…</button>
+      )}
       {complete &&
         (done.session ? (
           <MakeTechnique session={done.session} task={task} busy={busy} onPromoted={onPromoted} />

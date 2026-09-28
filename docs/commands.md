@@ -194,6 +194,7 @@ before it starts anything.
 | `--settle STEP=succeeded\|failed` | settle a step left in doubt by a crash or a disarm |
 | `--isolate worktree\|branch` | work in a new worktree, or on a new branch, rather than your checkout |
 | `--ephemeral` | keep no record of the run in the history |
+| `--record` | record what the terminal draws, kept with the run, to export with `keyjutsu history export` |
 | `--presentation standard\|discreet` | how KeyJutsu asks for you during the run: on screen, or only in the title bar, with the answer unseen |
 
 ### `keyjutsu recover SNAPSHOT`
@@ -221,6 +222,7 @@ changes left out.
 | `keyjutsu history list` | every recorded session, oldest first |
 | `keyjutsu history show ID` | one session: task, agent, outcome and steps |
 | `keyjutsu history recheck ID` | compare this machine with the one the session was approved on |
+| `keyjutsu history export ID --out FILE` | a recorded run as an asciicast (`.cast`), redacted, long pauses shortened; `--step`, or `--from` and `--to`, for part of it, or `--each FOLDER` for one file per step |
 | `keyjutsu technique promote SESSION --name NAME` | make a completed session a Technique; `--param NAME=VALUE` makes a value a parameter, `--description` says what it's for |
 | `keyjutsu technique list` | every Technique, with its revision and parameters |
 | `keyjutsu technique use ID --out FILE` | a draft plan from a Technique, to validate and approve; `--param NAME=VALUE` for each value |

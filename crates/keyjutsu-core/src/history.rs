@@ -15,6 +15,9 @@ use crate::git::RepoReport;
 use crate::store::Store;
 
 pub const KIND: &str = "session";
+/// A run's recording, when the operator recorded it (ADR 0021), kept under
+/// the run's id.
+pub const RECORDING_KIND: &str = "recording";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export, export_to = "history/")]
@@ -42,6 +45,8 @@ pub struct SessionSummary {
     pub finished_at: String,
     pub task: String,
     pub outcome: String,
+    /// The run was recorded, so it can be exported.
+    pub recorded: bool,
 }
 
 impl SessionRecord {
@@ -77,7 +82,23 @@ pub fn load(store: &Store, id: &str) -> Result<SessionRecord, String> {
     store.get(KIND, id)?.ok_or_else(|| format!("there is no session `{id}`"))
 }
 
+/// Keep the recording of run `id`, redacted as the run's record is: the
+/// store is encrypted, but a token a command printed is not worth keeping.
+pub fn save_recording(
+    store: &Store,
+    id: &str,
+    recording: &crate::recording::Recording,
+) -> Result<(), String> {
+    store.put(RECORDING_KIND, id, &recording.redacted().0)
+}
+
+/// The recording of run `id`, if it was recorded.
+pub fn load_recording(store: &Store, id: &str) -> Result<Option<crate::recording::Recording>, String> {
+    store.get(RECORDING_KIND, id)
+}
+
 pub fn list(store: &Store) -> Result<Vec<SessionSummary>, String> {
+    let recorded = store.list(RECORDING_KIND)?;
     let mut out = Vec::new();
     for id in store.list(KIND)? {
         let r: SessionRecord = load(store, &id)?;
@@ -90,7 +111,8 @@ pub fn list(store: &Store) -> Result<Vec<SessionSummary>, String> {
                 format!("waiting: {}", crate::boundary::describe(*boundary))
             }
         };
-        out.push(SessionSummary { id: r.id, finished_at: r.finished_at, task: r.task, outcome });
+        let recorded = recorded.contains(&r.id);
+        out.push(SessionSummary { id: r.id, finished_at: r.finished_at, task: r.task, outcome, recorded });
     }
     Ok(out)
 }

@@ -1301,6 +1301,21 @@ button.destructive:disabled {
   word-break: break-all;
 }
 
+/* Exporting a recording: a preview, then the choices (ADR 0021). */
+.export-recording {
+  width: min(760px, 94vw);
+  max-height: calc(100vh - 2 * var(--sp-4));
+  overflow: auto;
+}
+
+.recording-preview {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
 /* History and Techniques: a list to choose from, and what was chosen. */
 .page {
   width: 100%;

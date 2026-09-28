@@ -133,6 +133,42 @@ run.
 `--ephemeral` keeps the run out of the history, and `--clean` starts the
 shell without your profile.
 
+## Recording a run
+
+Tick **Record** beside **Runs in** before you arm, or add `--record` to
+`keyjutsu run`, and KeyJutsu keeps what the terminal drew, with its timing
+and where each step began and ended. The recording is kept with the run in
+the encrypted history, with anything that looks like a secret taken out, and
+goes when the history does. Nothing is recorded unless you ask.
+
+In the app, **Export the recording…** after the run, or on the run in
+History, makes files of it:
+
+- **What to export:** the whole run, a range of steps, or each step as its
+  own file. A part that starts partway opens on the screen as it was then.
+- **As:** a soundless video (MP4, or WebM where MP4 cannot be made), a GIF,
+  an asciicast (`.cast`) for asciinema, or a step-by-step guide: `guide.md`
+  with a picture of each step, and `guide.html`, one page with the pictures
+  inside. Each step in the guide gives its title, why it's there, the
+  command and what it printed.
+
+The first seconds play before anything is saved, with what was taken out as
+secrets. Long pauses are cut to two seconds. A video plays through as it's
+made, so keep the window in view while it exports. Files go to a folder of
+their own under `Videos\KeyJutsu`, shown in Explorer when done.
+
+From the CLI:
+
+```powershell
+keyjutsu history export 20260925-184553-a1b2 --out run.cast
+keyjutsu history export 20260925-184553-a1b2 --each steps
+```
+
+Redaction works by pattern, as it does for agents: a secret with no
+recognisable shape is left in, so watch the preview before you share one. A
+credential step is never in it: PowerShell's masked prompt does not echo
+what you type.
+
 ## What gets written
 
 - `check-a-service.approved.checkpoint.json`, next to the snapshot, before

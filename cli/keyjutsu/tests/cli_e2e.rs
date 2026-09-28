@@ -188,7 +188,9 @@ fn perform_types_the_staged_command_and_disarms_through_the_console() {
 
 /// End to end: a plan approved with the CLI, then executed by
 /// `keyjutsu run` in Performance mode inside a pseudo-console, with keys
-/// mashed through the console input stack.
+/// mashed through the console input stack, and recorded (ADR 0021): the
+/// recording comes back out of the history as an asciicast with the step's
+/// markers and what it printed.
 #[test]
 fn run_executes_an_approved_snapshot_in_performance_mode() {
     let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("run-e2e");
@@ -220,7 +222,7 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
     cmd.env("KEYJUTSU_RUN_LOCK", own_lock());
     cmd.cwd(outside_any_repository());
-    cmd.args(["run", snap.to_str().unwrap(), "--mode", "performance", "--clean"]);
+    cmd.args(["run", snap.to_str().unwrap(), "--mode", "performance", "--clean", "--record"]);
     let mut child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);
     let mut reader = pair.master.try_clone_reader().unwrap();
@@ -285,6 +287,25 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
         text.contains("complete") && text.contains("Say hello"),
         "the session is in the history:\n{text}"
     );
+
+    let shown = screen.plain();
+    let id = shown
+        .split("Recorded as session ")
+        .nth(1)
+        .and_then(|rest| rest.split_whitespace().next())
+        .unwrap_or_else(|| panic!("no session id in:\n{shown}"));
+    let cast = dir.join("run.cast");
+    let exported = test_command()
+        .args(["history", "export", id, "--step", "hello", "--out", cast.to_str().unwrap()])
+        .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env("KEYJUTSU_RUN_LOCK", own_lock())
+        .output()
+        .unwrap();
+    assert!(exported.status.success(), "{}", String::from_utf8_lossy(&exported.stderr));
+    let recording = std::fs::read_to_string(&cast).unwrap();
+    assert!(recording.starts_with("{\"") && recording.contains("\"version\":2"), "{recording}");
+    assert!(recording.contains("\"start:hello\"") && recording.contains("\"end:hello:ok\""), "{recording}");
+    assert!(recording.contains("run-ok"), "what the step printed is in it:\n{recording}");
 }
 
 #[test]

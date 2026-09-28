@@ -3,4 +3,8 @@
 /**
  * One line of the history list.
  */
-export type SessionSummary = { id: string, finished_at: string, task: string, outcome: string, };
+export type SessionSummary = { id: string, finished_at: string, task: string, outcome: string, 
+/**
+ * The run was recorded, so it can be exported.
+ */
+recorded: boolean, };

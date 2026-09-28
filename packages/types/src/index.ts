@@ -45,6 +45,7 @@ export type * as execute from "./execute";
 export type * as git from "./git";
 export type * as history from "./history";
 export type * as plan from "./plan";
+export type * as recording from "./recording";
 export type * as recovery from "./recovery";
 export type * as serde_json from "./serde_json";
 export type * as technique from "./technique";

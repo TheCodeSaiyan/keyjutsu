@@ -334,3 +334,39 @@ fn a_refused_draft_says_what_is_wrong() {
     let e = instantiate(&t, &values(&[])).unwrap_err();
     assert!(e.contains("/title"), "{e}");
 }
+
+/// ADR 0021: a recorded run, cut to one step, comes out redacted, with each
+/// step described from the plan it ran and what it printed.
+#[test]
+fn a_recorded_run_is_exported_with_its_steps_from_the_plan() {
+    use keyjutsu_core::recording::{Recorder, prepare_export};
+    let dir = scratch("recorded");
+    let store = Store::open(&dir.join("store")).unwrap();
+    let session = successful_session(&store);
+    let rec = Recorder::new(80, 24);
+    rec.output("PS> ");
+    rec.step_started("look");
+    rec.output("Get-Service -Name Winmgmt\r\nRunning  Winmgmt\r\nPS> ");
+    rec.step_finished("look", true);
+    rec.step_started("say");
+    rec.output("Write-Output done token=ghp_0123456789abcdefghijABCDEFGHIJ012345\r\ndone\r\nPS> ");
+    rec.step_finished("say", true);
+    history::save_recording(&store, &session.id, &rec.finish(&session.task)).unwrap();
+    assert!(history::list(&store).unwrap().iter().any(|s| s.id == session.id && s.recorded));
+
+    let whole = history::load_recording(&store, &session.id).unwrap().unwrap();
+    let all: String = whole.events.iter().map(|e| e.data.as_str()).collect();
+    assert!(!all.contains("ghp_"), "kept redacted: {all}");
+
+    let e = prepare_export(&session, &whole, Some("say"), None).unwrap();
+    assert_eq!(e.steps.len(), 1);
+    let say = &e.steps[0];
+    assert_eq!(say.step, "say");
+    let planned = session.snapshot().unwrap().plan().step("say").unwrap().clone();
+    assert_eq!(say.title, planned.title);
+    assert_eq!(say.commands, planned.commands.iter().map(|c| c.text.clone()).collect::<Vec<_>>());
+    assert!(say.printed.contains("done") && !say.printed.contains("Winmgmt"), "{}", say.printed);
+    assert!(e.cast.contains("\"start:say\"") && !e.cast.contains("\"start:look\""), "{}", e.cast);
+    assert_eq!(prepare_export(&session, &whole, None, None).unwrap().steps.len(), 2);
+    assert!(prepare_export(&session, &whole, Some("nowhere"), None).is_err());
+}

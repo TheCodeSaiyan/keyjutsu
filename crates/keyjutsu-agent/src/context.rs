@@ -110,6 +110,27 @@ pub fn redact(text: &str) -> (String, Vec<String>) {
     (out, found)
 }
 
+/// Where recognisable secrets are in `text`: byte ranges of the values (a
+/// kept key name such as `password=` is outside the range), with the kind of
+/// each. The same patterns as [`redact`]; where two overlap, the earlier,
+/// more specific one wins.
+pub fn secret_spans(text: &str) -> Vec<(std::ops::Range<usize>, &'static str)> {
+    let mut spans: Vec<(std::ops::Range<usize>, &'static str)> = Vec::new();
+    for pattern in PATTERNS.iter() {
+        for c in pattern.re.captures_iter(text) {
+            let Some(whole) = c.get(0) else { continue };
+            let start = pattern.keep.and_then(|g| c.get(g)).map_or(whole.start(), |k| k.end());
+            let range = start..whole.end();
+            if range.is_empty() || spans.iter().any(|(r, _)| r.start < range.end && range.start < r.end) {
+                continue;
+            }
+            spans.push((range, pattern.kind));
+        }
+    }
+    spans.sort_by_key(|(r, _)| r.start);
+    spans
+}
+
 /// File names that usually hold secrets.
 fn looks_sensitive(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
@@ -272,6 +293,22 @@ mod tests {
         assert!(out.contains("the word token on its own is fine"));
         assert!(found.iter().any(|f| f.starts_with("private key")));
         assert!(found.iter().all(|f| !f.contains("hunter2")), "counts, not values");
+    }
+
+    /// The spans are what `redact` removes: the value, not a kept key name.
+    #[test]
+    fn secret_spans_find_what_redact_removes() {
+        let text = "a password=hunter2; token = ghp_0123456789abcdefghijABCDEFGHIJ012345 end";
+        let spans = secret_spans(text);
+        let found: Vec<(&str, &str)> = spans.iter().map(|(r, k)| (&text[r.clone()], *k)).collect();
+        assert_eq!(
+            found,
+            [
+                ("hunter2", "credential assignment"),
+                ("ghp_0123456789abcdefghijABCDEFGHIJ012345", "GitHub token")
+            ]
+        );
+        assert!(secret_spans("nothing to see").is_empty());
     }
 
     #[test]

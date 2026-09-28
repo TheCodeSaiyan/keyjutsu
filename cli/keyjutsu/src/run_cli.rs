@@ -49,6 +49,8 @@ pub struct RunArgs<'a> {
     /// Put nothing of KeyJutsu's in the console: questions and notices go
     /// to the window title, and step titles do not.
     pub discreet: bool,
+    /// Record what the terminal draws, kept with the session (ADR 0021).
+    pub record: bool,
 }
 
 /// Where a run keeps its Git record: next to the snapshot.
@@ -336,6 +338,11 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         ..ExecuteOptions::default()
     };
     let discreet_run = args.discreet;
+    let recorder = args.record.then(|| {
+        let (cols, rows) = crossterm::terminal::size().unwrap_or((120, 30));
+        Arc::new(keyjutsu_core::recording::Recorder::new(cols, rows))
+    });
+    let marks = recorder.clone();
     let (plan_for_git, git_dir_c, baseline_c, start_c) =
         (snapshot.plan().clone(), git_dir.clone(), baseline.clone(), start.clone());
     // Copies of the operator's changed files are kept encrypted (ADR 0018).
@@ -378,22 +385,32 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         let title = |t: &str| {
             let _ = crossterm::execute!(std::io::stdout(), crossterm::terminal::SetTitle(t));
         };
-        let observe = |e: ExecutionEvent| match &e {
-            // Discreet: the title bar is kept for what needs the operator.
-            ExecutionEvent::StepStarting { title: t, .. } if !discreet_run => title(t),
-            // Staged typing is off: the operator must stop mashing and answer
-            // for real, in the shell's own masked prompt.
-            ExecutionEvent::CredentialRequired { prompt, .. } => {
-                title(&format!("Credential required: {prompt}. Stop typing, then press Enter."));
+        let observe = |e: ExecutionEvent| {
+            if let Some(r) = &marks {
+                match &e {
+                    ExecutionEvent::StepStarting { step, .. } => r.step_started(step),
+                    ExecutionEvent::StepFinished { step, run } => r.step_finished(step, run.succeeded),
+                    ExecutionEvent::ElevatedOutput { text, .. } => r.output(&text.replace('\n', "\r\n")),
+                    _ => {}
+                }
             }
-            // What the broker's elevated shell printed, shown in the terminal.
-            ExecutionEvent::ElevatedOutput { text, .. } => {
-                use std::io::Write;
-                let mut out = std::io::stdout();
-                let _ = out.write_all(text.replace('\n', "\r\n").as_bytes());
-                let _ = out.flush();
+            match &e {
+                // Discreet: the title bar is kept for what needs the operator.
+                ExecutionEvent::StepStarting { title: t, .. } if !discreet_run => title(t),
+                // Staged typing is off: the operator must stop mashing and answer
+                // for real, in the shell's own masked prompt.
+                ExecutionEvent::CredentialRequired { prompt, .. } => {
+                    title(&format!("Credential required: {prompt}. Stop typing, then press Enter."));
+                }
+                // What the broker's elevated shell printed, shown in the terminal.
+                ExecutionEvent::ElevatedOutput { text, .. } => {
+                    use std::io::Write;
+                    let mut out = std::io::stdout();
+                    let _ = out.write_all(text.replace('\n', "\r\n").as_bytes());
+                    let _ = out.flush();
+                }
+                _ => {}
             }
-            _ => {}
         };
         let done = execute(
             &held,
@@ -409,7 +426,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
         }
     });
 
-    if let Err(e) = console::run(options, None, Some(controller), Some(asker)) {
+    if let Err(e) = console::run_recorded(options, None, Some(controller), Some(asker), recorder.clone()) {
         eprintln!("keyjutsu: {e}");
         return ExitCode::FAILURE;
     }
@@ -448,6 +465,18 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             Ok(()) => {
                 println!("Recorded as session {} in the encrypted history.", record.id);
                 recorded_as = Some(record.id.clone());
+                if let Some(r) = &recorder {
+                    let title = record.task.clone();
+                    match keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root()).and_then(
+                        |s| keyjutsu_core::history::save_recording(&s, &record.id, &r.finish(&title)),
+                    ) {
+                        Ok(()) => println!(
+                            "Its recording is kept with it: keyjutsu history export {} --out FILE.cast",
+                            record.id
+                        ),
+                        Err(e) => eprintln!("keyjutsu: the recording was not kept: {e}"),
+                    }
+                }
             }
             Err(e) => eprintln!("keyjutsu: the session was not recorded: {e}"),
         }

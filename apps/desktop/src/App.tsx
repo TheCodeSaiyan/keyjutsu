@@ -32,6 +32,7 @@ import { NewTask } from "./components/NewTask";
 import { PlanWorkspace } from "./components/PlanWorkspace";
 import { CriticalDialog } from "./components/CriticalDialog";
 import { RunPanel } from "./components/RunPanel";
+import { ExportRecording } from "./components/ExportRecording";
 import { ResumeDialog } from "./components/ResumeDialog";
 import { HistoryView } from "./components/HistoryView";
 import { TechniquesView } from "./components/TechniquesView";
@@ -146,6 +147,10 @@ export function App() {
   const [exited, setExited] = useState(false);
 
   const [mode, setMode] = useState<ExecutionMode>("performance");
+  // Record the next run (ADR 0021), and whether the last one was.
+  const [record, setRecord] = useState(false);
+  const [recorded, setRecorded] = useState(false);
+  const [exporting, setExporting] = useState<string | null>(null);
   const [advance, setAdvance] = useState<AdvanceStyle>("pure");
   const [submit, setSubmit] = useState<SubmitPolicy>("any_key");
   const [source, setSource] = useState<"demo" | "own">("demo");
@@ -405,7 +410,8 @@ export function App() {
     setSpace("terminal");
     setRunning(true);
     try {
-      await ipc.runPlan(sessionId, config, onRun);
+      setRecorded(record);
+      await ipc.runPlan(sessionId, config, record ? (term.current?.size() ?? null) : null, onRun);
       term.current?.focus();
     } catch (e) {
       setRunning(false);
@@ -625,6 +631,9 @@ export function App() {
           </p>
         </nav>
       )}
+      {exporting && (
+        <ExportRecording session={exporting} profile={profile} onClose={() => setExporting(null)} />
+      )}
       <main className="main">
         {busy && (
           <p className="busy" role="status">
@@ -674,7 +683,11 @@ export function App() {
           />
         )}
         {space === "history" && !fullTerminal && (
-          <HistoryView busy={busy !== null} onPromoted={() => setSpace("techniques")} />
+          <HistoryView
+            busy={busy !== null}
+            onPromoted={() => setSpace("techniques")}
+            onExport={setExporting}
+          />
         )}
         {space === "techniques" && !fullTerminal && (
           <TechniquesView
@@ -699,6 +712,8 @@ export function App() {
             mode={mode}
             modes={MODES}
             onMode={(m) => setMode(m as ExecutionMode)}
+            record={record}
+            onRecord={setRecord}
           />
         )}
         <div
@@ -772,6 +787,8 @@ export function App() {
                     }
                   }}
                   task={ws?.plan.title ?? ws?.plan.task_id ?? ""}
+                  recorded={recorded}
+                  onExport={setExporting}
                   onPromoted={() => {
                     setRunDone(null);
                     setSpace("techniques");

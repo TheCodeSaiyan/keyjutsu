@@ -25,10 +25,15 @@ struct ConsoleSink {
     released: AtomicBool,
     /// Events for an execution controller, when one is running.
     forward: Mutex<Option<Sender<SessionEvent>>>,
+    /// What the terminal drew, when the run is recorded (ADR 0021).
+    recorder: Option<Arc<keyjutsu_core::recording::Recorder>>,
 }
 
 impl SessionSink for ConsoleSink {
     fn output(&self, text: &str) {
+        if let Some(r) = &self.recorder {
+            r.output(text);
+        }
         if let Ok(mut out) = self.out.lock() {
             let _ = out.write_all(text.as_bytes());
             let _ = out.flush();
@@ -195,10 +200,21 @@ impl Drop for RawModeGuard {
 /// Run a session in this console until its shell exits. With a performance,
 /// it is armed as soon as the shell reaches its first prompt.
 pub fn run(
+    options: SessionOptions,
+    performance: Option<Performance>,
+    controller: Option<Controller>,
+    asker: Option<Asker>,
+) -> Result<RunSummary, String> {
+    run_recorded(options, performance, controller, asker, None)
+}
+
+/// As [`run`], with what the terminal draws also given to `recorder`.
+pub fn run_recorded(
     mut options: SessionOptions,
     performance: Option<Performance>,
     controller: Option<Controller>,
     asker: Option<Asker>,
+    recorder: Option<Arc<keyjutsu_core::recording::Recorder>>,
 ) -> Result<RunSummary, String> {
     let (cols, rows) = terminal::size().map_err(|e| e.to_string())?;
     options.size = TerminalSize { rows, cols };
@@ -212,6 +228,7 @@ pub fn run(
         outcomes: Mutex::new(Vec::new()),
         released: AtomicBool::new(false),
         forward: Mutex::new(None),
+        recorder,
     });
     let session = Session::open(options, sink.clone()).map_err(|e| e.to_string())?;
 
