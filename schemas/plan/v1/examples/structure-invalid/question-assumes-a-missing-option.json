@@ -41,7 +41,8 @@
     {
       "id": "open-afterwards",
       "text": "Should the PDF be opened once it is made?",
-      "options": ["Yes", "No"]
+      "options": ["Yes", "No"],
+      "assumed": 5
     }
   ]
 }

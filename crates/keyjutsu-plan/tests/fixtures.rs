@@ -106,6 +106,10 @@ fn structure_invalid_fixtures_report_the_right_problem() {
             |p| matches!(p, Problem::UnknownStep { place, step } if place == "question `which-desktop`" && step == "make-pfd"),
         ),
         (
+            "question-assumes-a-missing-option.json",
+            |p| matches!(p, Problem::AssumedOptionMissing { question } if question == "open-afterwards"),
+        ),
+        (
             "duplicate-question-id.json",
             |p| matches!(p, Problem::DuplicateQuestionId { question } if question == "which-desktop"),
         ),

@@ -375,6 +375,20 @@ fn workspace_use_rating(id: String, plans: State<'_, Arc<Plans>>) -> Result<Work
     })
 }
 
+/// Answer the agent's question `id` with the option its plan already
+/// follows: closed, and nothing sent to the agent.
+#[tauri::command]
+fn workspace_keep_as_planned(id: String, plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
+    with_workspace(&plans, |w| w.keep_as_planned(&id, &fingerprint::now_rfc3339()).map_err(|e| e.to_string()))
+}
+
+/// Run step `id` as it is, although it needs review: the operator accepts
+/// what validation found. Never for a step that is blocked or invalid.
+#[tauri::command]
+fn workspace_accept_as_is(id: String, plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
+    with_workspace(&plans, |w| w.accept_as_is(&id, &fingerprint::now_rfc3339()).map_err(|e| e.to_string()))
+}
+
 /// Close the agent's question `id` and keep the plan as it is (ADR 0020).
 #[tauri::command]
 fn workspace_carry_on(id: String, plans: State<'_, Arc<Plans>>) -> Result<WorkspaceView, String> {
@@ -1192,6 +1206,8 @@ fn main() {
             workspace_dismiss,
             workspace_use_rating,
             workspace_carry_on,
+            workspace_keep_as_planned,
+            workspace_accept_as_is,
             recording_export,
             recording_save,
             recording_reveal,

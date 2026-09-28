@@ -69,8 +69,14 @@ export function Conversation({
         if (step) act("Removing the step…", () => ipc.removeStep(step.id));
         break;
       case "dismiss":
-        setReason("");
-        setDismissing(c.note);
+        // Fine needs no reason: one click. "Because…" is its own button.
+        act("Noting that…", () => ipc.dismiss(c.note, ""));
+        break;
+      case "keep_as_planned":
+        act("Noting that…", () => ipc.keepAsPlanned(c.question));
+        break;
+      case "accept_as_is":
+        if (step) act("Accepting the step as it is…", () => ipc.acceptAsIs(step.id));
         break;
       case "answer":
         sendAnswer(c.question, c.answer);
@@ -107,6 +113,10 @@ export function Conversation({
         return "In my own words";
       case "carry_on":
         return "Carry on as planned";
+      case "keep_as_planned":
+        return /as planned|\(default\)\s*$/i.test(c.answer) ? c.answer : `${c.answer} (as planned)`;
+      case "accept_as_is":
+        return "Run it as it is";
     }
   };
 
@@ -135,6 +145,20 @@ export function Conversation({
                     {label(c)}
                   </button>
                 ))}
+                {a.choices.map((c, j) =>
+                  c.kind === "dismiss" ? (
+                    <button
+                      key={`because-${j}`}
+                      disabled={busy !== null}
+                      onClick={() => {
+                        setReason("");
+                        setDismissing(c.note);
+                      }}
+                    >
+                      It&apos;s fine, because…
+                    </button>
+                  ) : null,
+                )}
               </div>
               {a.choices.some((c) => c.kind === "dismiss" && c.note === dismissing) && (
                 <form

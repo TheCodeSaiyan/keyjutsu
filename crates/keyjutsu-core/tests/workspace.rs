@@ -13,7 +13,7 @@ use keyjutsu_core::agent::context::prepare;
 use keyjutsu_core::agent::session::RunOutput;
 use keyjutsu_core::agent::{AgentError, AgentHandle, AgentKind, Agents, Runner};
 use keyjutsu_core::asks::{AskFrom, Choice};
-use keyjutsu_core::plan::model::{Command, ProvenanceAction, Readiness, Step};
+use keyjutsu_core::plan::model::{Command, EvidenceResult, ProvenanceAction, Readiness, Step};
 use keyjutsu_core::plan::parse_plan;
 use keyjutsu_core::validation::Options;
 use keyjutsu_core::workspace::{Workspace, WorkspaceError};
@@ -485,4 +485,96 @@ fn an_unanswered_question_does_not_block_approval() {
     assert!(w.view().overall.blocking.is_empty(), "{:?}", w.view().overall.blocking);
     let snap = w.approve(&BTreeMap::new(), None, AT).unwrap();
     assert_eq!(snap.plan().questions.len(), 1);
+}
+
+/// Choosing what the plan already assumes needs nothing from the agent: the
+/// question closes with the answer recorded. The option is the one `assumed`
+/// names, or one the agent marked "(default)".
+#[test]
+fn keeping_what_the_plan_assumes_asks_the_agent_nothing() {
+    let mut v = chain();
+    v["questions"] = json!([
+        {"id": "which", "step": "b", "text": "Which service?", "options": ["Winmgmt", "Spooler"], "assumed": 0},
+        {"id": "name", "text": "What to call it?", "options": ["cat.pdf (default)", "Something else"]}
+    ]);
+    let mut w = validated(&v);
+    let asks = w.view().asks;
+    let which = asks.iter().find(|a| a.text == "Which service?").unwrap();
+    assert_eq!(
+        which.choices[0],
+        Choice::KeepAsPlanned { question: "which".into(), answer: "Winmgmt".into() }
+    );
+    assert_eq!(which.choices[1], Choice::Answer { question: "which".into(), answer: "Spooler".into() });
+    let name = asks.iter().find(|a| a.text == "What to call it?").unwrap();
+    assert!(
+        matches!(&name.choices[0], Choice::KeepAsPlanned { answer, .. } if answer == "cat.pdf (default)")
+    );
+
+    let before = w.plan().steps.clone();
+    w.keep_as_planned("which", AT).unwrap();
+    w.keep_as_planned("name", AT).unwrap();
+    assert!(w.plan().questions.is_empty());
+    assert_eq!(w.plan().steps, before, "nothing changed");
+    assert!(readiness(&w).values().all(|r| *r == Some(Readiness::Ready)));
+    let notes: Vec<&str> = w
+        .plan()
+        .keyjutsu
+        .as_ref()
+        .unwrap()
+        .provenance
+        .iter()
+        .filter(|e| e.action == ProvenanceAction::Answered)
+        .filter_map(|e| e.note.as_deref())
+        .collect();
+    assert!(notes.iter().any(|n| n.contains("Winmgmt (as planned)")), "{notes:?}");
+}
+
+/// A step that only needs review can be run as it is, on the operator's
+/// word: ready, with what validation found still in its evidence. It holds
+/// through validating again, ends with a change to the step, and a critical
+/// step still needs its phrase.
+#[test]
+fn a_step_that_needs_review_can_be_accepted_as_it_is() {
+    let mut w = validated(&understated());
+    assert_eq!(readiness(&w)["wipe"], Some(Readiness::NeedsReview));
+    let ask = w.view().asks.into_iter().find(|a| a.step.as_deref() == Some("wipe")).unwrap();
+    assert!(ask.choices.contains(&Choice::AcceptAsIs), "{ask:?}");
+    assert!(w.approve(&BTreeMap::new(), None, AT).is_err(), "not before it is accepted");
+
+    w.accept_as_is("wipe", AT).unwrap();
+    assert_eq!(readiness(&w)["wipe"], Some(Readiness::Ready));
+    let state = &w.plan().keyjutsu.as_ref().unwrap().steps["wipe"];
+    assert!(
+        state.evidence.iter().any(|e| e.check == "risk" && e.result == EvidenceResult::Failed),
+        "still shown"
+    );
+    let said = state.evidence.iter().find(|e| e.check == "accepted").unwrap().detail.clone().unwrap();
+    assert!(said.starts_with("you accepted it as it is: risk:"), "{said}");
+    let last = w.plan().keyjutsu.as_ref().unwrap().provenance.last().unwrap();
+    assert_eq!((last.step.as_deref(), last.action), (Some("wipe"), ProvenanceAction::Accepted));
+    let phrase = w.view().steps[0].confirmation_phrase.clone().unwrap();
+    assert!(w.approve(&BTreeMap::new(), None, AT).is_err(), "a critical step still needs its phrase");
+    assert!(w.approve(&BTreeMap::from([("wipe".to_owned(), phrase)]), None, AT).is_ok());
+
+    w.validate(Options { dry_run: false, ..Options::default() }, AT).unwrap();
+    assert_eq!(readiness(&w)["wipe"], Some(Readiness::Ready), "the same findings stay accepted");
+
+    let mut wipe = w.plan().step("wipe").unwrap().clone();
+    wipe.commands[0].text.push('2');
+    w.replace_step(wipe, AT).unwrap();
+    w.validate(Options { dry_run: false, ..Options::default() }, AT).unwrap();
+    assert_eq!(readiness(&w)["wipe"], Some(Readiness::NeedsReview), "a changed step is asked again");
+}
+
+/// Blocked or invalid is not a matter of opinion: it cannot run here, so it
+/// cannot be accepted.
+#[test]
+fn a_blocked_step_cannot_be_accepted() {
+    let mut v = chain();
+    v["steps"][1]["commands"][0]["text"] = json!("Get-KeyJutsuNothingHere");
+    let mut w = validated(&v);
+    assert_eq!(readiness(&w)["b"], Some(Readiness::Blocked));
+    assert!(w.view().asks.iter().all(|a| !a.choices.contains(&Choice::AcceptAsIs)));
+    assert!(w.accept_as_is("b", AT).is_err());
+    assert_eq!(readiness(&w)["b"], Some(Readiness::Blocked));
 }

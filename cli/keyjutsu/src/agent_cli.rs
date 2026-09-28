@@ -274,6 +274,19 @@ pub fn answer(args: Answer<'_>) -> ExitCode {
         eprintln!("keyjutsu: give an answer with --answer, or close the question with --carry-on");
         return ExitCode::from(2);
     };
+    // The option the plan already follows changes nothing: no agent needed.
+    if asked.assumed_option() == Some(answer) {
+        return match w.keep_as_planned(id, &at) {
+            Ok(()) => {
+                println!("Kept `{answer}`, as the plan already does. Written to {}.", out.display());
+                write_plan(out, w.plan())
+            }
+            Err(e) => {
+                eprintln!("keyjutsu: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let Some(agent) = agent else {
         eprintln!("keyjutsu: say which agent to send the answer to with --agent");
         return ExitCode::from(2);

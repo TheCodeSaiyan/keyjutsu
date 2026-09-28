@@ -74,6 +74,11 @@ export const ipc = {
     invoke<workspace.WorkspaceView>("workspace_answer", { agent, id, answer }),
   /** Close the agent's question and keep the plan as it is. */
   carryOn: (id: string) => invoke<workspace.WorkspaceView>("workspace_carry_on", { id }),
+  /** Answer with the option the plan already follows; nothing goes to the agent. */
+  keepAsPlanned: (id: string) =>
+    invoke<workspace.WorkspaceView>("workspace_keep_as_planned", { id }),
+  /** Run a step that needs review as it is. */
+  acceptAsIs: (id: string) => invoke<workspace.WorkspaceView>("workspace_accept_as_is", { id }),
   propose: (task: string, agent: agent.AgentKind, context: string) =>
     invoke<workspace.WorkspaceView>("workspace_propose", { task, agent, context }),
   replaceStep: (step: plan.Step) =>

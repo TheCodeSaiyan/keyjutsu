@@ -160,6 +160,58 @@ fn clip(text: &str) -> String {
     }
 }
 
+/// What the operator accepts when they run a step that needs review as it
+/// is: every finding that failed, in order. The same findings always give the
+/// same text, which is how a later validation knows they are unchanged.
+fn acceptance(state: &keyjutsu_plan::model::StepState) -> String {
+    let found: Vec<String> = state
+        .evidence
+        .iter()
+        .filter(|e| e.result == keyjutsu_plan::model::EvidenceResult::Failed)
+        .map(|e| format!("{}: {}", e.check, e.detail.as_deref().unwrap_or_default()))
+        .collect();
+    clip(&format!("accepted as it is: {}", found.join("; ")))
+}
+
+fn mark_accepted(state: &mut keyjutsu_plan::model::StepState, note: &str) {
+    state.readiness = Readiness::Ready;
+    state.evidence.push(keyjutsu_plan::model::Evidence {
+        check: "accepted".into(),
+        result: keyjutsu_plan::model::EvidenceResult::Passed,
+        // "accepted as it is: …" becomes "you accepted it as it is: …".
+        detail: Some(format!("you {}", note.replacen("accepted", "accepted it", 1))),
+    });
+}
+
+/// After validating again, keep the operator's acceptance of each step that
+/// still needs review for exactly what they accepted, and that has not been
+/// changed since. Anything new, or any change, and it is asked again.
+fn reaccept(plan: &mut Plan) {
+    let Some(k) = plan.keyjutsu.as_mut() else { return };
+    let provenance = k.provenance.clone();
+    for (id, state) in &mut k.steps {
+        if state.readiness != Readiness::NeedsReview {
+            continue;
+        }
+        let latest = provenance.iter().rev().find(|e| {
+            e.step.as_deref() == Some(id.as_str())
+                && matches!(
+                    e.action,
+                    ProvenanceAction::Accepted
+                        | ProvenanceAction::Edited
+                        | ProvenanceAction::Revised
+                        | ProvenanceAction::Authored
+                )
+        });
+        let note = acceptance(state);
+        if latest.is_some_and(|e| {
+            e.action == ProvenanceAction::Accepted && e.note.as_deref() == Some(note.as_str())
+        }) {
+            mark_accepted(state, &note);
+        }
+    }
+}
+
 /// The record that the operator answered question `q`.
 fn answered(q: &keyjutsu_plan::model::Question, answer: &str, at: &str) -> ProvenanceEvent {
     ProvenanceEvent {
@@ -466,7 +518,9 @@ impl Workspace {
     pub fn validate(&mut self, options: Options, at: &str) -> Result<(), WorkspaceError> {
         let report = validate(&self.draft, options);
         self.problems = report.problems.clone();
-        self.draft = ValidPlan::revalidate(report.record_in(self.draft.plan(), at), false)?;
+        let mut plan = report.record_in(self.draft.plan(), at);
+        reaccept(&mut plan);
+        self.draft = ValidPlan::revalidate(plan, false)?;
         self.last_change = None;
         Ok(())
     }
@@ -576,6 +630,23 @@ impl Workspace {
     /// the plan stays as it is, and the decision is kept in its provenance.
     /// No step changes, so nothing goes back to validation.
     pub fn carry_on(&mut self, id: &str, at: &str) -> Result<(), WorkspaceError> {
+        self.close_question(id, "carry on as planned", at)
+    }
+
+    /// Answer the agent's question `id` with the option its plan already
+    /// follows: closed with that answer recorded, and nothing sent back.
+    pub fn keep_as_planned(&mut self, id: &str, at: &str) -> Result<(), WorkspaceError> {
+        let question = self.open_question(id)?;
+        let answer = question
+            .assumed_option()
+            .ok_or_else(|| {
+                WorkspaceError::Plan(format!("question `{id}` has no option the plan already follows"))
+            })?
+            .to_owned();
+        self.close_question(id, &format!("{answer} (as planned)"), at)
+    }
+
+    fn close_question(&mut self, id: &str, answer: &str, at: &str) -> Result<(), WorkspaceError> {
         let question = self.open_question(id)?;
         let mut plan = self.draft.plan().clone();
         plan.questions.retain(|q| q.id != id);
@@ -587,7 +658,42 @@ impl Workspace {
                 provenance: Vec::new(),
             })
             .provenance
-            .push(answered(&question, "carry on as planned", at));
+            .push(answered(&question, answer, at));
+        self.draft = ValidPlan::revalidate(plan, false)?;
+        Ok(())
+    }
+
+    /// Run step `id` as it is, although validation says it needs review: the
+    /// operator has read what it found and accepts it. The step becomes ready,
+    /// with the findings still in its evidence and one more saying they were
+    /// accepted, and the acceptance is kept in the plan's provenance. It holds
+    /// through a later validation only while the findings are the same, and
+    /// ends with any change to the step. A step that is blocked or invalid
+    /// cannot be accepted, and a critical step still needs its phrase.
+    pub fn accept_as_is(&mut self, id: &str, at: &str) -> Result<(), WorkspaceError> {
+        let mut plan = self.draft.plan().clone();
+        let state = plan
+            .keyjutsu
+            .as_mut()
+            .and_then(|k| k.steps.get_mut(id))
+            .ok_or_else(|| WorkspaceError::Plan(format!("`{id}` has not been validated")))?;
+        if state.readiness != Readiness::NeedsReview {
+            return Err(WorkspaceError::Plan(format!(
+                "only a step that needs review can be accepted as it is; `{id}` is {:?}",
+                state.readiness
+            )));
+        }
+        let note = acceptance(state);
+        mark_accepted(state, &note);
+        if let Some(k) = plan.keyjutsu.as_mut() {
+            k.provenance.push(ProvenanceEvent {
+                step: Some(id.to_owned()),
+                actor: operator(),
+                action: ProvenanceAction::Accepted,
+                at: at.into(),
+                note: Some(note),
+            });
+        }
         self.draft = ValidPlan::revalidate(plan, false)?;
         Ok(())
     }

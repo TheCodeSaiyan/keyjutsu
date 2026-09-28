@@ -79,6 +79,10 @@ pub enum Problem {
     DuplicateQuestionId {
         question: String,
     },
+    /// `assumed` names an option the question does not have.
+    AssumedOptionMissing {
+        question: String,
+    },
     /// A question, or one of its options, contains such a character: what
     /// the operator picks must be what the agent is told they picked.
     HiddenCharacterInQuestion {
@@ -136,6 +140,9 @@ impl fmt::Display for Problem {
             ),
             Problem::DuplicateQuestionId { question } => {
                 write!(f, "question id `{question}` is used more than once")
+            }
+            Problem::AssumedOptionMissing { question } => {
+                write!(f, "question `{question}` says the plan follows an option it does not have")
             }
             Problem::HiddenCharacterInQuestion { question, code_point } => write!(
                 f,
@@ -442,6 +449,9 @@ fn check_questions(plan: &Plan, steps: &HashMap<String, usize>, problems: &mut V
             && !steps.contains_key(step)
         {
             problems.push(Problem::UnknownStep { place: format!("question `{}`", q.id), step: step.clone() });
+        }
+        if q.assumed.is_some_and(|i| usize::from(i) >= q.options.len()) {
+            problems.push(Problem::AssumedOptionMissing { question: q.id.clone() });
         }
         let texts = std::iter::once(&q.text).chain(&q.options);
         if let Some(c) = texts.flat_map(|t| t.chars()).find(|c| is_hidden(*c)) {
