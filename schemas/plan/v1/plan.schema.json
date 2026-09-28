@@ -854,6 +854,12 @@
         "free_text": {
           "description": "Whether the operator may answer in their own words as well as pick an option.",
           "type": "boolean"
+        },
+        "assumed": {
+          "description": "Which option (counting from 0) the plan already follows. Choosing it keeps the plan as it is, without asking the agent again.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
         }
       }
     },
@@ -969,7 +975,8 @@
             "validated",
             "approved",
             "dismissed",
-            "answered"
+            "answered",
+            "accepted"
           ]
         },
         "at": {

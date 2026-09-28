@@ -81,6 +81,26 @@ pub struct Question {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[ts(as = "Option<_>", optional)]
     pub free_text: bool,
+    /// Which option the plan already follows, counting from 0. Choosing it
+    /// keeps the plan as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub assumed: Option<u8>,
+}
+
+impl Question {
+    /// The option the plan already follows: the one `assumed` names, or else
+    /// one the agent marked "(default)" in its own words.
+    pub fn assumed_option(&self) -> Option<&str> {
+        match self.assumed {
+            Some(i) => self.options.get(usize::from(i)).map(String::as_str),
+            None => self
+                .options
+                .iter()
+                .find(|o| o.trim_end().to_ascii_lowercase().ends_with("(default)"))
+                .map(String::as_str),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
@@ -757,6 +777,8 @@ pub enum ProvenanceAction {
     Dismissed,
     /// The operator answered one of the agent's questions.
     Answered,
+    /// The operator accepted a step that needed review, as it is.
+    Accepted,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]

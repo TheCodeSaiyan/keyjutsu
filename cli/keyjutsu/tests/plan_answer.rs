@@ -54,6 +54,34 @@ fn carrying_on_closes_the_question_and_records_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Answering with the option the plan already follows changes nothing, so
+/// it needs no agent: the question closes and the answer is kept.
+#[test]
+fn answering_with_what_the_plan_assumes_needs_no_agent() {
+    let dir = std::env::temp_dir().join(format!("kj-plan-answer-kept-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out_file = dir.join("kept.json");
+    let out = answer(&[
+        asking().to_str().unwrap(),
+        "--question",
+        "which-desktop",
+        "--answer",
+        "The OneDrive desktop",
+        "--out",
+        out_file.to_str().unwrap(),
+    ]);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(text(&out).contains("as the plan already does"), "{}", text(&out));
+    let plan: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&out_file).unwrap()).unwrap();
+    let events = plan["keyjutsu"]["provenance"].as_array().unwrap();
+    assert!(
+        events.iter().any(|e| e["action"] == "answered"
+            && e["note"].as_str().unwrap_or_default().contains("The OneDrive desktop (as planned)")),
+        "{events:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn an_answer_needs_an_agent_and_a_known_question() {
     let file = asking();

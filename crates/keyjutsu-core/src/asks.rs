@@ -44,6 +44,12 @@ pub enum Choice {
     /// Leave the plan as it is: the question is closed, and the agent is not
     /// asked anything.
     CarryOn { question: String },
+    /// The option the plan already follows: the question is closed with
+    /// this answer recorded, and the agent is not asked anything.
+    KeepAsPlanned { question: String, answer: String },
+    /// Run a step that needs review as it is: the operator accepts what
+    /// validation found. Never offered for a step that is blocked or invalid.
+    AcceptAsIs,
 }
 
 /// Where an ask came from.
@@ -128,6 +134,7 @@ pub fn asks(plan: &Plan, order: &[&str], notes: &[Note]) -> Vec<Ask> {
     for id in order {
         let Some(state) = states.and_then(|s| s.get(*id)) else { continue };
         let mut seen: Vec<(&str, &str)> = Vec::new();
+        let reviewable = state.readiness == keyjutsu_plan::model::Readiness::NeedsReview;
         for e in &state.evidence {
             let detail = e.detail.as_deref().unwrap_or_default();
             let undecided = e.check == "preconditions"
@@ -143,7 +150,13 @@ pub fn asks(plan: &Plan, order: &[&str], notes: &[Note]) -> Vec<Ask> {
                 step: Some((*id).to_owned()),
                 from: AskFrom::Validation { check: e.check.clone() },
                 text: format!("{}: {detail}", e.check),
-                choices: choices_for(&e.check, detail),
+                choices: {
+                    let mut c = choices_for(&e.check, detail);
+                    if reviewable && e.result == EvidenceResult::Failed {
+                        c.push(Choice::AcceptAsIs);
+                    }
+                    c
+                },
             });
         }
     }
@@ -152,8 +165,18 @@ pub fn asks(plan: &Plan, order: &[&str], notes: &[Note]) -> Vec<Ask> {
         .and_then(|v| v.as_str().map(str::to_owned))
         .unwrap_or_else(|| "The agent".into());
     for q in &plan.questions {
-        let mut choices: Vec<Choice> =
-            q.options.iter().map(|o| Choice::Answer { question: q.id.clone(), answer: o.clone() }).collect();
+        let assumed = q.assumed_option();
+        let mut choices: Vec<Choice> = q
+            .options
+            .iter()
+            .map(|o| {
+                if Some(o.as_str()) == assumed {
+                    Choice::KeepAsPlanned { question: q.id.clone(), answer: o.clone() }
+                } else {
+                    Choice::Answer { question: q.id.clone(), answer: o.clone() }
+                }
+            })
+            .collect();
         if q.free_text || q.options.is_empty() {
             choices.push(Choice::AnswerInOwnWords { question: q.id.clone() });
         }
@@ -206,6 +229,8 @@ mod tests {
                 Choice::Answer { .. } => "answer",
                 Choice::AnswerInOwnWords { .. } => "own words",
                 Choice::CarryOn { .. } => "carry on",
+                Choice::KeepAsPlanned { .. } => "keep",
+                Choice::AcceptAsIs => "accept",
             })
             .collect()
     }

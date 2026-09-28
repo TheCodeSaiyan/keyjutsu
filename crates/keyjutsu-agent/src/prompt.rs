@@ -46,7 +46,9 @@ Rules you must follow:
    step's reason. Ask only what you cannot find out read-only, and at most a
    few questions. Each option is a whole answer the operator can pick as it
    stands; where an answer needs details (a path, a name), leave it out and
-   set free_text. Say anything else you are unsure of in the step's reason.
+   set free_text. Give \"assumed\": the index of the option your plan already
+   follows, so choosing it changes nothing. Never ask what the task already
+   says. Say anything else you are unsure of in the step's reason.
 10. Leave out execution_mode and execution_preferences: the operator chooses
    how the plan runs. The one exception is a credential step's
    \"user_input\" (rule 6).
@@ -54,7 +56,15 @@ Rules you must follow:
    in a command: it ends that shell, and the plan with it; to fail a step,
    throw. Never use Start-Process -Wait: it waits for everything the program
    starts, and a browser or installer that leaves helpers running never lets
-   the step finish; use $p = Start-Process ... -PassThru; $p.WaitForExit().";
+   the step finish; use $p = Start-Process ... -PassThru; $p.WaitForExit().
+12. Do what the operator asked, as they asked it: their target, their way of
+   doing it, all of it. Do not swap in another file, folder, tool or method
+   because you think it better, and do not narrow the task or leave part of
+   it out. If you would do it differently, plan what was asked and say what
+   you would change in the summary, or ask. Do not refuse or water down a
+   step because it changes the machine or carries risk: KeyJutsu validates
+   every step and the operator approves it, and that is where risk is
+   decided. Rate it honestly in proposed_risk and say why in the reason.";
 
 const COMPACT_FORMAT: &str = r#"The JSON document is a plan:
 {
@@ -77,7 +87,7 @@ const COMPACT_FORMAT: &str = r#"The JSON document is a plan:
     "recovery": {"strategy": "restore_captured_state" | "commands" | "none", "commands": [{"text": "..."}]}
   }],
   "edges": [{"from": "step-id", "to": "step-id", "when": <condition>}],
-  "questions": [{"id": "kebab-id", "step": "step-id", "text": "...", "options": ["...", "..."], "free_text": true}]
+  "questions": [{"id": "kebab-id", "step": "step-id", "text": "...", "options": ["...", "..."], "assumed": 0, "free_text": true}]
 }
 Without edges, steps run in the order listed. Unknown properties are refused."#;
 
@@ -174,8 +184,12 @@ pub fn review(task: &str, plan_json: &str) -> String {
         "{RULES}\n\nYou are reviewing another agent's plan, not writing one. You cannot change it; \
          your findings go to the operator and the plan's author.\n\n\
          The operator's task:\n{task}\n\nThe plan:\n```json\n{plan_json}\n```\n\n\
-         Look for: assumptions that may not hold, missing validation, unsafe commands, weak or missing \
-         rollback, and better alternatives. Answer with a JSON document in a ```json block:\n\
+         Review it as a plan for doing what the operator asked; that is settled, so do not argue with \
+         the task or propose doing something else instead. Look for: assumptions that may not hold, \
+         missing validation, commands that would not do what the step says or would do harm beyond it, \
+         and weak or missing rollback. Raise an alternative only if it does the same thing more safely \
+         or more reliably. Use \"serious\" only for what would fail or cause harm, \"info\" for taste. \
+         Answer with a JSON document in a ```json block:\n\
          {{\"summary\": \"one paragraph\", \"findings\": [{{\"step\": \"step-id or null\", \
          \"kind\": \"assumption\" | \"missing_validation\" | \"unsafe\" | \"weak_rollback\" | \"alternative\" | \"other\", \
          \"severity\": \"info\" | \"warning\" | \"serious\", \"message\": \"...\"}}]}}"
@@ -236,6 +250,7 @@ mod tests {
             assert!(p.contains("no expression or script form"));
             assert!(p.contains("Leave out execution_mode"), "the operator chooses how it runs");
             assert!(p.contains("Never use Start-Process -Wait"), "it hangs on helpers");
+            assert!(p.contains("Do what the operator asked, as they asked it"), "no substitutes");
         }
     }
 

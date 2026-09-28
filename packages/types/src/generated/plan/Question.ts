@@ -14,4 +14,9 @@ step?: string, text: string, options?: Array<string>,
  * Whether the operator may also answer in their own words. A question
  * without options is always answered that way.
  */
-free_text?: boolean, };
+free_text?: boolean, 
+/**
+ * Which option the plan already follows, counting from 0. Choosing it
+ * keeps the plan as it is.
+ */
+assumed?: number, };

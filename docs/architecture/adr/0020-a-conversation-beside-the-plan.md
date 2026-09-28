@@ -101,6 +101,16 @@ so an invisible or reordering character is refused. The question is closed
 once answered, even if the agent's revision asks it again, and no step hash
 covers questions. The CLI has `keyjutsu plan answer`.
 
+Later, from use: a question can say which option the plan already follows
+(`assumed`, or an option the agent marks "(default)"), and choosing it closes
+the question without asking the agent anything. **It's fine** dismisses a
+concern in one click; a reason is optional. And a step that only needs review
+can be run as it is on the operator's word (**Run it as it is**), recorded as
+an `accepted` provenance event with exactly what was accepted; it holds
+through validating again only while the findings are the same, ends with any
+change to the step, and is never offered for a step that is blocked or
+invalid. Validation informs; the operator decides.
+
 ## Consequences
 
 - The step panel becomes: what the step does, its findings as conversation

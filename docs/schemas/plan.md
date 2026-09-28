@@ -247,6 +247,7 @@ decide which approvals a change withdraws: change step 3, and steps 4, 5 and
 | `structure-invalid/duplicate-question-id.json` | structure: `which-desktop` twice |
 | `structure-invalid/question-about-missing-step.json` | structure: a question about `make-pfd` |
 | `structure-invalid/hidden-character-in-question.json` | structure: an option ends in U+202E |
+| `structure-invalid/question-assumes-a-missing-option.json` | structure: `assumed` names an option the question does not have |
 
 `pnpm schemas:check` requires the structure-invalid fixtures to *pass* the
 schema, which is what shows the Rust checks are catching something the schema

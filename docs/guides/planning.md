@@ -137,15 +137,17 @@ When the agent can't find something out for itself (which of two folders,
 whether to keep a file), it asks rather than guesses. Its questions appear
 under **What needs you**, each option a button, with **In my own words** where
 the agent allows it and **Carry on as planned** to leave the plan as it is.
-Your answer goes back to the agent, and what it sends back is checked like
-any change. From the CLI, `keyjutsu plan answer spooler.json` lists them. An
+The option the plan already follows is marked **(as planned)**: choosing it
+just closes the question. Any other answer goes back to the agent, and what
+it sends back is checked like any change. From the CLI, `keyjutsu plan answer spooler.json` lists them. An
 unanswered question doesn't stop you approving the plan.
 
 The reviewer can't change the plan. Its concerns appear under **What needs
 you**, beside the steps they're about, each with **Ask the agent to address
-it**, **It's fine** or **Edit the step**. **It's fine** asks for your reason
-and records it, with the concern, in the plan's history, so a saved plan shows
-what was decided and why.
+it**, **It's fine** or **Edit the step**. **It's fine** dismisses it at once;
+**It's fine, because…** lets you say why. Either way the concern, and your
+reason if you gave one, is kept in the plan's history, so a saved plan shows
+what was decided.
 
 ### 4. Validate it
 
@@ -265,7 +267,12 @@ agent guidance written from the finding.
   **Ask for a step without it**.
 - **REVIEW**: KeyJutsu couldn't prove enough, or KeyJutsu rates the step high
   or critical and the agent rated it lower. Read the step; if it's right,
-  **Use KeyJutsu's rating**, or edit it to say so honestly.
+  **Use KeyJutsu's rating**, edit it to say so honestly, or **Run it as it
+  is**: the step is ready on your word, with what validation found still
+  shown beside it and your decision kept in the plan's history. It holds when
+  you validate again while the findings are the same, and goes if the step
+  changes. A critical step still needs its phrase, and a BLOCKED or INVALID
+  step can't be run as it is: those can't work here.
 - **A step needs a download.** **Stage the download** in the step, or
   `keyjutsu plan stage spooler.json`, fetches each file and checks it against
   its pinned hash before approval. Nothing is downloaded while a plan runs.
