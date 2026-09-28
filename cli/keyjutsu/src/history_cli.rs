@@ -54,6 +54,71 @@ pub fn history_list() -> ExitCode {
     }
 }
 
+/// Write session `id`'s recording as asciicast: the steps from `from` to
+/// `to`, or each step to its own file in `each`.
+pub fn history_export(
+    id: &str,
+    from: Option<&str>,
+    to: Option<&str>,
+    out: Option<&std::path::Path>,
+    each: Option<&std::path::Path>,
+) -> ExitCode {
+    use keyjutsu_core::recording::{IDLE_LIMIT, Recording};
+    let store = match open() {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    let recording = match history::load_recording(&store, id) {
+        Ok(Some(r)) => r,
+        Ok(None) => return fail(format!("session `{id}` was not recorded; run with --record to record one")),
+        Err(e) => return fail(e),
+    };
+    let steps = recording.steps();
+    let finish = |r: &Recording| -> (Recording, Vec<String>) {
+        let (clean, found) = r.redacted();
+        (clean.limit_idle(IDLE_LIMIT), found)
+    };
+    let write = |path: &std::path::Path, r: &Recording| -> Result<(), String> {
+        let (r, found) = finish(r);
+        std::fs::write(path, r.to_cast()).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        let taken =
+            if found.is_empty() { String::new() } else { format!(" (redacted: {})", found.join(", ")) };
+        println!("Wrote {}{taken}", path.display());
+        Ok(())
+    };
+    if let Some(dir) = each {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            return fail(format!("cannot make {}: {e}", dir.display()));
+        }
+        for (n, s) in steps.iter().enumerate() {
+            let cut = match recording.cut(&s.step, &s.step) {
+                Ok(c) => c,
+                Err(e) => return fail(e),
+            };
+            if let Err(e) = write(&dir.join(format!("{:02}-{}.cast", n + 1, s.step)), &cut) {
+                return fail(e);
+            }
+        }
+        return ExitCode::SUCCESS;
+    }
+    let Some(out) = out else { return fail("say where to write it with --out, or use --each FOLDER") };
+    let whole = from.is_none() && to.is_none();
+    let cut = if whole {
+        Ok(recording.clone())
+    } else {
+        let first = from.map(str::to_owned).or_else(|| steps.first().map(|s| s.step.clone()));
+        let last = to.map(str::to_owned).or_else(|| steps.last().map(|s| s.step.clone()));
+        match (first, last) {
+            (Some(f), Some(l)) => recording.cut(&f, &l),
+            _ => Err("the recording has no steps".into()),
+        }
+    };
+    match cut.and_then(|c| write(out, &c)) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => fail(e),
+    }
+}
+
 pub fn history_show(id: &str) -> ExitCode {
     let store = match open() {
         Ok(s) => s,
@@ -298,6 +363,7 @@ pub fn store_clear(history_too: bool, techniques: bool, artifacts: bool) -> Exit
         Err(c) => return c,
     };
     if history_too {
+        let _ = store.clear(history::RECORDING_KIND);
         match store.clear(history::KIND) {
             Ok(n) => println!("Cleared {}.", crate::count(n, "session", "sessions")),
             Err(e) => return fail(e),

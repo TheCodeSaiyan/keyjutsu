@@ -86,6 +86,29 @@ enum HistoryCommand {
         /// The session's id, from `keyjutsu history list`.
         id: String,
     },
+    /// Write a recorded session as an asciicast (.cast) file: the whole run,
+    /// some of its steps, or one file per step. Redacted, with long pauses
+    /// shortened.
+    Export {
+        /// The session's id, from `keyjutsu history list`. It must have been
+        /// run with --record.
+        id: String,
+        /// One step only.
+        #[arg(long, conflicts_with_all = ["from", "to"])]
+        step: Option<String>,
+        /// The first step to include; the run's first if left out.
+        #[arg(long)]
+        from: Option<String>,
+        /// The last step to include; the run's last if left out.
+        #[arg(long)]
+        to: Option<String>,
+        /// Where to write it.
+        #[arg(long, required_unless_present = "each", conflicts_with = "each")]
+        out: Option<std::path::PathBuf>,
+        /// Write each step to its own file in this folder instead.
+        #[arg(long, conflicts_with_all = ["step", "from", "to"])]
+        each: Option<std::path::PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -239,6 +262,10 @@ enum Command {
         /// Keep no record of this session in the encrypted history.
         #[arg(long)]
         ephemeral: bool,
+        /// Record what the terminal draws, kept with the session, to export
+        /// later with `keyjutsu history export`.
+        #[arg(long, conflicts_with = "ephemeral")]
+        record: bool,
         /// How KeyJutsu asks for you during the run: on screen, or only in
         /// the window's title bar, to keep the illusion.
         #[arg(long, value_enum, default_value = "standard")]
@@ -692,6 +719,13 @@ fn main() -> ExitCode {
         Command::History(HistoryCommand::List) => history_cli::history_list(),
         Command::History(HistoryCommand::Show { id }) => history_cli::history_show(&id),
         Command::History(HistoryCommand::Recheck { id }) => history_cli::history_recheck(&id),
+        Command::History(HistoryCommand::Export { id, step, from, to, out, each }) => {
+            let (from, to) = match step {
+                Some(s) => (Some(s.clone()), Some(s)),
+                None => (from, to),
+            };
+            history_cli::history_export(&id, from.as_deref(), to.as_deref(), out.as_deref(), each.as_deref())
+        }
         Command::Technique(TechniqueCommand::Promote { session, name, description, params }) => {
             history_cli::technique_promote(&session, &name, &description, &params)
         }
@@ -707,7 +741,7 @@ fn main() -> ExitCode {
         Command::Store(StoreCommand::Clear { history, techniques, artifacts }) => {
             history_cli::store_clear(history, techniques, artifacts)
         }
-        Command::Run { snapshot, mode, clean, resume, settle, isolate, ephemeral, presentation } => {
+        Command::Run { snapshot, mode, clean, resume, settle, isolate, ephemeral, record, presentation } => {
             run_cli::run(run_cli::RunArgs {
                 snapshot: &snapshot,
                 mode: mode.map(|m| match m {
@@ -725,6 +759,7 @@ fn main() -> ExitCode {
                 }),
                 ephemeral,
                 discreet: matches!(presentation, PresentationChoice::Discreet),
+                record,
             })
         }
         Command::Shell(shell) => session(shell.options(), None),
