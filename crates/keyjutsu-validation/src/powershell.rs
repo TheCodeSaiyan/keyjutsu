@@ -69,6 +69,9 @@ pub struct LineAnalysis {
     #[serde(default)]
     pub syntax_errors: Vec<SyntaxError>,
     pub single_command: bool,
+    /// `exit` on the line itself, which ends the shell rather than the step.
+    #[serde(default)]
+    pub exits_shell: bool,
     #[serde(default)]
     pub commands: Vec<CommandUse>,
 }

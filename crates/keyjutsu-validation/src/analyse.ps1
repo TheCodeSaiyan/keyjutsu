@@ -30,6 +30,18 @@ $results = foreach ($item in @($request.commands)) {
     $ast = [System.Management.Automation.Language.Parser]::ParseInput([string]$item.text, [ref]$tokens, [ref]$errors)
     $commandAsts = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true))
     $statements = @($ast.EndBlock.Statements)
+    # `exit` on the line itself ends the shell the plan runs in; inside a
+    # script block or function it ends only that.
+    $exits = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.ExitStatementAst] }, $true) |
+        Where-Object {
+            $p = $_.Parent; $nested = $false
+            while ($null -ne $p) {
+                if ($p -is [System.Management.Automation.Language.ScriptBlockExpressionAst] -or
+                    $p -is [System.Management.Automation.Language.FunctionDefinitionAst]) { $nested = $true; break }
+                $p = $p.Parent
+            }
+            -not $nested
+        })
     $single = $statements.Count -eq 1 -and
         $statements[0] -is [System.Management.Automation.Language.PipelineAst] -and
         $statements[0].PipelineElements.Count -eq 1 -and $commandAsts.Count -eq 1
@@ -94,6 +106,7 @@ $results = foreach ($item in @($request.commands)) {
             [ordered]@{ message = $_.Message; line = $_.Extent.StartLineNumber; column = $_.Extent.StartColumnNumber }
         })
         single_command = $single
+        exits_shell = $exits.Count -gt 0
         commands = @($commands)
     }
 }

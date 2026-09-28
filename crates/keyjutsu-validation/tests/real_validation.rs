@@ -329,3 +329,59 @@ fn the_report_can_be_recorded_in_a_stored_plan() {
     assert_eq!(back.plan().keyjutsu.as_ref().unwrap().steps["a"].readiness, Readiness::Ready);
     assert!(keyjutsu_plan::parse_proposal(&text).is_err(), "but never a valid proposal");
 }
+
+/// `Start-Process -Wait` waits for everything the program starts, not only
+/// the program. A plan printing to PDF with headless Edge hung like this: the
+/// PDF was written, and Edge's helpers kept the step waiting. Waiting on the
+/// process itself does not.
+#[test]
+fn start_process_wait_needs_review_but_waiting_on_the_process_does_not() {
+    let r = validate(
+        &plan(json!([
+            step("waits", "pwsh", "Start-Process -FilePath notepad.exe -Wait"),
+            step("passthru", "pwsh", "$p = Start-Process -FilePath notepad.exe -PassThru; $p.WaitForExit()"),
+            step(
+                "wait-process",
+                "pwsh",
+                "Wait-Process -Name notepad -Timeout 1 -ErrorAction SilentlyContinue"
+            )
+        ])),
+        Options { dry_run: false, ..Options::default() },
+    );
+    let s = state(&r, "waits");
+    assert_eq!(s.readiness, Readiness::NeedsReview, "{s:#?}");
+    let said = failed(s, "waiting");
+    assert!(
+        said.iter().any(|d| d.contains("everything the program starts") && d.contains("WaitForExit")),
+        "{said:?}"
+    );
+    for id in ["passthru", "wait-process"] {
+        assert!(failed(state(&r, id), "waiting").is_empty(), "{id}: {:#?}", state(&r, id));
+    }
+}
+
+/// A plan's steps run in one shell, so `exit` on a step's line ends the
+/// shell the rest of the plan needs. Inside a script block it ends only that
+/// block, which is fine.
+#[test]
+fn exit_on_a_steps_line_is_invalid() {
+    let r = validate(
+        &plan(json!([
+            step("exits", "pwsh", "Get-Date; exit 3"),
+            step("in-a-block", "pwsh", "& { Get-Date; exit 0 }"),
+            step(
+                "throws",
+                "pwsh",
+                "if (-not (Test-Path -LiteralPath C:/Windows)) { throw 'no Windows folder' }"
+            )
+        ])),
+        Options { dry_run: false, ..Options::default() },
+    );
+    let s = state(&r, "exits");
+    assert_eq!(s.readiness, Readiness::Invalid, "{s:#?}");
+    let said = failed(s, "exit");
+    assert!(said.iter().any(|d| d.contains("ends the shell") && d.contains("throw")), "{said:?}");
+    for id in ["in-a-block", "throws"] {
+        assert!(failed(state(&r, id), "exit").is_empty(), "{id}: {:#?}", state(&r, id));
+    }
+}

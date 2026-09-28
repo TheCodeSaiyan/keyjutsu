@@ -163,6 +163,17 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
                 format!("`{text}`: {} (column {})", first.message, first.column),
             );
         }
+        // A plan's steps share one shell, so `exit` would end it for every
+        // step after this one, and the run with it.
+        if a.exits_shell {
+            v.fail(
+                "exit",
+                Readiness::Invalid,
+                format!(
+                    "`{text}` uses exit, which ends the shell the plan runs in, not just this step; to fail the step, throw instead"
+                ),
+            );
+        }
         for c in &a.commands {
             // Called through a variable (`& $write "…"`, often a script block
             // the same line defines): there is no name to look up before it
@@ -205,6 +216,17 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
                             .push(format!("`{name}` is an external program; its arguments are not checked"));
                     }
                 }
+            }
+            // Start-Process -Wait waits for the program's whole process tree.
+            // A program that leaves helpers running, as a browser does,
+            // keeps the step waiting after its work is done.
+            if name.eq_ignore_ascii_case("Start-Process") && c.parameters_resolved.iter().any(|p| p == "Wait")
+            {
+                v.fail(
+                    "waiting",
+                    Readiness::NeedsReview,
+                    "`Start-Process -Wait` waits for everything the program starts, not only the program, so one that leaves helpers running (a browser does) never lets the step finish; wait on the process itself: `$p = Start-Process … -PassThru; $p.WaitForExit()`",
+                );
             }
             for p in &c.unknown_parameters {
                 all_parsed = false;

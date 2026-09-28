@@ -346,3 +346,29 @@ fn each_shell_says_where_it_is_at_every_prompt() {
         session.close();
     }
 }
+
+/// A step can wait on something that never finishes: `Start-Process -Wait`
+/// waits for everything the program starts, and a browser leaves helpers
+/// running (a plan printing to PDF with headless Edge hung like this).
+/// Closing the terminal must still end it promptly, or the window that
+/// closes it cannot close either.
+#[test]
+fn closing_a_terminal_never_waits_for_what_its_step_started() {
+    let (session, out) = start(ShellKind::Pwsh);
+    // The program exits at once, but leaves a grandchild on the same console
+    // for a minute, as Edge leaves its helpers.
+    let waits = "Start-Process pwsh -NoNewWindow -Wait -ArgumentList '-NoProfile','-Command',\
+                 'Start-Process pwsh -NoNewWindow -ArgumentList ''-NoProfile'',''-Command'',''Start-Sleep 60'''";
+    session.arm(script(&[(waits, Some(ExecutionMode::Direct))]), PerformanceConfig::default()).unwrap();
+    std::thread::sleep(Duration::from_secs(4));
+    assert_eq!(state(&session), ExecutionState::Executing, "the step should still be waiting");
+
+    let started = std::time::Instant::now();
+    session.close();
+    let closing = started.elapsed();
+    let exited = out.wait_until(Duration::from_secs(10), |s| {
+        s.events.iter().any(|e| matches!(e, SessionEvent::Exited { .. }))
+    });
+    assert!(closing < Duration::from_secs(2), "closing took {closing:?}");
+    assert!(exited, "the shell was not reported gone within 10 s of closing");
+}
