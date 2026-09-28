@@ -34,6 +34,9 @@ KeyJutsu reads rather than runs. An agent's
 claim that a step is ready, proved or approved is refused as part of the
 format, because those are KeyJutsu's to decide.
 
+The agent is told what it's writing for: this machine's Windows build,
+shell versions, real folder locations and tools, without your user name.
+
 Before anything is sent, you see what would go. Secret-looking
 things (tokens, keys, private keys, `password=` lines) are redacted from
 everything sent: the task, pasted text, files, your guidance and the plan

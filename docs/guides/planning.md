@@ -46,12 +46,20 @@ Without `--send`, nothing leaves the machine. You see exactly what would go:
 ```text
 Request for Claude Code 2.1.282, in its read-only mode:
   --permission-mode plan: plan mode, no edits or commands
-  context: none beyond the task
+  text     this machine (761 characters)
 
 Nothing was sent. Add --send to send this request.
 ```
 
 The version shown is whichever one you have installed.
+
+**This machine** is what KeyJutsu tells the agent about where the plan will
+run, so it writes commands for what's really here rather than guessing: the
+Windows build, each shell's version, whether KeyJutsu has Administrator
+rights, where your Desktop, Documents and Downloads really are (a Desktop in
+OneDrive included), and which common tools are on your PATH, with versions.
+It names no user: folders are given as `%USERPROFILE%\…`. It goes with the
+first proposal, from the app and the CLI alike.
 
 Add `--file` for a file to include and `--folder` for a folder the agent may
 investigate. Anything that looks like a secret, such as a token, a key or a

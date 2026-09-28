@@ -160,7 +160,11 @@ impl EnvironmentFingerprint {
             for name in names {
                 let a = then.iter().find(|e| &e.name == name);
                 let b = current.iter().find(|e| &e.name == name);
-                if a != b {
+                let same = match (a, b) {
+                    (Some(a), Some(b)) => a == b || same_store_app(a, b),
+                    (a, b) => a == b,
+                };
+                if !same {
                     out.push(Drift {
                         what: format!("{prefix}:{name}"),
                         before: a.map(describe),
@@ -171,6 +175,27 @@ impl EnvironmentFingerprint {
         }
         out
     }
+}
+
+/// Whether two entries are one Store app, found once through its App
+/// Execution Alias (`…\Microsoft\WindowsApps\pwsh.exe`) and once in its
+/// package folder (`…\WindowsApps\<package>\pwsh.exe`). Which is found first
+/// depends on PATH, and so on how KeyJutsu was started: PowerShell 7 puts its
+/// own folder first for everything it starts. The alias starts the package's
+/// program, so with the same file name and version they are the same program.
+fn same_store_app(a: &FingerprintEntry, b: &FingerprintEntry) -> bool {
+    let parts = |p: &str| -> Vec<String> { p.split(['\\', '/']).map(str::to_ascii_lowercase).collect() };
+    let is_alias = |p: &[String]| {
+        let n = p.len();
+        n >= 3 && p[n - 2] == "windowsapps" && p[n - 3] == "microsoft"
+    };
+    let in_package = |p: &[String]| p.len() >= 3 && p[..p.len() - 2].iter().any(|c| c == "windowsapps");
+    let (Some(pa), Some(pb)) = (&a.path, &b.path) else { return false };
+    let (pa, pb) = (parts(pa), parts(pb));
+    a.version.is_some()
+        && a.version == b.version
+        && pa.last() == pb.last()
+        && ((is_alias(&pa) && in_package(&pb)) || (is_alias(&pb) && in_package(&pa)))
 }
 
 /// The steps a set of drifts puts in question. A change of operating system,
@@ -253,6 +278,33 @@ mod tests {
         assert_eq!(a.hash(), b.hash());
         b.tools[0].path = Some("C:/elsewhere/git.exe".into());
         assert_ne!(a.hash(), b.hash());
+    }
+
+    /// A Store app is found through its alias from a process started from the
+    /// Start menu, and through its package folder from one started by
+    /// PowerShell 7, which puts its own folder first on PATH. Approved in the
+    /// app and used from the CLI, the same pwsh.exe looked like a change.
+    #[test]
+    fn a_store_apps_alias_and_its_package_are_the_same_program() {
+        let alias = r"C:\Users\nrtat\AppData\Local\Microsoft\WindowsApps\pwsh.exe";
+        let package =
+            r"C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\pwsh.exe";
+        let with = |path: &str, version: &str| {
+            let mut f = fp();
+            f.tools = vec![FingerprintEntry {
+                name: "pwsh.exe".into(),
+                path: Some(path.into()),
+                version: Some(version.into()),
+            }];
+            f
+        };
+        assert!(with(alias, "7.6.6").drift(&with(package, "7.6.6")).is_empty());
+        assert!(with(package, "7.6.6").drift(&with(alias, "7.6.6")).is_empty());
+        // Still a change: another version, another program, or two ordinary folders.
+        assert_eq!(with(alias, "7.6.6").drift(&with(package, "7.7.0")).len(), 1);
+        let other = r"C:\Program Files\WindowsApps\Other_1.0_x64__x\other.exe";
+        assert_eq!(with(alias, "7.6.6").drift(&with(other, "7.6.6")).len(), 1);
+        assert_eq!(with(r"C:\a\pwsh.exe", "7.6.6").drift(&with(r"C:\b\pwsh.exe", "7.6.6")).len(), 1);
     }
 
     #[test]
