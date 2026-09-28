@@ -151,6 +151,9 @@ History, makes files of it:
   with a picture of each step, and `guide.html`, one page with the pictures
   inside. Each step in the guide gives its title, why it's there, the
   command and what it printed.
+- **Size:** fitted to the part of the screen the run drew on, or the whole
+  terminal as it was, and the text size. A terminal that fills the window is
+  mostly empty space, so fitted is the default.
 
 The first seconds play before anything is saved, with what was taken out as
 secrets. Long pauses are cut to two seconds. A video plays through as it's

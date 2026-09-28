@@ -56,6 +56,21 @@ Option 3.
   at a credential step is never in the recording: PowerShell's masked prompt
   does not echo it.
 
+### Sizes
+
+A terminal's output is drawn for its size: the cursor is placed by row and
+column, so output replayed at another size lands in the wrong places. The
+first recordings took their size from the window, which had just resized
+itself for the run, and replayed garbled. So:
+
+- A recording's size, and the screen it starts from, come from the shell's
+  own session, which knows the size it draws for. The screen is captured
+  as it is when recording starts, so the first frame is whole.
+- Every change of size is recorded (asciicast `r` events) and replayed.
+- A cut opens on the screen as it was at that moment, at the size it had.
+- An export is fitted to the part of the screen the run drew on, or drawn
+  at the most the terminal had, in a chosen text size.
+
 ## Consequences
 
 - One new dependency for GIF encoding (`gifenc`), and `@xterm/headless` from

@@ -411,7 +411,7 @@ export function App() {
     setRunning(true);
     try {
       setRecorded(record);
-      await ipc.runPlan(sessionId, config, record ? (term.current?.size() ?? null) : null, onRun);
+      await ipc.runPlan(sessionId, config, record, onRun);
       term.current?.focus();
     } catch (e) {
       setRunning(false);

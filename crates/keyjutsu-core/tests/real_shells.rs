@@ -372,3 +372,25 @@ fn closing_a_terminal_never_waits_for_what_its_step_started() {
     assert!(closing < Duration::from_secs(2), "closing took {closing:?}");
     assert!(exited, "the shell was not reported gone within 10 s of closing");
 }
+
+/// A recording starts from the screen as the shell has it, at the size the
+/// shell draws for (ADR 0021): the window's own idea of its size can be
+/// stale, and output replayed at the wrong size lands in the wrong places.
+#[test]
+fn the_screen_a_recording_starts_from_is_the_shells() {
+    let collector = Arc::new(Collector::new());
+    let mut options = SessionOptions::new(ShellKind::Pwsh);
+    options.profile = ProfileMode::Clean;
+    options.intercept_cursor_queries = true;
+    options.size = TerminalSize { rows: 17, cols: 93 };
+    let session = Session::open(options, collector.clone()).expect("shell starts");
+    assert!(session.wait_ready(TIMEOUT));
+    session.write_input(b"Write-Output ('seen' + '-before')\r").unwrap();
+    wait_for_text(&collector, "seen-before");
+    session.resize(TerminalSize { rows: 21, cols: 101 }).unwrap();
+    let (size, screen) = session.screen();
+    assert_eq!((size.cols, size.rows), (101, 21));
+    assert!(screen.starts_with("\u{1b}[H\u{1b}[2J"), "it redraws from a cleared screen");
+    assert!(screen.contains("seen-before"), "{screen:?}");
+    session.close();
+}

@@ -36,6 +36,17 @@ impl Transcript {
         self.parser.screen_mut().set_size(rows.max(1), cols.max(1));
     }
 
+    /// The screen's size, as `(rows, cols)`.
+    pub fn size(&self) -> (u16, u16) {
+        self.parser.screen().size()
+    }
+
+    /// What redraws the visible screen exactly as it is, from a cleared one:
+    /// where a recording starts, it starts from this.
+    pub fn formatted(&self) -> String {
+        format!("\u{1b}[H\u{1b}[2J{}", String::from_utf8_lossy(&self.parser.screen().contents_formatted()))
+    }
+
     /// How many lines have scrolled above the screen.
     fn depth(&mut self) -> usize {
         let screen = self.parser.screen_mut();

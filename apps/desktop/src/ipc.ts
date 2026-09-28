@@ -115,11 +115,11 @@ export const ipc = {
   approve: (confirmations: Record<string, string>) =>
     invoke<Sealed>("workspace_approve", { confirmations }),
 
-  /** Run the sealed plan; `record` is the terminal's size when the run is recorded. */
+  /** Run the sealed plan, recording it if `record` (ADR 0021). */
   runPlan: (
     id: number,
     config: PerformanceConfig,
-    record: TerminalSize | null,
+    record: boolean,
     onEvent: (m: RunMessage) => void,
   ) => {
     const channel = new Channel<RunMessage>();

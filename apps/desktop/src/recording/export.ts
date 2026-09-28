@@ -1,7 +1,7 @@
 import { applyPalette, GIFEncoder, quantize } from "gifenc";
 import type { ITheme } from "@xterm/xterm";
 import type { recording } from "@keyjutsu/types";
-import { canvasSize, measure, paint, Player, screenRows, type Metrics } from "./render";
+import { canvasSize, measure, paint, Player, screenRows, type Area, type Metrics } from "./render";
 
 /**
  * Turning a prepared recording into files (ADR 0021): a soundless video, a
@@ -129,6 +129,8 @@ export interface Look {
   theme: ITheme;
   fontFamily: string;
   fontSizePx: number;
+  /** The part of the screen to show; the recording's size if not given. */
+  area?: Area;
 }
 
 function canvasFor(
@@ -139,9 +141,12 @@ function canvasFor(
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("this window cannot draw on a canvas");
   const m = measure(ctx, look.fontFamily, look.fontSizePx);
-  Object.assign(canvas, canvasSize(rec, m));
+  Object.assign(canvas, canvasSize(areaOf(rec, look), m));
   return { canvas, ctx, m };
 }
+
+const areaOf = (rec: recording.Recording, look: Look): Area =>
+  look.area ?? { cols: rec.width, rows: rec.height };
 
 /** Every step's last frame, as a PNG, keyed by step. */
 export async function stepStills(e: recording.Export, look: Look): Promise<Map<string, Blob>> {
@@ -155,7 +160,7 @@ export async function stepStills(e: recording.Export, look: Look): Promise<Map<s
   const stills = new Map<string, Blob>();
   for (const s of e.steps) {
     await player.advanceTo(ends.get(s.step) ?? player.duration);
-    paint(ctx, screenRows(player.term, look.theme), m, look.theme);
+    paint(ctx, screenRows(player.term, look.theme, look.area), m, look.theme);
     const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/png"));
     if (blob) stills.set(s.step, blob);
   }
@@ -177,7 +182,7 @@ export async function toGif(rec: recording.Recording, look: Look, fps = 10): Pro
   };
   for (let i = 0; i < times.length; i++) {
     await player.advanceTo(times[i]);
-    paint(ctx, screenRows(player.term, look.theme), m, look.theme);
+    paint(ctx, screenRows(player.term, look.theme, look.area), m, look.theme);
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     const step = i + 1 < times.length ? times[i + 1] - times[i] : 1;
     if (previous && data.length === previous.length && data.every((v, n) => v === previous![n])) {
@@ -185,7 +190,7 @@ export async function toGif(rec: recording.Recording, look: Look, fps = 10): Pro
       continue;
     }
     flush(held * 1000);
-    const palette = quantize(data, 256, { format: "rgb444" });
+    const palette = quantize(data, 64, { format: "rgb444" });
     pending = { index: applyPalette(data, palette, "rgb444"), palette };
     previous = data;
     held = step;
@@ -217,14 +222,14 @@ export async function toVideo(
   const chunks: Blob[] = [];
   recorder.ondataavailable = (ev) => ev.data.size && chunks.push(ev.data);
   const stopped = new Promise<void>((done) => (recorder.onstop = () => done()));
-  paint(ctx, screenRows(player.term, look.theme), m, look.theme);
+  paint(ctx, screenRows(player.term, look.theme, look.area), m, look.theme);
   recorder.start(1000);
   const start = performance.now();
   const duration = player.duration + 1;
   for (;;) {
     const at = (performance.now() - start) / 1000;
     await player.advanceTo(at);
-    paint(ctx, screenRows(player.term, look.theme), m, look.theme);
+    paint(ctx, screenRows(player.term, look.theme, look.area), m, look.theme);
     progress(Math.min(1, at / duration));
     if (at >= duration) break;
     await new Promise((done) => setTimeout(done, 33));
@@ -247,7 +252,7 @@ export async function preview(
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const m = measure(ctx, look.fontFamily, look.fontSizePx);
-  Object.assign(canvas, canvasSize(rec, m));
+  Object.assign(canvas, canvasSize(areaOf(rec, look), m));
   const player = new Player(rec);
   const start = performance.now();
   const end = Math.min(seconds, player.duration);
@@ -255,7 +260,7 @@ export async function preview(
     if (cancelled()) break;
     const at = (performance.now() - start) / 1000;
     await player.advanceTo(at);
-    paint(ctx, screenRows(player.term, look.theme), m, look.theme);
+    paint(ctx, screenRows(player.term, look.theme, look.area), m, look.theme);
     if (at >= end) break;
     await new Promise((done) => setTimeout(done, 50));
   }

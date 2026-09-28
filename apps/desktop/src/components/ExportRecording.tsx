@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { recording, TerminalProfile } from "@keyjutsu/types";
 import { ipc } from "../ipc";
-import { themeFromProfile, pointsToPixels } from "../theme";
+import { themeFromProfile } from "../theme";
+import { areas, type Area } from "../recording/render";
 import {
   guideHtml,
   guideMarkdown,
@@ -48,19 +49,25 @@ export function ExportRecording({ session, profile, onClose }: Props) {
   const [saved, setSaved] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  // How much of the screen the run drew on, and the whole of it.
+  const [found, setFound] = useState<{ used: Area; whole: Area } | null>(null);
+  const [size, setSize] = useState<"fit" | "whole">("fit");
+  const [fontPx, setFontPx] = useState(14);
 
   const look: Look = {
     theme: profile ? themeFromProfile(profile) : { background: "#0c0c0c", foreground: "#cccccc" },
     fontFamily: profile
       ? `"${profile.font_face}", "Cascadia Mono", Consolas, monospace`
       : "Consolas, monospace",
-    fontSizePx: profile ? pointsToPixels(profile.font_size) : 16,
+    fontSizePx: fontPx,
+    area: found ? (size === "fit" ? found.used : found.whole) : undefined,
   };
 
   useEffect(() => {
     ipc
       .recordingExport(session, null, null)
-      .then((e) => {
+      .then(async (e) => {
+        setFound(await areas(e.recording));
         setWhole(e);
         setFrom(e.steps[0]?.step ?? "");
         setTo(e.steps[e.steps.length - 1]?.step ?? "");
@@ -84,7 +91,7 @@ export function ExportRecording({ session, profile, onClose }: Props) {
     };
     // The look follows the profile, which does not change while this is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [whole, which, from, to, session]);
+  }, [whole, which, from, to, session, size, fontPx, found]);
 
   const steps = whole?.steps ?? [];
   const folder = `${session}${which === "range" ? `-${from}-to-${to}` : which === "each" ? "-steps" : ""}`;
@@ -233,6 +240,37 @@ export function ExportRecording({ session, profile, onClose }: Props) {
                   onChange={() => setWhich("each")}
                 />
                 Each step as its own file
+              </label>
+            </fieldset>
+            <fieldset>
+              <legend>Size</legend>
+              <label className="choice">
+                <input
+                  type="radio"
+                  name="size"
+                  checked={size === "fit"}
+                  onChange={() => setSize("fit")}
+                />
+                Fit to what was drawn{found ? ` (${found.used.cols} × ${found.used.rows})` : ""}
+              </label>
+              <label className="choice">
+                <input
+                  type="radio"
+                  name="size"
+                  checked={size === "whole"}
+                  onChange={() => setSize("whole")}
+                />
+                As recorded{found ? ` (${found.whole.cols} × ${found.whole.rows})` : ""}
+              </label>
+              <label>
+                Text size{" "}
+                <select value={fontPx} onChange={(e) => setFontPx(Number(e.target.value))}>
+                  {[12, 14, 16, 18].map((px) => (
+                    <option key={px} value={px}>
+                      {px} px
+                    </option>
+                  ))}
+                </select>
               </label>
             </fieldset>
             <fieldset>
