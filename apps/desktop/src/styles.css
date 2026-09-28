@@ -265,10 +265,14 @@ button.link:hover:not(:disabled) {
 
 /* Workspace: continuous surfaces separated by hairlines, not nested cards. */
 
+/* The terminal screen fills what is left under any banner above it, and
+   never more: at 100% of the space as well as a banner, it overflowed, and
+   the wheel scrolled the whole window instead of the terminal. */
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .topbar {
@@ -418,21 +422,27 @@ button.arm {
   font-size: var(--fs-compact);
 }
 
+/* Allowed to shrink, so the terminal refits to fewer rows rather than
+   growing past its space. */
 .terminal-frame {
   position: relative;
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
 }
 
 .terminal-host {
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
-/* Armed: nothing of KeyJutsu is left on screen but the terminal. */
-.app[data-armed="true"] .terminal-frame {
-  height: 100vh;
+/* The wheel scrolls the terminal's history and stops at its ends, instead of
+   carrying on to whatever is around it. */
+.terminal-host .xterm-viewport {
+  overscroll-behavior: contain;
 }
 
 /* Operator overlay: small, private, clear of the output. */
@@ -600,6 +610,8 @@ button.arm {
 .main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   position: relative;
