@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { agent, recovery, RunMessage } from "@keyjutsu/types";
 import { boundaryStep, outcomeLine } from "../plan";
+import { MakeTechnique } from "./MakeTechnique";
 
 type Done = Extract<RunMessage, { kind: "done" }>;
 
@@ -13,15 +14,30 @@ interface Props {
   onRecover(): Promise<recovery.RecoveryResult[]>;
   /** Ask the agent to fix the failed step; the revised plan opens for review. */
   onFix(agent: agent.AgentKind, guidance: string): Promise<void>;
+  /** The run's task, the name a Technique made from it starts with. */
+  task: string;
+  /** Called after a Technique is saved from this run, to show it. */
+  onPromoted(): void;
   onBack(): void;
 }
 
 /**
- * After a run: what happened, where the record is, and, after a failure,
- * the four choices it has. Nothing is rolled back unless the operator
+ * After a run: what happened, where the record is; after a run that
+ * completed, the offer to keep it as a Technique; after a failure, the four
+ * choices it has. Nothing is rolled back unless the operator
  * reviews the recovery plan and then confirms it.
  */
-export function RunPanel({ done, busy, agents, onReview, onRecover, onFix, onBack }: Props) {
+export function RunPanel({
+  done,
+  busy,
+  agents,
+  onReview,
+  onRecover,
+  onFix,
+  task,
+  onPromoted,
+  onBack,
+}: Props) {
   const [items, setItems] = useState<recovery.RecoveryItem[] | null>(null);
   const installed = agents.filter((a) => a.path !== null);
   const [fixWith, setFixWith] = useState<agent.AgentKind | null>(installed[0]?.kind ?? null);
@@ -73,6 +89,14 @@ export function RunPanel({ done, busy, agents, onReview, onRecover, onFix, onBac
           )}
         </div>
       ))}
+      {complete &&
+        (done.session ? (
+          <MakeTechnique session={done.session} task={task} busy={busy} onPromoted={onPromoted} />
+        ) : (
+          <p className="small muted">
+            This run could not be recorded in the history, so it cannot become a Technique.
+          </p>
+        ))}
       {failed && failed.output.trim() && (
         <details open>
           <summary className="small">What the step printed</summary>

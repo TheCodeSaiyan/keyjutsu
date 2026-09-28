@@ -771,6 +771,11 @@ export function App() {
                       setBusy(null);
                     }
                   }}
+                  task={ws?.plan.title ?? ws?.plan.task_id ?? ""}
+                  onPromoted={() => {
+                    setRunDone(null);
+                    setSpace("techniques");
+                  }}
                   onReview={() => ipc.recoveryPlan()}
                   onRecover={async () => {
                     if (sessionId === null) throw new Error("no terminal");

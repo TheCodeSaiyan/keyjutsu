@@ -128,21 +128,7 @@ pub enum WorkspaceError {
 
 impl From<PlanError> for WorkspaceError {
     fn from(e: PlanError) -> Self {
-        let details: Vec<String> = match &e {
-            PlanError::Schema { violations } => violations
-                .iter()
-                .map(|v| {
-                    format!("{}: {}", if v.at.is_empty() { "(document)" } else { v.at.as_str() }, v.message)
-                })
-                .collect(),
-            PlanError::Invalid { problems } => problems.iter().map(ToString::to_string).collect(),
-            _ => Vec::new(),
-        };
-        if details.is_empty() {
-            Self::Plan(e.to_string())
-        } else {
-            Self::Plan(format!("{e}: {}", details.join("; ")))
-        }
+        Self::Plan(e.explain())
     }
 }
 

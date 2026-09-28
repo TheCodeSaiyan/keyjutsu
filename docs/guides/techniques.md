@@ -39,9 +39,9 @@ see its steps.
 
 ### 2. Make it a Technique
 
-In the desktop app, a completed run has **Make it a Technique** under its
-steps: give it a name, and list any parameters as `name = value`, one per
-line.
+In the desktop app, a run that completes offers **Make it a Technique** as
+soon as it finishes, and any completed run in History has it under its steps:
+give it a name, and list any parameters as `name = value`, one per line.
 
 ![The History screen. A completed run, Check that Windows Management Instrumentation is running, is selected, with its two steps marked ok. Below them, Make it a Technique: a name, and one parameter, service_name = Winmgmt, then the Make a Technique button.](../images/history.png)
 

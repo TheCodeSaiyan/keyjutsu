@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { history } from "@keyjutsu/types";
 import { ipc } from "../ipc";
+import { MakeTechnique } from "./MakeTechnique";
 
 interface Props {
   busy: boolean;
@@ -16,8 +17,6 @@ interface Props {
 export function HistoryView({ busy, onPromoted }: Props) {
   const [sessions, setSessions] = useState<history.SessionSummary[] | null>(null);
   const [selected, setSelected] = useState<history.SessionRecord | null>(null);
-  const [name, setName] = useState("");
-  const [params, setParams] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,21 +31,10 @@ export function HistoryView({ busy, onPromoted }: Props) {
     try {
       const record = await ipc.historyShow(id);
       setSelected(record);
-      setName(record.task);
-      setParams("");
     } catch (e) {
       setError(String(e));
     }
   };
-
-  // One parameter per line, "name = value": the value as it appears in the
-  // run's plan, which the Technique asks for next time.
-  const pairs = (): [string, string][] =>
-    params
-      .split("\n")
-      .map((l) => l.split("="))
-      .filter((p) => p.length === 2 && p[0].trim() && p[1].trim())
-      .map(([n, v]) => [n.trim(), v.trim()]);
 
   return (
     <section className="page" aria-label="History">
@@ -91,41 +79,13 @@ export function HistoryView({ busy, onPromoted }: Props) {
               ))}
             </ol>
             {selected.outcome.kind === "complete" ? (
-              <>
-                <h2>Make it a Technique</h2>
-                <label className="small">
-                  Name
-                  <input value={name} onChange={(e) => setName(e.target.value)} />
-                </label>
-                <label className="small">
-                  Parameters, one per line, as <code>name = value</code>
-                  <textarea
-                    value={params}
-                    onChange={(e) => setParams(e.target.value)}
-                    placeholder="service_name = Winmgmt"
-                  />
-                </label>
-                <p className="small muted">
-                  Each value, wherever it appears in the plan, becomes a parameter you fill in when
-                  you use the Technique. A Technique never runs because it worked before: using one
-                  makes a draft that is validated and approved here.
-                </p>
-                <button
-                  className="primary"
-                  disabled={busy || !name.trim()}
-                  onClick={async () => {
-                    setError(null);
-                    try {
-                      await ipc.promote(selected.id, name.trim(), "", pairs());
-                      onPromoted();
-                    } catch (e) {
-                      setError(String(e));
-                    }
-                  }}
-                >
-                  Make a Technique
-                </button>
-              </>
+              <MakeTechnique
+                key={selected.id}
+                session={selected.id}
+                task={selected.task}
+                busy={busy}
+                onPromoted={onPromoted}
+              />
             ) : (
               <p className="small muted">Only a run that completed can become a Technique.</p>
             )}

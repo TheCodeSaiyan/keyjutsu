@@ -303,3 +303,34 @@ fn the_store_is_encrypted_and_records_cannot_be_swapped() {
     assert_eq!(store.clear(history::KIND).unwrap(), 2);
     assert!(history::list(&store).unwrap().is_empty());
 }
+
+/// A Technique named after a long task has an id at the plan's 64-character
+/// limit; its draft's id, which adds the revision, must still fit. A draft
+/// from "Replace Cats.pdf on the Desktop with a PDF of ten random cat images
+/// and open it" was refused as not matching the schema, without saying why.
+#[test]
+fn a_technique_with_a_long_name_still_makes_a_draft() {
+    let dir = scratch("long-name");
+    let store = Store::open(&dir.join("store")).unwrap();
+    let recorded = successful_session(&store);
+    let name = "Replace Cats.pdf on the Desktop with a PDF of ten random cat images and open it";
+    let t = promote(&recorded, name, "", &[], AT).unwrap();
+    assert_eq!(t.id.len(), 64, "{}", t.id);
+
+    let draft = instantiate(&t, &values(&[])).unwrap_or_else(|e| panic!("{e}"));
+    let id = &draft.plan().plan_id;
+    assert!(id.len() <= 64 && id.ends_with("-r1"), "{id}");
+    assert!(!id.contains("--"), "{id}");
+}
+
+/// When a draft is refused, the reason says which part of the plan and why.
+#[test]
+fn a_refused_draft_says_what_is_wrong() {
+    let dir = scratch("refused-draft");
+    let store = Store::open(&dir.join("store")).unwrap();
+    let recorded = successful_session(&store);
+    let mut t = promote(&recorded, "Check a Windows service", "", &[], AT).unwrap();
+    t.template.title = Some(String::new());
+    let e = instantiate(&t, &values(&[])).unwrap_err();
+    assert!(e.contains("/title"), "{e}");
+}

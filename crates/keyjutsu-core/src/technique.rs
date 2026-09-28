@@ -87,6 +87,15 @@ fn record_id(id: &str, revision: u32) -> String {
     format!("{id}-r{revision}")
 }
 
+/// A draft's plan id: the Technique's id and revision, within the plan's 64
+/// characters. A Technique named after a long task already has a 64-character
+/// id, so the id gives way to the revision.
+fn draft_id(id: &str, revision: u32) -> String {
+    let suffix = format!("-r{revision}");
+    let kept: String = id.chars().take(64usize.saturating_sub(suffix.len())).collect();
+    format!("{}{suffix}", kept.trim_end_matches(['-', '_']))
+}
+
 fn slug(name: &str) -> String {
     let s: String = name
         .to_ascii_lowercase()
@@ -239,9 +248,9 @@ pub fn instantiate(t: &Technique, values: &BTreeMap<String, String>) -> Result<V
         let rest: String = left[i..].chars().take(40).collect();
         return Err(format!("a placeholder was left unfilled: {rest}"));
     }
-    plan.plan_id = format!("{}-r{}", t.id, t.revision);
+    plan.plan_id = draft_id(&t.id, t.revision);
     plan.keyjutsu = None;
-    ValidPlan::revalidate(plan, false).map_err(|e| e.to_string())
+    ValidPlan::revalidate(plan, false).map_err(|e| e.explain())
 }
 
 /// How a Technique stands on this machine, before any validation.
