@@ -117,6 +117,18 @@ fn clip(text: &str) -> String {
     format!("{kept}…")
 }
 
+/// A command line as a finding quotes it: whole when it is short, its start
+/// otherwise. The whole line is always shown with the step; a finding that
+/// repeats a long one buries what it has to say.
+pub(crate) fn quote(text: &str) -> String {
+    const MAX: usize = 80;
+    if text.chars().count() <= MAX {
+        format!("`{text}`")
+    } else {
+        format!("`{}…`", text.chars().take(MAX - 1).collect::<String>().trim_end())
+    }
+}
+
 pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
     let mut v = Verdict { readiness: Readiness::Ready, evidence: Vec::new(), uncertainty: Vec::new() };
     let operator_step = matches!(step.kind, StepKind::Manual | StepKind::UserInput | StepKind::Credential);
@@ -153,14 +165,14 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
     for (text, analysis) in g.lines.iter().chain(g.support_lines.iter()) {
         let Some(a) = analysis else { continue };
         if a.syntax_errors.is_empty() {
-            v.pass("syntax", format!("`{text}` parses"));
+            v.pass("syntax", format!("{} parses", quote(text)));
         } else {
             all_parsed = false;
             let first = &a.syntax_errors[0];
             v.fail(
                 "syntax",
                 Readiness::Invalid,
-                format!("`{text}`: {} (column {})", first.message, first.column),
+                format!("{}: {} (column {})", quote(text), first.message, first.column),
             );
         }
         // A plan's steps share one shell, so `exit` would end it for every
@@ -170,7 +182,8 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
                 "exit",
                 Readiness::Invalid,
                 format!(
-                    "`{text}` uses exit, which ends the shell the plan runs in, not just this step; to fail the step, throw instead"
+                    "{} uses exit, which ends the shell the plan runs in, not just this step; to fail the step, throw instead",
+                    quote(text)
                 ),
             );
         }
@@ -524,20 +537,20 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
             } else {
                 w.operations.join(" | ")
             };
-            v.pass("dry run", format!("`{text}` -WhatIf: {targets}"));
+            v.pass("dry run", format!("{} -WhatIf: {targets}", quote(text)));
         } else {
             dry_run_clean = false;
             v.record(
                 "dry run",
                 EvidenceResult::Failed,
-                format!("`{text}` -WhatIf: {}", w.errors.join(" | ")),
+                format!("{} -WhatIf: {}", quote(text), w.errors.join(" | ")),
             );
             v.worsen(Readiness::NeedsReview);
             v.uncertainty.push("The dry run failed; an earlier step may create what it needs".into());
         }
     }
     for (text, why) in &g.dry_run_skipped {
-        v.record("dry run", EvidenceResult::NotApplicable, format!("`{text}` not dry-run: {why}"));
+        v.record("dry run", EvidenceResult::NotApplicable, format!("{} not dry-run: {why}", quote(text)));
     }
 
     // How much was shown.
@@ -588,6 +601,23 @@ mod tests {
             "parameters_used": ["X"], "unknown_parameters": unknown
         }]}))
         .unwrap()
+    }
+
+    #[test]
+    fn a_finding_quotes_a_long_command_by_its_start() {
+        assert_eq!(quote("Get-Date"), "`Get-Date`");
+        let long = format!("$x = {}", "a".repeat(200));
+        let q = quote(&long);
+        assert_eq!(q.chars().count(), 82, "{q}");
+        assert!(q.starts_with("`$x = aaa") && q.ends_with("…`"), "{q}");
+    }
+
+    #[test]
+    fn a_finding_is_kept_to_a_thousand_characters() {
+        assert_eq!(clip("short"), "short");
+        let c = clip(&"x".repeat(5000));
+        assert_eq!(c.chars().count(), MAX_FINDING);
+        assert!(c.ends_with('…'));
     }
 
     #[test]

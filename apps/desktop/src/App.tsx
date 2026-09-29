@@ -723,10 +723,6 @@ export function App() {
         >
           {!fullTerminal && (
             <header className="topbar">
-              <span className="wordmark">
-                <img src={mark} alt="" width={22} height={22} />
-                KeyJutsu
-              </span>
               <label>
                 Shell{" "}
                 <select
@@ -912,7 +908,7 @@ export function App() {
                 </section>
                 <section>
                   <h2>Readiness</h2>
-                  <ReadinessPanel report={report} />
+                  <ReadinessPanel report={report} fold />
                 </section>
                 <section>
                   <h2>Diagnostics</h2>

@@ -83,7 +83,9 @@ with "Proposed N steps in M attempt(s)", and the plan is written to
 
 In the desktop app, the **Plan** space lists the steps in the middle. Select
 one to see its commands, what it's meant to achieve, the evidence behind its
-readiness, its risk, and how it would be undone:
+readiness, its risk, and how it would be undone. What needs you comes first;
+the checks that passed are folded into one line, each shown once, since a step
+with many commands passes the same check many times:
 
 ![The KeyJutsu Plan screen. Two steps of the example plan, both READY and low risk. The first is selected, showing its command, Get-Service -Name Winmgmt, the evidence behind its readiness, and Edit, Retry step with agent, Move and Remove. At the foot, 2/2 ready, no elevation, and Validate and Approve plan.](../images/plan-workspace.png)
 

@@ -302,8 +302,8 @@ fn recovery_commands_are_checked_too() {
 #[test]
 fn a_long_command_line_is_validated_and_recorded() {
     // One line of several thousand characters, as an agent writes a whole
-    // small program on one line. Its findings quote it; the plan keeps 4,000
-    // characters for a finding, and recording used to fail on it.
+    // small program on one line. Its findings quote its start, and recording
+    // used to fail on it when they quoted all of it.
     let line = "$null = Get-Date; ".repeat(300);
     assert!(line.len() > 5000);
     let p = plan(json!([step("long", "pwsh", line.trim())]));
@@ -314,7 +314,7 @@ fn a_long_command_line_is_validated_and_recorded() {
     let st = &back.plan().keyjutsu.as_ref().unwrap().steps["long"];
     assert!(st.evidence.iter().filter_map(|e| e.detail.as_deref()).all(|d| d.chars().count() <= 1000));
     assert!(
-        st.evidence.iter().any(|e| e.detail.as_deref().is_some_and(|d| d.ends_with('…'))),
+        st.evidence.iter().any(|e| e.detail.as_deref().is_some_and(|d| d.contains("…`"))),
         "the cut is marked"
     );
 }

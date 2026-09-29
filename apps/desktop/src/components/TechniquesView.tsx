@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { technique, TechniqueDraft } from "@keyjutsu/types";
+import { agentLabel, when } from "../history";
 import { ipc } from "../ipc";
 
 interface Props {
@@ -43,7 +44,7 @@ export function TechniquesView({ busy, onDraft }: Props) {
       {list && list.length === 0 && (
         <p className="muted">None yet. A run that completed can be made into one from History.</p>
       )}
-      <div className="columns">
+      <div className="history-layout">
         <ul className="plain list">
           {(list ?? []).map((t) => (
             <li key={t.id}>
@@ -62,41 +63,70 @@ export function TechniquesView({ busy, onDraft }: Props) {
             </li>
           ))}
         </ul>
-        {selected && (
-          <div className="card stack">
-            <h2>{selected.name}</h2>
-            {selected.parameters.length === 0 && (
-              <p className="small muted">It has no parameters.</p>
-            )}
-            {selected.parameters.map((p) => (
-              <label key={p.name} className="small">
-                {p.name}
-                <input
-                  value={values[p.name] ?? ""}
-                  onChange={(e) => setValues({ ...values, [p.name]: e.target.value })}
-                />
-              </label>
-            ))}
-            <p className="small muted">
-              This makes a draft plan. It is validated and approved here like any other: a Technique
-              never runs because it worked before.
-            </p>
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={async () => {
-                setError(null);
-                try {
-                  onDraft(await ipc.useTechnique(selected.id, values));
-                } catch (e) {
-                  setError(String(e));
-                }
-              }}
-            >
-              Make a draft plan
-            </button>
-          </div>
-        )}
+        <article className="card run-detail" aria-label="The chosen Technique">
+          {!selected && (list?.length ?? 0) > 0 && (
+            <p className="muted">Choose a Technique to see what it does.</p>
+          )}
+          {selected && (
+            <>
+              <h2 className="run-heading">{selected.name}</h2>
+              <p className="run-meta">
+                <span className="badge">revision {selected.revision}</span>
+                <span>saved {when(selected.provenance.created_at)}</span>
+                <span>planned by {agentLabel(selected.provenance.agent)}</span>
+                {selected.provenance.imported && <span className="chip">Imported</span>}
+              </p>
+              {selected.description && selected.description !== selected.name && (
+                <p>{selected.description}</p>
+              )}
+
+              <p className="eyebrow muted">Steps</p>
+              <ol className="technique-steps">
+                {selected.template.steps.map((st) => (
+                  <li key={st.id}>{st.title}</li>
+                ))}
+              </ol>
+
+              {selected.parameters.length > 0 && (
+                <>
+                  <p className="eyebrow muted">Parameters</p>
+                  {selected.parameters.map((p) => (
+                    <label key={p.name} className="small stack">
+                      <span>
+                        <strong>{p.name}</strong>
+                        {p.description ? ` · ${p.description}` : ""}
+                      </span>
+                      <input
+                        value={values[p.name] ?? ""}
+                        onChange={(e) => setValues({ ...values, [p.name]: e.target.value })}
+                      />
+                    </label>
+                  ))}
+                </>
+              )}
+              <p className="small muted">
+                This makes a draft plan. It is validated and approved here like any other: a
+                Technique never runs because it worked before.
+              </p>
+              <div className="row">
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={async () => {
+                    setError(null);
+                    try {
+                      onDraft(await ipc.useTechnique(selected.id, values));
+                    } catch (e) {
+                      setError(String(e));
+                    }
+                  }}
+                >
+                  Make a draft plan
+                </button>
+              </div>
+            </>
+          )}
+        </article>
       </div>
     </section>
   );

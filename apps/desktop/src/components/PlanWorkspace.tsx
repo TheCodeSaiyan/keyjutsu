@@ -12,6 +12,7 @@ import {
   summaryLine,
   type StepForm,
   STEP_MODES,
+  groupEvidence,
 } from "../plan";
 import { ordinal } from "../labels";
 import { ipc } from "../ipc";
@@ -504,29 +505,6 @@ function StepPanel({
         </p>
       )}
 
-      <p className="eyebrow muted">Readiness</p>
-      {state ? (
-        <ul className="evidence">
-          {state.evidence.map((e, i) => (
-            <li key={i} data-result={e.result}>
-              <span aria-hidden="true">{evidenceGlyph(e.result)}</span> {e.check}
-              {e.detail ? `: ${e.detail}` : ""}
-              <span className="visually-hidden"> ({e.result})</span>
-            </li>
-          ))}
-          {state.remaining_uncertainty.map((u) => (
-            <li key={u} data-result="not_applicable">
-              <span aria-hidden="true">?</span> {u}
-            </li>
-          ))}
-          <li className="muted">Proof: {state.proof_level.toLowerCase()}</li>
-        </ul>
-      ) : (
-        <p className="small muted">
-          {validatedOnce ? "Changed since validation: validate again." : "Not validated yet."}
-        </p>
-      )}
-
       <p className="eyebrow muted">What needs you</p>
       <Conversation
         asks={view.asks.filter((a) => a.step === step.id)}
@@ -536,6 +514,62 @@ function StepPanel({
         act={act}
         onEdit={() => setEditing(true)}
       />
+
+      <p className="eyebrow muted">Readiness</p>
+      {state ? (
+        (() => {
+          const { attention, passed } = groupEvidence(state.evidence);
+          // What failed is under What needs you, with what answers it.
+          const failed = attention.filter((e) => e.result === "failed").length;
+          return (
+            <>
+              <ul className="evidence">
+                {failed > 0 && (
+                  <li data-result="failed">
+                    <span aria-hidden="true">✗</span> {failed}{" "}
+                    {failed === 1 ? "finding needs" : "findings need"} you: see above
+                  </li>
+                )}
+                {attention
+                  .filter((e) => e.result !== "failed")
+                  .map((e, i) => (
+                    <li key={i} data-result={e.result}>
+                      <span aria-hidden="true">{evidenceGlyph(e.result)}</span> {e.check}
+                      {e.detail ? `: ${e.detail}` : ""}
+                      <span className="visually-hidden"> ({e.result})</span>
+                    </li>
+                  ))}
+                {state.remaining_uncertainty.map((u) => (
+                  <li key={u} data-result="not_applicable">
+                    <span aria-hidden="true">?</span> {u}
+                  </li>
+                ))}
+              </ul>
+              {passed.length > 0 && (
+                <details className="evidence-passed">
+                  <summary className="small">
+                    <span aria-hidden="true">✓</span> {passed.length}{" "}
+                    {passed.length === 1 ? "check" : "checks"} passed · proof{" "}
+                    {state.proof_level.toLowerCase()}
+                  </summary>
+                  <ul className="evidence">
+                    {passed.map((e, i) => (
+                      <li key={i} data-result="passed">
+                        <span aria-hidden="true">✓</span> {e.check}
+                        {e.detail ? `: ${e.detail}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
+          );
+        })()
+      ) : (
+        <p className="small muted">
+          {validatedOnce ? "Changed since validation: validate again." : "Not validated yet."}
+        </p>
+      )}
 
       <p className="eyebrow muted">Risk</p>
       <p className="small">

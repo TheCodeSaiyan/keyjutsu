@@ -12,6 +12,7 @@ import {
   readinessTone,
   riskLabel,
   stepFromForm,
+  groupEvidence,
 } from "./plan";
 
 const base: plan.Step = {
@@ -184,5 +185,24 @@ describe("a step's own mode", () => {
     expect(formFromStep(typed).mode).toBe("user_input");
     const cleared = stepFromForm(typed, { ...formFromStep(typed), mode: "" });
     expect(cleared.execution_mode).toBeUndefined();
+  });
+});
+
+describe("groupEvidence", () => {
+  it("puts what needs the operator first and each pass once", () => {
+    const ev = (check: string, result: plan.EvidenceResult, detail?: string): plan.Evidence => ({
+      check,
+      result,
+      detail,
+    });
+    const { attention, passed } = groupEvidence([
+      ev("commands", "passed", "`Test-Path` is a Cmdlet"),
+      ev("preconditions", "failed", "does not hold"),
+      ev("commands", "passed", "`Test-Path` is a Cmdlet"),
+      ev("dry run", "not_applicable", "not dry-run"),
+      ev("syntax", "passed", "parses"),
+    ]);
+    expect(attention.map((e) => e.check)).toEqual(["preconditions", "dry run"]);
+    expect(passed.map((e) => e.detail)).toEqual(["`Test-Path` is a Cmdlet", "parses"]);
   });
 });
