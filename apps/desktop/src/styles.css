@@ -1316,6 +1316,121 @@ button.destructive:disabled {
   background: var(--surface-2);
 }
 
+/* History: the runs, newest first, and the one chosen. */
+.history-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) 3fr;
+  gap: var(--sp-4);
+  align-items: start;
+  margin-top: var(--sp-4);
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.run-row {
+  width: 100%;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+}
+
+.run-row[aria-current="true"] {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+.run-title {
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-compact);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.run-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--text-2);
+}
+
+.run-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+.run-detail .run-heading {
+  font-size: var(--fs-heading3);
+  line-height: var(--lh-heading);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  margin: 0;
+}
+
+.run-stopped {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--state-blocked);
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+}
+
+/* A disarm is not a failure, and a run waiting to continue is neither. */
+.run-stopped.none {
+  border-left-color: var(--border);
+}
+
+.run-stopped.review {
+  border-left-color: var(--state-review);
+}
+
+.run-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.run-steps li {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr auto;
+  gap: var(--sp-2);
+  align-items: baseline;
+}
+
+.run-steps [data-result="passed"] > span:first-child {
+  color: var(--state-ready);
+}
+
+.run-steps [data-result="failed"] > span:first-child {
+  color: var(--state-blocked);
+}
+
+.run-steps [data-result="not_run"] {
+  color: var(--text-2);
+}
+
 /* History and Techniques: a list to choose from, and what was chosen. */
 .page {
   width: 100%;
@@ -1345,6 +1460,9 @@ button.destructive:disabled {
 
 .list button {
   width: 100%;
+  /* Buttons are one control high; a list entry is as tall as its lines. */
+  height: auto;
+  min-height: var(--control-default);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
