@@ -43,7 +43,7 @@ In the desktop app, a run that completes offers **Make it a Technique** as
 soon as it finishes, and any completed run in History has it under its steps:
 give it a name, and list any parameters as `name = value`, one per line.
 
-![The History screen. A completed run, Check that Windows Management Instrumentation is running, is selected, with its two steps marked ok. Below them, Make it a Technique: a name, and one parameter, service_name = Winmgmt, then the Make a Technique button.](../images/history.png)
+![The History screen. One run, Check that Windows Management Instrumentation is running, marked Completed, is selected: when it ran, that it took 4 s, and that Codex planned it, then its two steps, each ticked with its time. Below them, Make it a Technique: a name, and one parameter, service_name = Winmgmt, then the Make a Technique button.](../images/history.png)
 
 From the CLI:
 
@@ -69,7 +69,7 @@ since it has worked on no machine KeyJutsu knows.
 Fill in its parameters, and **Make a draft plan**: the draft opens in the Plan screen, not validated,
 for you to validate and approve.
 
-![The Techniques screen. One Technique, revision 1, worked on 1 machine, is selected, with its service_name parameter filled in as Winmgmt and the Make a draft plan button.](../images/techniques.png)
+![The Techniques screen. One Technique, saved today and worked on 1 machine, is selected: revision 1, when it was saved, that Codex planned it, its two steps, its service_name parameter filled in as Winmgmt, and the Make a draft plan button.](../images/techniques.png)
 
 From the CLI:
 

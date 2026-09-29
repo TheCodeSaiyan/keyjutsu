@@ -87,7 +87,7 @@ readiness, its risk, and how it would be undone. What needs you comes first;
 the checks that passed are folded into one line, each shown once, since a step
 with many commands passes the same check many times:
 
-![The KeyJutsu Plan screen. Two steps of the example plan, both READY and low risk. The first is selected, showing its command, Get-Service -Name Winmgmt, the evidence behind its readiness, and Edit, Retry step with agent, Move and Remove. At the foot, 2/2 ready, no elevation, and Validate and Approve plan.](../images/plan-workspace.png)
+![The KeyJutsu Plan screen. On the left, the agent, Codex CLI, with nothing that needs you and a reply box, and a reviewer. In the middle, two steps of the example plan, both READY and low risk. The first is selected on the right, showing its command, Get-Service -Name Winmgmt, a note that it was checked without your PowerShell profile, 5 checks passed, and Edit, Move up, Move down and Remove. At the foot, 2/2 ready, no elevation, and Save plan, Validate, where it runs, Record and Approve plan.](../images/plan-workspace.png)
 
 From the CLI:
 
