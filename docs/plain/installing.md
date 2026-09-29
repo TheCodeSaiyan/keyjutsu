@@ -6,7 +6,7 @@ that your computer is ready.
 ## Before you start
 
 You'll need the KeyJutsu installer. Its name is
-`KeyJutsu_0.1.12_x64-setup.exe`, and it's on the
+`KeyJutsu_0.1.13_x64-setup.exe`, and it's on the
 [releases page](https://github.com/TheCodeSaiyan/keyjutsu/releases/latest). If
 that page is empty, no copy has been published yet, and someone who builds
 software has to make one for you.
@@ -18,7 +18,7 @@ someone who does nearby. You type it once.
 
 ### 1. Start the installer
 
-Double-click `KeyJutsu_0.1.12_x64-setup.exe`.
+Double-click `KeyJutsu_0.1.13_x64-setup.exe`.
 
 ### 2. Get past the warning
 
