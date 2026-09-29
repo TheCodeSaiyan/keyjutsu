@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { technique, TechniqueDraft } from "@keyjutsu/types";
 import { agentLabel, when } from "../history";
 import { ipc } from "../ipc";
-import { lastChanged, latestFirst, whereItWorked } from "../technique";
+import { filledIn, lastChanged, latestFirst, whereItWorked } from "../technique";
 
 interface Props {
   busy: boolean;
@@ -105,7 +105,7 @@ export function TechniquesView({ busy, onDraft }: Props) {
                 <p className="eyebrow muted">Steps</p>
                 <ol className="technique-steps">
                   {selected.template.steps.map((st) => (
-                    <li key={st.id}>{st.title}</li>
+                    <li key={st.id}>{filledIn(st.title, values)}</li>
                   ))}
                 </ol>
 

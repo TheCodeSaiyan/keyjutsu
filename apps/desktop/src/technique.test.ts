@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { technique } from "@keyjutsu/types";
-import { lastChanged, latestFirst, parameterPairs, whereItWorked } from "./technique";
+import { filledIn, lastChanged, latestFirst, parameterPairs, whereItWorked } from "./technique";
 
 describe("parameterPairs", () => {
   it("reads one name = value per line, trimmed", () => {
@@ -56,6 +56,32 @@ describe("the Techniques list", () => {
     expect(whereItWorked(saved("a", "2026-09-01T10:00:00Z", {}, 3))).toBe("worked on 3 machines");
     expect(whereItWorked(saved("a", "2026-09-01T10:00:00Z", { imported: true }, 0))).toBe(
       "not yet worked on a machine known here",
+    );
+  });
+});
+
+describe("filledIn", () => {
+  it("shows each placeholder as the value it will get", () => {
+    expect(filledIn("Look at the {{kj:service_name}} service", { service_name: "Winmgmt" })).toBe(
+      "Look at the Winmgmt service",
+    );
+    expect(filledIn("{{kj:a}} then {{kj:a}} and {{kj:b}}", { a: "x", b: "y" })).toBe(
+      "x then x and y",
+    );
+  });
+
+  it("names a parameter that has no value yet", () => {
+    expect(filledIn("Look at the {{kj:service_name}} service", { service_name: "  " })).toBe(
+      "Look at the <service_name> service",
+    );
+    expect(filledIn("Look at the {{kj:service_name}} service", {})).toBe(
+      "Look at the <service_name> service",
+    );
+  });
+
+  it("leaves text without placeholders alone", () => {
+    expect(filledIn("Say when Windows last started", { a: "x" })).toBe(
+      "Say when Windows last started",
     );
   });
 });

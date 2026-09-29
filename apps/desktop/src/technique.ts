@@ -27,3 +27,10 @@ export function whereItWorked(t: technique.Technique): string {
   if (n === 0) return "not yet worked on a machine known here";
   return `worked on ${n} machine${n === 1 ? "" : "s"}`;
 }
+
+/**
+ * Text from a Technique's plan with each `{{kj:name}}` shown as the value it
+ * will get, or as `<name>` while that value is blank.
+ */
+export const filledIn = (text: string, values: Record<string, string>) =>
+  text.replace(/\{\{kj:([^}]+)\}\}/g, (_, name: string) => values[name]?.trim() || `<${name}>`);
