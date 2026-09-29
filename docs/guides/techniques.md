@@ -60,9 +60,12 @@ second command.
 
 ### 3. Use it
 
-In the desktop app, **Techniques** lists them, each with its revision and how
-many machines it has worked on. Select one to see what it does before you
-use it: its steps in order, when it was saved and which agent planned it.
+In the desktop app, **Techniques** lists them, the one saved or revalidated
+most recently first, each with when that was and how many machines it has
+worked on; the first is open when you arrive. Select one to see what it does
+before you use it: its steps in order, when it was saved and which agent
+planned it. An imported one says that every step is validated here first,
+since it has worked on no machine KeyJutsu knows.
 Fill in its parameters, and **Make a draft plan**: the draft opens in the Plan screen, not validated,
 for you to validate and approve.
 
