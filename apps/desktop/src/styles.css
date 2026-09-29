@@ -58,6 +58,12 @@ select {
   transition: background var(--motion-fast) var(--ease-standard);
 }
 
+button {
+  height: auto;
+  min-height: var(--control-default);
+  padding: var(--sp-1) var(--sp-3);
+}
+
 button:hover:not(:disabled),
 select:hover {
   background: var(--surface-hover);
@@ -837,7 +843,8 @@ button.text-danger {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(240px, 22%) 1fr minmax(300px, 26%);
+  /* The step panel is where the work is: it gets the room. */
+  grid-template-columns: minmax(220px, 20%) minmax(340px, 1fr) minmax(360px, 36%);
 }
 
 .agent-column,
@@ -913,6 +920,27 @@ button.text-danger {
 
 .conversation textarea {
   width: 100%;
+}
+
+/* Replies waiting for the agent, oldest first. */
+.queued ol {
+  margin: 0 0 var(--sp-2);
+  padding-left: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.queued li {
+  overflow-wrap: anywhere;
+}
+
+.queued li > * + * {
+  margin-left: var(--sp-2);
+}
+
+.queued li[data-sending="true"] > span:first-child {
+  color: var(--text-2);
 }
 
 .asks {
@@ -1148,6 +1176,35 @@ button.text-danger {
 
 .evidence [data-result="failed"] span:first-child {
   color: var(--state-blocked);
+}
+
+/* What passed, folded: open it to see each check once. */
+.evidence-passed,
+.checks-ready {
+  margin: 0 0 var(--sp-3);
+}
+
+.evidence-passed summary,
+.checks-ready summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+
+.evidence-passed summary span,
+.checks-ready summary span {
+  color: var(--state-ready);
+}
+
+.checks-ready .checks {
+  margin-top: var(--sp-2);
+}
+
+.evidence-passed .evidence {
+  margin: var(--sp-1) 0 0;
+}
+
+.evidence li {
+  overflow-wrap: anywhere;
 }
 
 .step-editor {
@@ -1429,6 +1486,15 @@ button.destructive:disabled {
 
 .run-steps [data-result="not_run"] {
   color: var(--text-2);
+}
+
+/* A Technique's steps: what the draft will hold, in order. */
+.technique-steps {
+  margin: 0;
+  padding-left: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
 }
 
 /* History and Techniques: a list to choose from, and what was chosen. */

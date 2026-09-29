@@ -415,7 +415,7 @@ pub fn validate(plan: &ValidPlan, options: Options) -> Report {
                     (Some(line), Some(program)) => match what_if_blocker(line) {
                         None => match what_if(program, line, text) {
                             Ok(w) => dry_runs.push((*text, w)),
-                            Err(e) => problems.push(format!("dry run of `{text}`: {e}")),
+                            Err(e) => problems.push(format!("dry run of {}: {e}", crate::judge::quote(text))),
                         },
                         Some(why) => dry_run_skipped.push((*text, why)),
                     },
@@ -442,7 +442,8 @@ pub fn validate(plan: &ValidPlan, options: Options) -> Report {
             match made_earlier.iter().find(|(target, _)| errors.contains(&normal(target))) {
                 Some((target, by)) => {
                     deferred.push(format!(
-                        "`{text}` could not be dry-run yet: it needs {target}, which `{by}` creates first"
+                        "{} could not be dry-run yet: it needs {target}, which `{by}` creates first",
+                        crate::judge::quote(text)
                     ));
                     false
                 }

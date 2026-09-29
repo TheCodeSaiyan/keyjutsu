@@ -61,8 +61,9 @@ second command.
 ### 3. Use it
 
 In the desktop app, **Techniques** lists them, each with its revision and how
-many machines it has worked on. Select one, fill in its parameters, and
-**Make a draft plan**: the draft opens in the Plan screen, not validated,
+many machines it has worked on. Select one to see what it does before you
+use it: its steps in order, when it was saved and which agent planned it.
+Fill in its parameters, and **Make a draft plan**: the draft opens in the Plan screen, not validated,
 for you to validate and approve.
 
 ![The Techniques screen. One Technique, revision 1, worked on 1 machine, is selected, with its service_name parameter filled in as Winmgmt and the Make a draft plan button.](../images/techniques.png)

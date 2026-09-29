@@ -38,6 +38,7 @@ import { HistoryView } from "./components/HistoryView";
 import { TechniquesView } from "./components/TechniquesView";
 import { boundaryName, confirmationFor } from "./plan";
 import { stagedError } from "./staging";
+import { nextBatch, type Replies, type Reply } from "./replies";
 import {
   PRESENTATIONS,
   isOperatorChord,
@@ -109,6 +110,12 @@ export function App() {
   const [agents, setAgents] = useState<agent.AgentInfo[] | null>(null);
   const [ws, setWs] = useState<workspace.WorkspaceView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Replies to the agent wait here while it works, and go when it is free.
+  const [replies, setReplies] = useState<Reply[]>([]);
+  // The replies being sent now, and whether a failed send has held the rest.
+  const [sending, setSending] = useState<number[]>([]);
+  const [repliesHeld, setRepliesHeld] = useState(false);
+  const replyIds = useRef(0);
   const [sealed, setSealed] = useState<Sealed | null>(null);
   // A run stopped at a restart or other boundary, and what was checked
   // before crossing it.
@@ -334,7 +341,7 @@ export function App() {
   };
 
   /** A workspace request: show what is happening, then the new view. */
-  const act = (label: string, request: () => Promise<workspace.WorkspaceView>) => {
+  const act = useCallback((label: string, request: () => Promise<workspace.WorkspaceView>) => {
     setBusy(label);
     setError(null);
     request()
@@ -345,6 +352,61 @@ export function App() {
       })
       .catch((e) => setError(String(e)))
       .finally(() => setBusy(null));
+  }, []);
+
+  /** A new plan: what was queued for the last one is not for this one. */
+  const forgetReplies = () => {
+    setReplies([]);
+    setRepliesHeld(false);
+  };
+
+  // Send what is queued whenever nothing else is in progress: one request at
+  // a time, oldest first. A sent reply leaves the queue only once the agent
+  // has answered; a failed one stays, and holds the rest until the operator
+  // sends again. The send starts from a timer the cleanup cancels, so a
+  // change before it starts (another request, a removed reply) is seen first,
+  // and one batch is never sent twice.
+  useEffect(() => {
+    if (busy !== null || repliesHeld || armed || !ws) return;
+    const batch = nextBatch(
+      replies,
+      ws.plan.steps.map((s) => s.id),
+    );
+    if (!batch) return;
+    const ids = batch.replies.map((r) => r.id);
+    const title = batch.step ? ws.steps.find((s) => s.id === batch.step)?.title : undefined;
+    const send = () =>
+      act(
+        title
+          ? `The agent is revising "${title}" with your reply…`
+          : "The agent is reconsidering the plan with your reply…",
+        async () => {
+          setSending(ids);
+          try {
+            const w = await (batch.step
+              ? ipc.retryStep(batch.agent, batch.step, batch.guidance)
+              : ipc.revise(batch.agent, batch.guidance));
+            setReplies((rs) => rs.filter((r) => !ids.includes(r.id)));
+            return w;
+          } catch (e) {
+            setRepliesHeld(true);
+            throw e;
+          } finally {
+            setSending([]);
+          }
+        },
+      );
+    const timer = setTimeout(send, 0);
+    return () => clearTimeout(timer);
+  }, [busy, repliesHeld, armed, ws, replies, act]);
+
+  const repliesApi: Replies = {
+    queued: replies,
+    sending,
+    held: repliesHeld,
+    add: (r) => setReplies((rs) => [...rs, { ...r, id: ++replyIds.current }]),
+    remove: (id) => setReplies((rs) => rs.filter((r) => r.id !== id)),
+    resume: () => setRepliesHeld(false),
   };
 
   const approve = async (typed: Record<string, string>) => {
@@ -638,6 +700,8 @@ export function App() {
         {busy && (
           <p className="busy" role="status">
             {busy}
+            {replies.length - sending.length > 0 &&
+              ` · ${replies.length - sending.length} more ${replies.length - sending.length === 1 ? "reply" : "replies"} queued`}
           </p>
         )}
         {error && space !== "terminal" && (
@@ -658,6 +722,7 @@ export function App() {
                 void ipc
                   .openWaiting()
                   .then((o) => {
+                    forgetReplies();
                     setWs(o.view);
                     setSealed(o.sealed);
                     setRunDone(null);
@@ -676,10 +741,14 @@ export function App() {
             agents={agents}
             report={report}
             busy={busy !== null}
-            onPlan={(task, kind, context) =>
-              act("The agent is investigating…", () => ipc.propose(task, kind, context))
-            }
-            onOpen={(text) => act("Reading the plan…", () => ipc.openPlan(text))}
+            onPlan={(task, kind, context) => {
+              forgetReplies();
+              act("The agent is investigating…", () => ipc.propose(task, kind, context));
+            }}
+            onOpen={(text) => {
+              forgetReplies();
+              act("Reading the plan…", () => ipc.openPlan(text));
+            }}
           />
         )}
         {space === "history" && !fullTerminal && (
@@ -693,6 +762,7 @@ export function App() {
           <TechniquesView
             busy={busy !== null}
             onDraft={(draft) => {
+              forgetReplies();
               setWs(draft.view);
               setSealed(null);
               setSpace("plan");
@@ -704,6 +774,7 @@ export function App() {
             view={ws}
             agents={agents}
             busy={busy}
+            replies={repliesApi}
             sealed={sealed}
             canArm={canArm}
             act={act}
@@ -723,10 +794,6 @@ export function App() {
         >
           {!fullTerminal && (
             <header className="topbar">
-              <span className="wordmark">
-                <img src={mark} alt="" width={22} height={22} />
-                KeyJutsu
-              </span>
               <label>
                 Shell{" "}
                 <select
@@ -912,7 +979,7 @@ export function App() {
                 </section>
                 <section>
                   <h2>Readiness</h2>
-                  <ReadinessPanel report={report} />
+                  <ReadinessPanel report={report} fold />
                 </section>
                 <section>
                   <h2>Diagnostics</h2>

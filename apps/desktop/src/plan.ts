@@ -276,3 +276,24 @@ export function retryGuidance(state: plan.StepState | undefined): string {
   if (found.length === 0) return "";
   return `Validation found this step won't run as it is:\n${[...new Set(found)].join("\n")}\nChange it so it will, without changing what it achieves.`;
 }
+
+/**
+ * A step's evidence as the operator reads it: what failed or could not be
+ * decided first, since that is what needs them, and what passed apart, once
+ * each, since a plan with many commands passes the same check many times.
+ */
+export function groupEvidence(evidence: plan.Evidence[]): {
+  attention: plan.Evidence[];
+  passed: plan.Evidence[];
+} {
+  const attention = evidence.filter((e) => e.result !== "passed");
+  const seen = new Set<string>();
+  const passed = evidence.filter((e) => {
+    if (e.result !== "passed") return false;
+    const key = `${e.check}\u0000${e.detail ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { attention, passed };
+}
