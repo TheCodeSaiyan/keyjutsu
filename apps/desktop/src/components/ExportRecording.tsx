@@ -36,7 +36,7 @@ async function dataUri(blob: Blob): Promise<string> {
 /**
  * Export a recorded run (ADR 0021): the whole run, a range of steps, or each
  * step on its own, as a soundless video, a GIF, an asciicast and a guide.
- * Rust has already cut it, taken out what looked like secrets and shortened
+ * Rust has already cut it, taken out what looked like secrets and the account's name, and shortened
  * long pauses; the first seconds play here before anything is saved.
  */
 export function ExportRecording({ session, profile, onClose }: Props) {
@@ -186,7 +186,7 @@ export function ExportRecording({ session, profile, onClose }: Props) {
             />
             <p className="small">
               {whole.redactions.length
-                ? `Taken out as secrets: ${whole.redactions.join(", ")}. Each is shown as *.`
+                ? `Taken out: ${whole.redactions.join(", ")}. Each is shown as *.`
                 : "Nothing in it looked like a secret. Check the preview all the same."}
             </p>
             <fieldset>

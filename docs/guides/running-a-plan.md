@@ -172,6 +172,15 @@ recognisable shape is left in, so watch the preview before you share one. A
 credential step is never in it: PowerShell's masked prompt does not echo
 what you type.
 
+Your account's name is taken out too, since it's in every path under your
+profile (`C:\Users\<name>`): in what the terminal showed, and in the guide's
+titles, objectives and commands, which come from the plan. It's taken out
+where it stands on its own, in any case, and not inside a longer word, so an
+account called `ann` doesn't blank out `annual`. A one-letter account name is
+left in. Other names, such as the one on a OneDrive folder
+(`OneDrive - Contoso`) or the computer's, are not taken out: check the
+preview for those.
+
 ## What gets written
 
 - `check-a-service.approved.checkpoint.json`, next to the snapshot, before

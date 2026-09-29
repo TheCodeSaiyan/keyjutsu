@@ -358,7 +358,7 @@ fn a_recorded_run_is_exported_with_its_steps_from_the_plan() {
     let all: String = whole.events.iter().map(|e| e.data.as_str()).collect();
     assert!(!all.contains("ghp_"), "kept redacted: {all}");
 
-    let e = prepare_export(&session, &whole, Some("say"), None).unwrap();
+    let e = prepare_export(&session, &whole, Some("say"), None, &[]).unwrap();
     assert_eq!(e.steps.len(), 1);
     let say = &e.steps[0];
     assert_eq!(say.step, "say");
@@ -367,6 +367,16 @@ fn a_recorded_run_is_exported_with_its_steps_from_the_plan() {
     assert_eq!(say.commands, planned.commands.iter().map(|c| c.text.clone()).collect::<Vec<_>>());
     assert!(say.printed.contains("done") && !say.printed.contains("Winmgmt"), "{}", say.printed);
     assert!(e.cast.contains("\"start:say\"") && !e.cast.contains("\"start:look\""), "{}", e.cast);
-    assert_eq!(prepare_export(&session, &whole, None, None).unwrap().steps.len(), 2);
-    assert!(prepare_export(&session, &whole, Some("nowhere"), None).is_err());
+    assert_eq!(prepare_export(&session, &whole, None, None, &[]).unwrap().steps.len(), 2);
+    assert!(prepare_export(&session, &whole, Some("nowhere"), None, &[]).is_err());
+
+    // A name in what it printed and in the plan's commands is masked in the
+    // recording and in the guide alike ("Winmgmt" stands in for an account).
+    let named = prepare_export(&session, &whole, Some("look"), None, &["winmgmt".to_owned()]).unwrap();
+    let look = &named.steps[0];
+    assert!(look.commands.iter().all(|c| !c.contains("Winmgmt")), "{:?}", look.commands);
+    assert_eq!((look.title.as_str(), look.objective.as_str()), ("Look at *******", "******* is running."));
+    assert!(!look.printed.contains("Winmgmt"), "{}", look.printed);
+    assert!(!named.cast.to_lowercase().contains("winmgmt"), "{}", named.cast);
+    assert!(named.redactions.iter().any(|r| r.starts_with("account name ×")), "{:?}", named.redactions);
 }

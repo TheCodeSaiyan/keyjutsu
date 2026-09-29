@@ -4,10 +4,12 @@ import type { Recording } from "./Recording";
 
 /**
  * A run's recording, cut and made ready to export: redacted, with long
- * pauses shortened, as asciicast too, and each step for the guide.
+ * pauses shortened, as asciicast too, and each step for the guide. The
+ * account's name is masked in all of it, the guide's text from the plan too.
  */
 export type Export = { title: string, recording: Recording, cast: string, 
 /**
- * Kinds of secret taken out, with counts, never the values.
+ * Kinds of secret taken out, and the account's name, with counts, never
+ * the values.
  */
 redactions: Array<string>, steps: Array<GuideStep>, };

@@ -63,7 +63,7 @@ pub fn history_export(
     out: Option<&std::path::Path>,
     each: Option<&std::path::Path>,
 ) -> ExitCode {
-    use keyjutsu_core::recording::{IDLE_LIMIT, Recording};
+    use keyjutsu_core::recording::{IDLE_LIMIT, Recording, account_names};
     let store = match open() {
         Ok(s) => s,
         Err(c) => return c,
@@ -74,8 +74,9 @@ pub fn history_export(
         Err(e) => return fail(e),
     };
     let steps = recording.steps();
+    let names = account_names();
     let finish = |r: &Recording| -> (Recording, Vec<String>) {
-        let (clean, found) = r.redacted();
+        let (clean, found) = r.redacted_for(&names);
         (clean.limit_idle(IDLE_LIMIT), found)
     };
     let write = |path: &std::path::Path, r: &Recording| -> Result<(), String> {

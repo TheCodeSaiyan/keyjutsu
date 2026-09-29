@@ -899,7 +899,13 @@ async fn recording_export(
         let record = keyjutsu_core::history::load(&store, &session)?;
         let whole =
             keyjutsu_core::history::load_recording(&store, &session)?.ok_or("this run was not recorded")?;
-        keyjutsu_core::recording::prepare_export(&record, &whole, first.as_deref(), last.as_deref())
+        keyjutsu_core::recording::prepare_export(
+            &record,
+            &whole,
+            first.as_deref(),
+            last.as_deref(),
+            &keyjutsu_core::recording::account_names(),
+        )
     })
     .await
     .map_err(|e| e.to_string())?
