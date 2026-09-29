@@ -334,3 +334,36 @@ fn a_mode_the_operator_chose_survives_a_revision() {
     let modes: Vec<Option<ExecutionMode>> = p.plan.plan().steps.iter().map(|s| s.execution_mode).collect();
     assert_eq!(modes, [Some(ExecutionMode::Direct), None]);
 }
+
+/// A slow stand-in for an agent's CLI: `cmd` waiting half a minute.
+fn slow_agent() -> Invocation {
+    Invocation {
+        program: PathBuf::from("cmd"),
+        args: vec!["/D".into(), "/C".into(), "ping -n 30 127.0.0.1 >NUL".into()],
+        stdin: String::new(),
+        cwd: std::env::temp_dir(),
+        output_file: None,
+    }
+}
+
+#[test]
+fn an_agent_the_operator_stops_ends_saying_so() {
+    let runner = keyjutsu_agent::ProcessRunner::default();
+    runner.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let started = std::time::Instant::now();
+    let e = runner.run(&slow_agent()).unwrap_err();
+    assert_eq!(e, AgentError::Stopped);
+    assert_eq!(e.to_string(), "stopped at your request; nothing was changed");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
+fn an_agent_that_overruns_says_how_long_it_had() {
+    let runner = keyjutsu_agent::ProcessRunner {
+        timeout: std::time::Duration::from_millis(500),
+        ..keyjutsu_agent::ProcessRunner::default()
+    };
+    let e = runner.run(&slow_agent()).unwrap_err();
+    assert_eq!(e, AgentError::TimedOut { minutes: 1 });
+    assert!(e.to_string().starts_with("the agent had not answered after 1 minute,"), "{e}");
+}

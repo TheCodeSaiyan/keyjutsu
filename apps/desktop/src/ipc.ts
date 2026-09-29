@@ -110,6 +110,8 @@ export const ipc = {
     invoke<workspace.WorkspaceView>("workspace_fix_failure", { agent, guidance }),
   revise: (agent: agent.AgentKind, guidance: string) =>
     invoke<workspace.WorkspaceView>("workspace_revise", { agent, guidance }),
+  /** Stop the agent request in progress; it fails, and changes nothing. */
+  agentStop: () => invoke<void>("agent_stop"),
   review: (agent: agent.AgentKind) =>
     invoke<workspace.WorkspaceView>("workspace_review", { agent }),
   approve: (confirmations: Record<string, string>) =>
