@@ -16,6 +16,7 @@ import {
 } from "../plan";
 import { ordinal } from "../labels";
 import { ipc } from "../ipc";
+import type { Replies } from "../replies";
 import { Conversation } from "./Conversation";
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
   agents: agent.AgentInfo[] | null;
   /** What is in progress, if anything, in words ("Validating…"). */
   busy: string | null;
+  /** Replies to the agent, queued while it works. */
+  replies: Replies;
   sealed: Sealed | null;
   canArm: boolean;
   /** Run a request that returns the new view. */
@@ -45,7 +48,7 @@ interface Props {
  * the whole plan and decides what needs validating again.
  */
 export function PlanWorkspace(props: Props) {
-  const { view, agents, busy, sealed, canArm, act } = props;
+  const { view, agents, busy, replies, sealed, canArm, act } = props;
   const [selected, setSelected] = useState<string | null>(null);
   const validatedOnce = everValidated(view.plan);
   const installed = (agents ?? []).filter((a) => a.path !== null);
@@ -70,6 +73,7 @@ export function PlanWorkspace(props: Props) {
         primary={primary}
         setPrimary={setAgentKind}
         busy={busy}
+        replies={replies}
         act={act}
       />
 
@@ -257,6 +261,7 @@ export function PlanWorkspace(props: Props) {
             validatedOnce={validatedOnce}
             primary={primary}
             busy={busy}
+            replies={replies}
             act={act}
           />
         ) : (
@@ -273,6 +278,7 @@ function AgentPanel({
   primary,
   setPrimary,
   busy,
+  replies,
   act,
 }: {
   view: workspace.WorkspaceView;
@@ -280,6 +286,7 @@ function AgentPanel({
   primary: agent.AgentKind | undefined;
   setPrimary(k: agent.AgentKind): void;
   busy: string | null;
+  replies: Replies;
   act: Props["act"];
 }) {
   const reviewers = installed.filter((a) => a.kind !== primary);
@@ -332,6 +339,7 @@ function AgentPanel({
         step={undefined}
         primary={primary}
         busy={busy}
+        replies={replies}
         act={act}
       />
       <div className="stack">
@@ -373,6 +381,7 @@ function StepPanel({
   validatedOnce,
   primary,
   busy,
+  replies,
   act,
 }: {
   view: workspace.WorkspaceView;
@@ -381,6 +390,7 @@ function StepPanel({
   validatedOnce: boolean;
   primary: agent.AgentKind | undefined;
   busy: string | null;
+  replies: Replies;
   act: Props["act"];
 }) {
   const [editing, setEditing] = useState(false);
@@ -511,6 +521,7 @@ function StepPanel({
         step={step}
         primary={primary}
         busy={busy}
+        replies={replies}
         act={act}
         onEdit={() => setEditing(true)}
       />

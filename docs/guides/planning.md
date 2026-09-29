@@ -118,9 +118,21 @@ leaves it as it was.
 
 Or ask the agent. Under **What needs you**, each step and the plan have a
 reply box: **Send to agent** passes what you wrote as guidance, for that step
-or for the whole plan, and **Keep as a note** keeps it for yourself. What the
-agent sends back arrives unvalidated and unapproved, like any change. From the
-CLI:
+or for the whole plan (Ctrl+Enter does the same), and **Keep as a note** keeps
+it for yourself. What the agent sends back arrives unvalidated and unapproved,
+like any change.
+
+You don't have to wait for the agent to finish. While it's working, the button
+reads **Queue for the agent**: what you write waits under the reply box, in the
+order the agent will get it, and goes when the agent is free. Replies in a row
+about the same thing go as one request, so three quick thoughts cost one
+revision, not three. **Remove** takes one back before it's sent. If a send
+fails, nothing is lost: the reply goes back to the queue, the rest wait behind
+it, and **Send again** carries on. A reply about a step the agent has since
+removed goes to the plan, naming the step. The queue belongs to the plan it
+was written for: starting or opening another plan clears it.
+
+From the CLI:
 
 ```powershell
 keyjutsu plan revise spooler.json --step restart --guidance "Don't restart it; find out what stops it" --agent claude --out spooler.v2.json --send

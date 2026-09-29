@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { agent, plan, workspace } from "@keyjutsu/types";
 import { ipc } from "../ipc";
+import type { Replies } from "../replies";
 
 /**
  * What needs the operator in a step, or in the whole plan, and the choices
@@ -8,13 +9,15 @@ import { ipc } from "../ipc";
  * the kind of finding, never from what an agent wrote; each choice here only
  * calls the workspace operation it names. Free text is always possible: for
  * a step it goes to the agent as that step's guidance, for the plan as the
- * plan's; or it is kept as the operator's note.
+ * plan's; or it is kept as the operator's note. A reply written while the
+ * agent is working is queued, and sent when it is free.
  */
 export function Conversation({
   asks,
   step,
   primary,
   busy,
+  replies,
   act,
   onEdit,
 }: {
@@ -23,6 +26,7 @@ export function Conversation({
   step: plan.Step | undefined;
   primary: agent.AgentKind | undefined;
   busy: string | null;
+  replies: Replies;
   act(label: string, request: () => Promise<workspace.WorkspaceView>): void;
   onEdit?(): void;
 }) {
@@ -118,6 +122,17 @@ export function Conversation({
       case "accept_as_is":
         return "Run it as it is";
     }
+  };
+
+  const target = step?.id ?? null;
+  const queued = replies.queued.filter((r) => r.step === target);
+  // Only the reply queues while the agent works: a choice answers the plan
+  // as it is now, which the agent is about to change.
+  const reply = () => {
+    const t = text.trim();
+    if (!primary || !t) return;
+    replies.add({ agent: primary, step: target, stepTitle: step?.title ?? null, text: t });
+    setText("");
   };
 
   const needsAgent = (c: workspace.Choice) =>
@@ -221,18 +236,21 @@ export function Conversation({
           value={text}
           placeholder="What to change, or a note"
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              reply();
+            }
+          }}
         />
       </label>
       <div className="row">
         <button
-          disabled={busy !== null || !primary || !text.trim()}
-          title={primary ? undefined : "Open this plan with an agent to ask it"}
-          onClick={() => {
-            askAgent(text.trim());
-            setText("");
-          }}
+          disabled={!primary || !text.trim()}
+          title={primary ? "Ctrl+Enter sends it too" : "Open this plan with an agent to ask it"}
+          onClick={reply}
         >
-          Send to agent
+          {busy !== null ? "Queue for the agent" : "Send to agent"}
         </button>
         <button
           disabled={busy !== null || !text.trim()}
@@ -247,8 +265,41 @@ export function Conversation({
       </div>
       {text.trim() && (
         <p className="small muted">
-          What the agent sends back comes back unvalidated and unapproved, like any change.
+          {busy !== null
+            ? "The agent is busy: this waits its turn, and goes when it is free."
+            : "What the agent sends back comes back unvalidated and unapproved, like any change."}
         </p>
+      )}
+      {queued.length > 0 && (
+        <div className="queued">
+          <p className="small muted">
+            {replies.held
+              ? "Held: the last reply could not be sent. It is kept here."
+              : "Your replies, in the order the agent gets them:"}
+          </p>
+          <ol>
+            {queued.map((r) => {
+              const now = replies.sending.includes(r.id);
+              return (
+                <li key={r.id} data-sending={now}>
+                  <span>{r.text}</span>
+                  {now ? (
+                    <span className="small muted">with the agent now</span>
+                  ) : (
+                    <button className="link small" onClick={() => replies.remove(r.id)}>
+                      Remove
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {replies.held && (
+            <button disabled={busy !== null} onClick={replies.resume}>
+              Send again
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

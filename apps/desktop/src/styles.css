@@ -922,6 +922,27 @@ button.text-danger {
   width: 100%;
 }
 
+/* Replies waiting for the agent, oldest first. */
+.queued ol {
+  margin: 0 0 var(--sp-2);
+  padding-left: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.queued li {
+  overflow-wrap: anywhere;
+}
+
+.queued li > * + * {
+  margin-left: var(--sp-2);
+}
+
+.queued li[data-sending="true"] > span:first-child {
+  color: var(--text-2);
+}
+
 .asks {
   list-style: none;
   padding: 0;
