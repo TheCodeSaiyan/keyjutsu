@@ -17,6 +17,23 @@ New-Item -ItemType File "$out\started" | Out-Null
 $installer = Get-ChildItem "$kj\installer\*.exe" | Select-Object -First 1
 $p = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
 log "installer exited $($p.ExitCode)"
+
+# The Sandbox's image can say WebView2 is installed at a version whose files
+# it does not have, once the host's WebView2 has updated: the installer then
+# skips it and the app cannot open. Point the app at the version that is
+# there instead.
+$wv = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+$pv = (Get-ItemProperty $wv -ErrorAction SilentlyContinue).pv
+$runtimes = "${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application"
+if (-not ($pv -and (Test-Path "$runtimes\$pv\msedgewebview2.exe"))) {
+    $there = Get-ChildItem $runtimes -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path "$($_.FullName)\msedgewebview2.exe" } | Select-Object -Last 1
+    log "WebView2 $pv is registered but not present; found: $(@(Get-ChildItem $runtimes -Name -ErrorAction SilentlyContinue) -join ', ')"
+    if ($there) {
+        $env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $there.FullName
+        log "using WebView2 from $($there.FullName)"
+    }
+}
 $app = "$env:ProgramFiles\KeyJutsu\keyjutsu-desktop.exe"
 
 # Stand-in agents: no real agent, no account, nobody's versions.
@@ -135,6 +152,8 @@ d click 'History'
 Start-Sleep -Seconds 3
 d click 'Check that Windows Management Instrumentation'
 Start-Sleep -Seconds 3
+d click 'Make it a Technique'     # the form opens only when asked
+Start-Sleep -Seconds 1
 d click 'Parameters, one per line'
 d keys 'service_name = Winmgmt'
 Start-Sleep -Seconds 1
