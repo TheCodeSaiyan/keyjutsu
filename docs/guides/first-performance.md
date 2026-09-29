@@ -28,7 +28,7 @@ In the desktop app, the first screen has **Try the safe demo**. It stages
 the same three commands; open **Terminal**, choose the **Clean** profile, and
 press **Arm KeyJutsu** to begin:
 
-![The Terminal screen with the safe demo ready. On the left, the mode (Performance selected), Turbo, what submits a command, the demo's read-only commands and the red Arm KeyJutsu button. On the right, Windows PowerShell with the Clean profile, waiting at its prompt.](../images/terminal.png)
+![The Terminal screen with the safe demo ready. On the left, the mode (Performance selected), Turbo, what submits a command, the demo's read-only commands and the red Arm KeyJutsu button, then Readiness, naming PowerShell 7 and Git as not installed. On the right, Windows PowerShell with the Clean profile, waiting at its prompt.](../images/terminal.png)
 
 ### 2. Mash the keyboard
 
