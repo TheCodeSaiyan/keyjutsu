@@ -637,6 +637,18 @@ button.arm {
   background: var(--surface-2);
   border-bottom: 1px solid var(--border-subtle);
   color: var(--state-running);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.busy p {
+  margin: 0;
+  flex: 1;
+}
+
+.busy button {
+  flex-shrink: 0;
 }
 
 .banner {

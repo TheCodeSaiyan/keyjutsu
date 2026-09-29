@@ -12,6 +12,8 @@
 //! - Every accepted answer is recorded in provenance.
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use keyjutsu_plan::model::{
@@ -41,16 +43,18 @@ pub trait Runner {
     fn run(&self, invocation: &Invocation) -> Result<RunOutput, AgentError>;
 }
 
-/// Starts the agent's CLI and waits for it, up to `timeout`.
-#[derive(Debug, Clone, Copy)]
+/// Starts the agent's CLI and waits for it, up to `timeout`, or until `stop`
+/// is set by whoever asked.
+#[derive(Debug, Clone)]
 pub struct ProcessRunner {
     pub timeout: Duration,
+    pub stop: Arc<AtomicBool>,
 }
 
 impl Default for ProcessRunner {
     fn default() -> Self {
         // Agents investigate before answering; ten minutes is generous but finite.
-        Self { timeout: Duration::from_secs(600) }
+        Self { timeout: Duration::from_secs(600), stop: Arc::default() }
     }
 }
 
@@ -62,7 +66,13 @@ impl Runner for ProcessRunner {
             let _ = std::fs::remove_file(f);
         }
         let done =
-            process::run(command, &inv.stdin, self.timeout).map_err(|e| AgentError::Run(e.to_string()))?;
+            process::run_stoppable(command, &inv.stdin, self.timeout, &self.stop).map_err(|e| match e {
+                process::RunError::Stopped { .. } => AgentError::Stopped,
+                process::RunError::TimedOut { seconds, .. } => AgentError::TimedOut {
+                    minutes: usize::try_from(seconds.div_ceil(60)).unwrap_or(usize::MAX).max(1),
+                },
+                e => AgentError::Run(e.to_string()),
+            })?;
         let output_file = inv.output_file.as_ref().and_then(|f| std::fs::read_to_string(f).ok());
         Ok(RunOutput { success: done.success, stdout: done.stdout, stderr: done.stderr, output_file })
     }
@@ -74,6 +84,11 @@ pub enum AgentError {
     Invocation(#[from] InvocationError),
     #[error("the agent could not be run: {0}")]
     Run(String),
+    /// The operator stopped it. Nothing it had done is kept.
+    #[error("stopped at your request; nothing was changed")]
+    Stopped,
+    #[error("the agent had not answered after {}, so it was stopped; nothing was changed", keyjutsu_plan::count(*minutes, "minute", "minutes"))]
+    TimedOut { minutes: usize },
     #[error("the agent failed: {0}")]
     Failed(String),
     /// The agent said it did not run in the read-only mode KeyJutsu asked

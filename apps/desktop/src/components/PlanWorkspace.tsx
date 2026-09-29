@@ -28,8 +28,8 @@ interface Props {
   replies: Replies;
   sealed: Sealed | null;
   canArm: boolean;
-  /** Run a request that returns the new view. */
-  act(label: string, request: () => Promise<workspace.WorkspaceView>): void;
+  /** Run a request that returns the new view; `agent` when an agent answers it, which can be stopped. */
+  act(label: string, request: () => Promise<workspace.WorkspaceView>, agent?: boolean): void;
   onApprove(): void;
   onArm(): void;
   /** How the plan will run: the same choice as the Terminal's Performance panel. */
@@ -361,7 +361,7 @@ function AgentPanel({
         </label>
         <button
           disabled={busy !== null || !chosenReviewer}
-          onClick={() => act("Asking for a review…", () => ipc.review(chosenReviewer!))}
+          onClick={() => act("Asking for a review…", () => ipc.review(chosenReviewer!), true)}
         >
           Ask for review
         </button>

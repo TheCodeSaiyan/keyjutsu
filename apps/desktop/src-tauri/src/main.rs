@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -99,6 +99,8 @@ struct Plans {
     waiting: Mutex<Option<PathBuf>>,
     /// The operator's answer to a critical confirmation: `Some(None)` declines.
     answer: Arc<(Mutex<Option<Option<String>>>, Condvar)>,
+    /// Set to stop the agent request in progress. One runs at a time.
+    agent_stop: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -354,6 +356,20 @@ fn agents(runner: &ProcessRunner) -> Agents<'_, ProcessRunner> {
     Agents { runner, scratch: std::env::temp_dir(), max_repairs: 2 }
 }
 
+/// A runner for a new agent request, which [`agent_stop`] can stop. A stop
+/// meant for the last request is forgotten.
+fn agent_runner(plans: &Plans) -> ProcessRunner {
+    plans.agent_stop.store(false, Ordering::SeqCst);
+    ProcessRunner { stop: plans.agent_stop.clone(), ..ProcessRunner::default() }
+}
+
+/// Stop the agent request in progress, and everything the agent started.
+/// The plan stays as it was before the request: requests work on a copy.
+#[tauri::command]
+fn agent_stop(plans: State<'_, Arc<Plans>>) {
+    plans.agent_stop.store(true, Ordering::SeqCst);
+}
+
 #[tauri::command]
 fn workspace_view(plans: State<'_, Arc<Plans>>) -> Option<WorkspaceView> {
     locked(&plans.workspace).as_ref().map(Workspace::view)
@@ -444,7 +460,7 @@ async fn workspace_propose(
             items.push(ContextItem::Text { label: "pasted".into(), text: context });
         }
         let prepared = prepare(&items).map_err(|e| e.to_string())?;
-        let runner = ProcessRunner::default();
+        let runner = agent_runner(&plans);
         let w = Workspace::propose(&agents(&runner), &handle, &task, &prepared, &fingerprint::now_rfc3339())
             .map_err(|e| e.to_string())?;
         let view = w.view();
@@ -542,7 +558,7 @@ async fn agent_request(
     let plans = plans.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let handle = handle(agent)?;
-        let runner = ProcessRunner::default();
+        let runner = agent_runner(&plans);
         let a = agents(&runner);
         // Work on a copy so the draft stays usable while the agent thinks.
         let mut copy = locked(&plans.workspace).clone().ok_or("there is no plan open")?;
@@ -1239,6 +1255,7 @@ fn main() {
             technique_use,
             workspace_revise,
             workspace_review,
+            agent_stop,
             workspace_approve,
             plan_run,
             plan_confirm,

@@ -36,6 +36,7 @@ import { ExportRecording } from "./components/ExportRecording";
 import { ResumeDialog } from "./components/ResumeDialog";
 import { HistoryView } from "./components/HistoryView";
 import { TechniquesView } from "./components/TechniquesView";
+import { BusyLine } from "./components/BusyLine";
 import { boundaryName, confirmationFor } from "./plan";
 import { stagedError } from "./staging";
 import { nextBatch, type Replies, type Reply } from "./replies";
@@ -110,6 +111,14 @@ export function App() {
   const [agents, setAgents] = useState<agent.AgentInfo[] | null>(null);
   const [ws, setWs] = useState<workspace.WorkspaceView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // When it started, and whether it is an agent's request, which can be stopped.
+  const [busySince, setBusySince] = useState(0);
+  const [busyAgent, setBusyAgent] = useState(false);
+  const startBusy = useCallback((label: string, agent = false) => {
+    setBusy(label);
+    setBusySince(Date.now());
+    setBusyAgent(agent);
+  }, []);
   // Replies to the agent wait here while it works, and go when it is free.
   const [replies, setReplies] = useState<Reply[]>([]);
   // The replies being sent now, and whether a failed send has held the rest.
@@ -341,18 +350,21 @@ export function App() {
   };
 
   /** A workspace request: show what is happening, then the new view. */
-  const act = useCallback((label: string, request: () => Promise<workspace.WorkspaceView>) => {
-    setBusy(label);
-    setError(null);
-    request()
-      .then((w) => {
-        setWs(w);
-        setSealed(null);
-        setSpace("plan");
-      })
-      .catch((e) => setError(String(e)))
-      .finally(() => setBusy(null));
-  }, []);
+  const act = useCallback(
+    (label: string, request: () => Promise<workspace.WorkspaceView>, agent = false) => {
+      startBusy(label, agent);
+      setError(null);
+      request()
+        .then((w) => {
+          setWs(w);
+          setSealed(null);
+          setSpace("plan");
+        })
+        .catch((e) => setError(String(e)))
+        .finally(() => setBusy(null));
+    },
+    [startBusy],
+  );
 
   /** A new plan: what was queued for the last one is not for this one. */
   const forgetReplies = () => {
@@ -395,6 +407,7 @@ export function App() {
             setSending([]);
           }
         },
+        true,
       );
     const timer = setTimeout(send, 0);
     return () => clearTimeout(timer);
@@ -410,7 +423,7 @@ export function App() {
   };
 
   const approve = async (typed: Record<string, string>) => {
-    setBusy("Approving and sealing…");
+    startBusy("Approving and sealing…");
     setError(null);
     try {
       setSealed(await ipc.approve(typed));
@@ -698,11 +711,14 @@ export function App() {
       )}
       <main className="main">
         {busy && (
-          <p className="busy" role="status">
-            {busy}
-            {replies.length - sending.length > 0 &&
-              ` · ${replies.length - sending.length} more ${replies.length - sending.length === 1 ? "reply" : "replies"} queued`}
-          </p>
+          <BusyLine
+            key={busySince}
+            label={busy}
+            since={busySince}
+            agent={busyAgent}
+            queued={replies.length - sending.length}
+            onStop={() => void ipc.agentStop().catch((e) => setError(String(e)))}
+          />
         )}
         {error && space !== "terminal" && (
           <p role="alert" className="banner error">
@@ -743,7 +759,7 @@ export function App() {
             busy={busy !== null}
             onPlan={(task, kind, context) => {
               forgetReplies();
-              act("The agent is investigating…", () => ipc.propose(task, kind, context));
+              act("The agent is investigating…", () => ipc.propose(task, kind, context), true);
             }}
             onOpen={(text) => {
               forgetReplies();
@@ -844,7 +860,7 @@ export function App() {
                   busy={busy !== null}
                   agents={agents ?? []}
                   onFix={async (fixWith, guidance) => {
-                    setBusy("The agent is working out what went wrong…");
+                    startBusy("The agent is working out what went wrong…", true);
                     try {
                       setWs(await ipc.fixFailure(fixWith, guidance));
                       setRunDone(null);
@@ -863,7 +879,7 @@ export function App() {
                   onReview={() => ipc.recoveryPlan()}
                   onRecover={async () => {
                     if (sessionId === null) throw new Error("no terminal");
-                    setBusy("Recovering…");
+                    startBusy("Recovering…");
                     try {
                       return await ipc.recover(sessionId);
                     } finally {

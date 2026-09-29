@@ -132,6 +132,12 @@ it, and **Send again** carries on. A reply about a step the agent has since
 removed goes to the plan, naming the step. The queue belongs to the plan it
 was written for: starting or opening another plan clears it.
 
+An agent can take minutes, so the line at the top of the window shows how long
+it has been working, and **Stop** ends it: the agent and everything it started
+are stopped, and nothing is changed, whether it was writing a new plan or
+revising this one. Replies queued behind it are kept, held until you **Send
+again**. KeyJutsu stops an agent itself after ten minutes, and says so.
+
 From the CLI:
 
 ```powershell

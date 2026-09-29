@@ -2,7 +2,8 @@
 //! helpers speak.
 
 use std::io::{Read, Write};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +19,9 @@ pub enum RunError {
     Start { program: String, detail: String },
     #[error("{program} did not finish within {seconds} seconds and was stopped")]
     TimedOut { program: String, seconds: u64 },
+    /// Whoever started it asked for it to stop.
+    #[error("{program} was stopped")]
+    Stopped { program: String },
 }
 
 /// Run `command`, feed it `stdin`, and give up after `limit`. Output is read
@@ -26,7 +30,18 @@ pub enum RunError {
 /// [keyjutsu_terminal::shell::command]).
 pub use keyjutsu_terminal::shell::command;
 
-pub fn run(mut command: Command, stdin: &str, limit: Duration) -> Result<Finished, RunError> {
+pub fn run(command: Command, stdin: &str, limit: Duration) -> Result<Finished, RunError> {
+    run_stoppable(command, stdin, limit, &AtomicBool::new(false))
+}
+
+/// [`run`], which also gives up as soon as `stop` is set, from another thread:
+/// the operator no longer wants the answer.
+pub fn run_stoppable(
+    mut command: Command,
+    stdin: &str,
+    limit: Duration,
+    stop: &AtomicBool,
+) -> Result<Finished, RunError> {
     // Never a console window of its own: from the desktop app, which has
     // none, each program started would otherwise flash one up.
     keyjutsu_terminal::shell::no_window(&mut command);
@@ -60,10 +75,13 @@ pub fn run(mut command: Command, stdin: &str, limit: Duration) -> Result<Finishe
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
+            Ok(None) if stop.load(Ordering::SeqCst) => {
+                end_tree(&mut child);
+                return Err(RunError::Stopped { program });
+            }
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
             _ => {
-                let _ = child.kill();
-                let _ = child.wait();
+                end_tree(&mut child);
                 return Err(RunError::TimedOut { program, seconds: limit.as_secs() });
             }
         }
@@ -73,6 +91,20 @@ pub fn run(mut command: Command, stdin: &str, limit: Duration) -> Result<Finishe
         stdout: out_thread.join().unwrap_or_default(),
         stderr: err_thread.join().unwrap_or_default(),
     })
+}
+
+/// End `child` and everything it started. An agent reached through a `.cmd`
+/// shim is `cmd.exe` running `node.exe`: ending only the first would leave the
+/// agent working, and holding the output pipes open.
+fn end_tree(child: &mut Child) {
+    if cfg!(windows) {
+        let mut taskkill = command("taskkill");
+        taskkill.args(["/T", "/F", "/PID", &child.id().to_string()]);
+        keyjutsu_terminal::shell::no_window(&mut taskkill);
+        let _ = taskkill.stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -139,6 +171,32 @@ mod tests {
         let r = run(c, "", Duration::from_millis(500));
         assert!(matches!(r, Err(RunError::TimedOut { .. })), "{r:?}");
         assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_process_asked_to_stop_stops_with_what_it_started() {
+        // The child starts a second cmd that would write a file after two
+        // seconds: stopping the child has to stop that one too.
+        let marker = std::env::temp_dir().join(format!("kj-stop-{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        let mut c = keyjutsu_terminal::shell::command("cmd");
+        // Raw: cmd reads its own quotes, not the C runtime's escaped ones.
+        std::os::windows::process::CommandExt::raw_arg(
+            &mut c,
+            format!("/D /C cmd /D /C \"ping -n 3 127.0.0.1 >NUL & echo x> {}\"", marker.display()),
+        );
+        let stop = std::sync::Arc::new(AtomicBool::new(false));
+        let setter = stop.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            setter.store(true, Ordering::SeqCst);
+        });
+        let started = Instant::now();
+        let r = run_stoppable(c, "", Duration::from_secs(60), &stop);
+        assert!(matches!(r, Err(RunError::Stopped { .. })), "{r:?}");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        std::thread::sleep(Duration::from_secs(4));
+        assert!(!marker.exists(), "what the stopped process started carried on");
     }
 
     #[test]

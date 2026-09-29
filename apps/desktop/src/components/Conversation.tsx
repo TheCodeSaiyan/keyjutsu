@@ -27,7 +27,7 @@ export function Conversation({
   primary: agent.AgentKind | undefined;
   busy: string | null;
   replies: Replies;
-  act(label: string, request: () => Promise<workspace.WorkspaceView>): void;
+  act(label: string, request: () => Promise<workspace.WorkspaceView>, agent?: boolean): void;
   onEdit?(): void;
 }) {
   const [text, setText] = useState("");
@@ -38,17 +38,23 @@ export function Conversation({
 
   const sendAnswer = (question: string, text: string) => {
     if (!primary) return;
-    act("The agent is reconsidering the plan with your answer…", () =>
-      ipc.answer(primary, question, text),
+    act(
+      "The agent is reconsidering the plan with your answer…",
+      () => ipc.answer(primary, question, text),
+      true,
     );
   };
 
   const askAgent = (guidance: string) => {
     if (!primary) return;
     if (step) {
-      act("The agent is revising this step…", () => ipc.retryStep(primary, step.id, guidance));
+      act(
+        "The agent is revising this step…",
+        () => ipc.retryStep(primary, step.id, guidance),
+        true,
+      );
     } else {
-      act("The agent is reconsidering the plan…", () => ipc.revise(primary, guidance));
+      act("The agent is reconsidering the plan…", () => ipc.revise(primary, guidance), true);
     }
   };
 
@@ -274,7 +280,7 @@ export function Conversation({
         <div className="queued">
           <p className="small muted">
             {replies.held
-              ? "Held: the last reply could not be sent. It is kept here."
+              ? "Held: the agent did not answer the last reply, so it is kept here with the rest. Send again when you are ready."
               : "Your replies, in the order the agent gets them:"}
           </p>
           <ol>

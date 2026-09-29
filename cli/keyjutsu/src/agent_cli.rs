@@ -475,7 +475,7 @@ pub fn check(live: bool) -> ExitCode {
         eprintln!("          Run `keyjutsu agents check --live` to do it.");
         return ExitCode::from(2);
     }
-    let runner = ProcessRunner { timeout: std::time::Duration::from_secs(180) };
+    let runner = ProcessRunner { timeout: std::time::Duration::from_secs(180), ..ProcessRunner::default() };
     let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 0 };
     let mut failures = 0;
     for info in detect_all().into_iter().filter(|a| a.installed()) {
