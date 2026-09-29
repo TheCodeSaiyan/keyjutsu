@@ -1254,8 +1254,14 @@ button.text-danger {
   pointer-events: auto;
 }
 
+/* Never taller than the window: long commands wrap, and the scrim is fixed,
+   so anything past the edge could not be scrolled to. The heading and the
+   phrase with its buttons stay put; what sits between them scrolls. */
 .critical-dialog {
+  display: flex;
+  flex-direction: column;
   width: min(720px, 92vw);
+  max-height: calc(100vh - 2 * var(--sp-4));
   background: var(--surface-1);
   border: 1px solid var(--kj-critical);
   border-radius: var(--r-lg);
@@ -1312,10 +1318,17 @@ button.text-danger {
 
 .critical-dialog dl {
   display: grid;
-  grid-template-columns: 9em 1fr;
+  grid-template-columns: 9em minmax(0, 1fr);
   gap: var(--sp-2) var(--sp-4);
   margin: 0;
   padding: var(--sp-4);
+  min-height: 0;
+  overflow: auto;
+}
+
+.critical-dialog header,
+.critical-dialog form {
+  flex-shrink: 0;
 }
 
 .critical-dialog dt {
@@ -1331,6 +1344,7 @@ button.text-danger {
 
 .critical-dialog .target {
   display: block;
+  overflow-wrap: anywhere;
   padding: var(--sp-2) var(--sp-3);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -1385,7 +1399,7 @@ button.destructive:disabled {
   background: var(--surface-2);
 }
 
-/* History: the runs, newest first, and the one chosen. */
+/* History and Techniques: the runs or Techniques, latest first, and the one chosen. */
 .history-layout {
   display: grid;
   grid-template-columns: minmax(260px, 2fr) 3fr;
@@ -1509,7 +1523,6 @@ button.destructive:disabled {
   gap: var(--sp-1);
 }
 
-/* History and Techniques: a list to choose from, and what was chosen. */
 .page {
   width: 100%;
   max-width: var(--layout-content-max);
@@ -1520,35 +1533,4 @@ button.destructive:disabled {
 
 .page .eyebrow {
   color: var(--accent);
-}
-
-.columns {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) 2fr;
-  gap: var(--sp-4);
-  align-items: start;
-  margin-top: var(--sp-4);
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.list button {
-  width: 100%;
-  /* Buttons are one control high; a list entry is as tall as its lines. */
-  height: auto;
-  min-height: var(--control-default);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  padding: var(--sp-2) var(--sp-3);
-  text-align: left;
-}
-
-.list button[aria-current] {
-  border-color: var(--accent);
 }

@@ -54,7 +54,11 @@ Option 3.
   fell, which keeps the timing and the layout. The operator sees the first
   frames, and the redaction count, before anything is saved. A secret typed
   at a credential step is never in the recording: PowerShell's masked prompt
-  does not echo it.
+  does not echo it. The account's name, and its profile folder's where that
+  differs, is masked the same way wherever it stands on its own, in the
+  recording and in the guide's text from the plan, since every path under the
+  profile names it. This is done at export, not in the store, so a recording
+  made before it is covered too.
 
 ### Sizes
 

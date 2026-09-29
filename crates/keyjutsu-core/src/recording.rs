@@ -201,6 +201,13 @@ impl Recording {
     /// drawn in pieces or in colour is found whole. Returns the kinds found,
     /// with counts, never the values.
     pub fn redacted(&self) -> (Recording, Vec<String>) {
+        self.redacted_for(&[])
+    }
+
+    /// [`Recording::redacted`], with `names` masked too wherever one stands
+    /// on its own ([`name_spans`]): the account's name, for an export that
+    /// may be shared, since it is in every path under the profile.
+    pub fn redacted_for(&self, names: &[String]) -> (Recording, Vec<String>) {
         // Each visible character: (event, byte offset in its data, length).
         let mut visible = String::new();
         let mut places: Vec<(usize, usize, usize)> = Vec::new();
@@ -221,14 +228,21 @@ impl Recording {
         }
         let mut masked: Vec<Vec<(usize, usize)>> = vec![Vec::new(); self.events.len()];
         let mut counts: Vec<(&'static str, usize)> = Vec::new();
-        for (range, kind) in keyjutsu_agent::context::secret_spans(&visible) {
+        let names = names.iter().flat_map(|name| name_spans(&visible, name)).map(|r| (r, ACCOUNT_NAME));
+        for (range, kind) in keyjutsu_agent::context::secret_spans(&visible).into_iter().chain(names) {
             match counts.iter_mut().find(|(k, _)| *k == kind) {
                 Some((_, n)) => *n += 1,
                 None => counts.push((kind, 1)),
             }
-            for (n, &(event, offset, len)) in places.iter().enumerate() {
+            // `starts` is in order: only the characters inside `range`.
+            let first = starts.partition_point(|&s| s < range.start);
+            for n in first..starts.len() {
+                if starts[n] >= range.end {
+                    break;
+                }
+                let (event, offset, len) = places[n];
                 let c = visible[starts[n]..].chars().next().unwrap_or(' ');
-                if range.contains(&starts[n]) && !c.is_control() {
+                if !c.is_control() {
                     masked[event].push((offset, len));
                 }
             }
@@ -242,6 +256,8 @@ impl Recording {
                     return e.clone();
                 }
                 mask.sort_unstable();
+                // A character inside both a secret and a name is masked once.
+                mask.dedup();
                 let mut data = String::with_capacity(e.data.len());
                 let mut from = 0;
                 for (offset, len) in mask {
@@ -345,6 +361,75 @@ impl Recording {
     }
 }
 
+/// How an account's name is listed among what an export took out.
+const ACCOUNT_NAME: &str = "account name";
+
+/// What names this person on this machine, to keep out of an export: the
+/// account's name, and its profile folder's, which can differ (a renamed
+/// account keeps its folder). A one-letter name is left alone: masking every
+/// "a" standing on its own would hide more than it protects.
+pub fn account_names() -> Vec<String> {
+    let folder = std::env::var("USERPROFILE")
+        .ok()
+        .and_then(|p| std::path::Path::new(&p).file_name().map(|n| n.to_string_lossy().into_owned()));
+    let mut names: Vec<String> = Vec::new();
+    for name in [std::env::var("USERNAME").ok(), folder].into_iter().flatten() {
+        let name = name.trim().to_owned();
+        if name.chars().count() >= 2 && !names.iter().any(|n| n.to_lowercase() == name.to_lowercase()) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// Where `name` stands on its own in `text`, in any case: `nrtat` in
+/// `C:\Users\nrtat>` or `nrtat@host`, not inside a longer word.
+pub fn name_spans(text: &str, name: &str) -> Vec<std::ops::Range<usize>> {
+    let wanted: Vec<char> = name.chars().collect();
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    if wanted.is_empty() || wanted.len() > chars.len() {
+        return Vec::new();
+    }
+    let same = |a: char, b: char| a == b || a.to_lowercase().eq(b.to_lowercase());
+    let word = |c: Option<&(usize, char)>| c.is_some_and(|&(_, c)| c.is_alphanumeric());
+    let mut spans = Vec::new();
+    let mut i = 0;
+    while i + wanted.len() <= chars.len() {
+        let end = i + wanted.len();
+        if chars[i..end].iter().zip(&wanted).all(|(&(_, c), &w)| same(c, w))
+            && !word(i.checked_sub(1).and_then(|p| chars.get(p)))
+            && !word(chars.get(end))
+        {
+            spans.push(chars[i].0..chars.get(end).map_or(text.len(), |&(b, _)| b));
+            i = end;
+        } else {
+            i += 1;
+        }
+    }
+    spans
+}
+
+/// `text` with each of `names` standing on its own masked, one `*` for each
+/// character, and how many were.
+pub fn mask_names(text: &str, names: &[String]) -> (String, usize) {
+    let mut spans: Vec<std::ops::Range<usize>> = names.iter().flat_map(|n| name_spans(text, n)).collect();
+    spans.sort_by_key(|r| r.start);
+    let mut out = String::with_capacity(text.len());
+    let mut from = 0;
+    let mut count = 0;
+    for r in spans {
+        if r.start < from {
+            continue;
+        }
+        out.push_str(&text[from..r.start]);
+        out.extend(text[r.clone()].chars().map(|_| '*'));
+        from = r.end;
+        count += 1;
+    }
+    out.push_str(&text[from..]);
+    (out, count)
+}
+
 /// A step as the guide describes it: from the plan, and what it printed.
 #[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export, export_to = "recording/")]
@@ -362,26 +447,29 @@ pub struct GuideStep {
 }
 
 /// A run's recording, cut and made ready to export: redacted, with long
-/// pauses shortened, as asciicast too, and each step for the guide.
+/// pauses shortened, as asciicast too, and each step for the guide. The
+/// account's name is masked in all of it, the guide's text from the plan too.
 #[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export, export_to = "recording/")]
 pub struct Export {
     pub title: String,
     pub recording: Recording,
     pub cast: String,
-    /// Kinds of secret taken out, with counts, never the values.
+    /// Kinds of secret taken out, and the account's name, with counts, never
+    /// the values.
     pub redactions: Vec<String>,
     pub steps: Vec<GuideStep>,
 }
 
 /// Run `record`'s recording `whole`, from step `first` to step `last` (the
 /// whole run if neither is given; the run's first or last step for the one
-/// left out), ready to export.
+/// left out), ready to export, with `names` ([`account_names`]) masked.
 pub fn prepare_export(
     record: &crate::history::SessionRecord,
     whole: &Recording,
     first: Option<&str>,
     last: Option<&str>,
+    names: &[String],
 ) -> Result<Export, String> {
     let spans = whole.steps();
     let cut = match (first, last) {
@@ -395,21 +483,30 @@ pub fn prepare_export(
             }
         }
     };
-    let (clean, redactions) = cut.redacted();
-    let recording = clean.limit_idle(IDLE_LIMIT);
+    let (clean, mut redactions) = cut.redacted_for(names);
+    let mut recording = clean.limit_idle(IDLE_LIMIT);
     let snapshot = record.snapshot()?;
     let plan = snapshot.plan();
+    // The guide's words come from the plan, whose paths name the account too.
+    let mut in_text = 0;
+    let mut mask = |text: &str| {
+        let (masked, n) = mask_names(text, names);
+        in_text += n;
+        masked
+    };
+    recording.title = mask(&recording.title);
+    let title = mask(&record.task);
     let steps = recording
         .steps()
         .into_iter()
         .map(|span| {
             let step = plan.step(&span.step);
             GuideStep {
-                title: step.map_or_else(|| span.step.clone(), |s| s.title.clone()),
-                objective: step.map(|s| s.objective.clone()).unwrap_or_default(),
-                reason: step.and_then(|s| s.reason.clone()),
+                title: mask(&step.map_or_else(|| span.step.clone(), |s| s.title.clone())),
+                objective: mask(&step.map(|s| s.objective.clone()).unwrap_or_default()),
+                reason: step.and_then(|s| s.reason.as_deref()).map(&mut mask),
                 commands: step
-                    .map(|s| s.commands.iter().map(|c| c.text.clone()).collect())
+                    .map(|s| s.commands.iter().map(|c| mask(&c.text)).collect())
                     .unwrap_or_default(),
                 printed: recording.step_text(&span.step, 4000).unwrap_or_default(),
                 succeeded: span.succeeded,
@@ -417,7 +514,17 @@ pub fn prepare_export(
             }
         })
         .collect();
-    Ok(Export { title: record.task.clone(), cast: recording.to_cast(), recording, redactions, steps })
+    if in_text > 0 {
+        let prefix = format!("{ACCOUNT_NAME} ×");
+        match redactions.iter_mut().find(|r| r.starts_with(&prefix)) {
+            Some(r) => {
+                let before: usize = r[prefix.len()..].parse().unwrap_or(0);
+                *r = format!("{prefix}{}", before + in_text);
+            }
+            None => redactions.push(format!("{prefix}{in_text}")),
+        }
+    }
+    Ok(Export { title, cast: recording.to_cast(), recording, redactions, steps })
 }
 
 /// Just enough of a terminal's escape-sequence grammar to tell what is drawn
@@ -538,6 +645,34 @@ mod tests {
         assert_eq!(all, format!("echo \u{1b}[93m{}\u{1b}[0m\r\ndone", "*".repeat(token.len())));
         assert_eq!(clean.events.len(), r.events.len(), "timing kept");
         assert!(sample().redacted().1.is_empty());
+    }
+
+    /// The account's name, drawn in pieces and in colour, is masked where it
+    /// stands on its own, in any case, and nowhere inside a longer word.
+    #[test]
+    fn the_account_name_is_masked_where_it_stands_alone() {
+        use EventKind::Output;
+        let events = vec![
+            ev(0.0, Output, "PS C:\\Users\\nr"),
+            ev(0.1, Output, "\u{1b}[93mtat\u{1b}[0m> dir\r\n"),
+            ev(0.2, Output, "NRTAT@pc  nrtatx  xnrtat  nrtat\r\n"),
+        ];
+        let r = Recording { width: 80, height: 24, title: String::new(), events };
+        let (clean, found) = r.redacted_for(&["nrtat".to_owned()]);
+        assert_eq!(found, ["account name ×3"]);
+        let all: String = clean.events.iter().map(|e| e.data.as_str()).collect();
+        assert_eq!(all, "PS C:\\Users\\**\u{1b}[93m***\u{1b}[0m> dir\r\n*****@pc  nrtatx  xnrtat  *****\r\n");
+        assert_eq!(r.redacted().1, Vec::<String>::new(), "without names, only secrets");
+    }
+
+    #[test]
+    fn text_from_the_plan_is_masked_the_same_way() {
+        let names = ["nrtat".to_owned(), "Nigel Tatum".to_owned()];
+        let (text, n) = mask_names(r"$d = 'C:\Users\nrtat\OneDrive - Nigel Tatum\Desktop'", &names);
+        assert_eq!(text, r"$d = 'C:\Users\*****\OneDrive - ***********\Desktop'");
+        assert_eq!(n, 2);
+        assert_eq!(mask_names("nrtatx", &names), ("nrtatx".to_owned(), 0));
+        assert!(name_spans("abc", "").is_empty());
     }
 
     #[test]

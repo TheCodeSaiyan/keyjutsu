@@ -68,7 +68,7 @@ export function guideMarkdown(e: recording.Export, images: Map<string, string>):
     }
     if (s.succeeded === false) out.push("**This step failed.**", "");
   });
-  if (e.redactions.length) out.push(`_Taken out as secrets: ${e.redactions.join(", ")}._`, "");
+  if (e.redactions.length) out.push(`_Taken out: ${e.redactions.join(", ")}._`, "");
   return out.join("\n");
 }
 
@@ -98,7 +98,7 @@ export function guideHtml(e: recording.Export, images: Map<string, string>): str
     })
     .join("\n");
   const taken = e.redactions.length
-    ? `<p><em>Taken out as secrets: ${escapeHtml(e.redactions.join(", "))}.</em></p>`
+    ? `<p><em>Taken out: ${escapeHtml(e.redactions.join(", "))}.</em></p>`
     : "";
   return `<!doctype html>
 <html lang="en">

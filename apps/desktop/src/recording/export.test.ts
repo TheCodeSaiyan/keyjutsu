@@ -63,7 +63,7 @@ describe("export", () => {
     expect(md).toContain("```powershell\nStart-Process cat.jpg -Verb Print\n```");
     expect(md).toContain("![Step 1: Print the photo to a PDF](01-make-pdf.png)");
     expect(md).toContain("**This step failed.**");
-    expect(md).toContain("Taken out as secrets: GitHub token ×1");
+    expect(md).toContain("Taken out: GitHub token ×1");
     // A command holding a fence cannot close its own block.
     expect(md).toContain("````powershell\nWrite-Output '```'\n````");
   });
