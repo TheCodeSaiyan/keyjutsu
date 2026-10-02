@@ -92,7 +92,7 @@ jobs:
       # The release publishes one; it is made here too, so a change that
       # breaks it is found on the pull request, not on the tag.
       - run: node scripts/sbom.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: keyjutsu-installer-unsigned
           path: target/release/bundle/nsis/*.exe
