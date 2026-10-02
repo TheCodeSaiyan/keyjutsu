@@ -49,7 +49,7 @@ crossterm = "0.29"
 getrandom = "0.4"
 # Without its default features it cannot fetch or read remote schemas: plans
 # are only ever checked against the schemas compiled into KeyJutsu.
-jsonschema = { version = "0.57", default-features = false }
+jsonschema = { version = "0.58", default-features = false }
 portable-pty = "0.9"
 proptest = "1.11"
 regex = "1"
