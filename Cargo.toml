@@ -28,7 +28,7 @@ default-members = [
 [workspace.package]
 version = "0.1.16"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.90"
 license = "GPL-3.0-only"
 publish = false
 

@@ -126,7 +126,7 @@ KeyJutsu here" on Explorer's folder menus.
 
 ## Build from source
 
-You need Rust 1.88 or later, Node 22 or later and pnpm 9.
+You need Rust 1.90 or later, Node 22 or later and pnpm 9.
 
 ```powershell
 pnpm install
