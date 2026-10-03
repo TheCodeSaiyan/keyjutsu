@@ -63,8 +63,12 @@ fn outcomes(c: &Collector) -> Vec<StepOutcome> {
 }
 
 fn wait_outcomes(c: &Collector, n: usize) -> Vec<StepOutcome> {
+    wait_outcomes_within(c, n, TIMEOUT)
+}
+
+fn wait_outcomes_within(c: &Collector, n: usize, within: Duration) -> Vec<StepOutcome> {
     assert!(
-        c.wait_until(TIMEOUT, |s| {
+        c.wait_until(within, |s| {
             s.events.iter().filter(|e| matches!(e, SessionEvent::StepFinished { .. })).count() >= n
         }),
         "timed out waiting for {n} step(s); output:\n{}",
@@ -296,7 +300,11 @@ fn the_safe_demo_runs_in_direct_mode() {
     let (session, out) = start(ShellKind::Pwsh);
     let config = PerformanceConfig { mode: ExecutionMode::Direct, ..PerformanceConfig::default() };
     session.arm(keyjutsu_core::demo::safe_demo(ShellKind::Pwsh), config).unwrap();
-    let results = wait_outcomes(&out, 3);
+    // Two of the demo's three commands ask WMI (Get-ComputerInfo, Get-Volume),
+    // whose first answer on a fresh machine is slow, and CI runs these shells
+    // side by side on a few cores: one CI run spent the whole 30 s before
+    // Get-Volume printed. The budget is for the demo, not for each step.
+    let results = wait_outcomes_within(&out, 3, Duration::from_secs(90));
     assert!(results.iter().all(|o| matches!(o, StepOutcome::Succeeded { .. })), "{results:?}");
     wait_for_text(&out, "PSVersion");
     session.close();
