@@ -191,7 +191,7 @@ jobs:
           for f in *.exe *.cdx.json; do sha256sum "$f" | tr -d '\n' > "$f.sha256"; done
           cat *.sha256; echo
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: keyjutsu-installer
           path: out/
@@ -287,7 +287,7 @@ jobs:
           Pop-Location
           "Ran $said from the portable build, which says it cannot run Administrator steps."
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: keyjutsu-portable
           path: portable/
@@ -351,7 +351,7 @@ jobs:
           version="${{ needs.installer.outputs.version }}"
           node scripts/winget.mjs "$version" "out/KeyJutsu_${version}_x64-setup.exe" winget
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: winget-manifests
           path: winget/
