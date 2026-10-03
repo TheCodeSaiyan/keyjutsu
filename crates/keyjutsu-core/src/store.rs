@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use aes_gcm::aead::{Aead, KeyInit, Payload};
+use aes_gcm::aead::{Aead, AeadCore, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -53,6 +53,12 @@ impl std::fmt::Debug for Store {
     }
 }
 
+/// The nonce stored after the four magic bytes; callers have checked that
+/// there are at least sixteen.
+fn nonce_at(bytes: &[u8]) -> Result<Nonce<<Aes256Gcm as AeadCore>::NonceSize>, String> {
+    Nonce::try_from(&bytes[4..16]).map_err(|_| "a stored nonce has the wrong length".to_owned())
+}
+
 fn valid_name(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 128
@@ -69,10 +75,9 @@ impl Store {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => create_key(&key_file)?,
             Err(e) => return Err(e.to_string()),
         };
-        if key.len() != 32 {
-            return Err("the store key has the wrong length".into());
-        }
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+        let key = Key::<Aes256Gcm>::try_from(key.as_slice())
+            .map_err(|_| "the store key has the wrong length".to_owned())?;
+        let cipher = Aes256Gcm::new(&key);
         Ok(Self { root: root.to_owned(), cipher })
     }
 
@@ -98,7 +103,7 @@ impl Store {
         getrandom::fill(&mut nonce).map_err(|e| e.to_string())?;
         let sealed = self
             .cipher
-            .encrypt(Nonce::from_slice(&nonce), Payload { msg: &plain, aad: &Self::aad(kind, id) })
+            .encrypt(&Nonce::from(nonce), Payload { msg: &plain, aad: &Self::aad(kind, id) })
             .map_err(|_| "encryption failed".to_owned())?;
         let mut out = Vec::with_capacity(4 + 12 + sealed.len());
         out.extend_from_slice(MAGIC);
@@ -120,10 +125,7 @@ impl Store {
         }
         let plain = self
             .cipher
-            .decrypt(
-                Nonce::from_slice(&bytes[4..16]),
-                Payload { msg: &bytes[16..], aad: &Self::aad(kind, id) },
-            )
+            .decrypt(&nonce_at(&bytes)?, Payload { msg: &bytes[16..], aad: &Self::aad(kind, id) })
             .map_err(|_| {
                 format!("{kind}/{id} could not be decrypted: it was altered or is not this record")
             })?;
@@ -138,7 +140,7 @@ impl Store {
         getrandom::fill(&mut nonce).map_err(|e| e.to_string())?;
         let sealed = self
             .cipher
-            .encrypt(Nonce::from_slice(&nonce), Payload { msg: plain, aad: &Self::copy_aad(label) })
+            .encrypt(&Nonce::from(nonce), Payload { msg: plain, aad: &Self::copy_aad(label) })
             .map_err(|_| "encryption failed".to_owned())?;
         let mut out = Vec::with_capacity(4 + 12 + sealed.len());
         out.extend_from_slice(COPY_MAGIC);
@@ -153,10 +155,7 @@ impl Store {
             return Err(format!("the copy of {label} is not a KeyJutsu copy"));
         }
         self.cipher
-            .decrypt(
-                Nonce::from_slice(&sealed[4..16]),
-                Payload { msg: &sealed[16..], aad: &Self::copy_aad(label) },
-            )
+            .decrypt(&nonce_at(sealed)?, Payload { msg: &sealed[16..], aad: &Self::copy_aad(label) })
             .map_err(|_| {
                 format!("the copy of {label} could not be decrypted: it was altered, or is not that copy")
             })
