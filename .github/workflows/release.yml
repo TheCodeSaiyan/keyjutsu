@@ -37,10 +37,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: node scripts/release-gates.mjs
@@ -75,7 +75,7 @@ jobs:
       signed: ${{ steps.signed.outputs.value }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Resolve version
         id: version
@@ -120,7 +120,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -135,7 +135,7 @@ jobs:
 
       - name: Azure login for signing
         if: env.ARTIFACT_SIGNING_ACCOUNT != ''
-        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -191,7 +191,7 @@ jobs:
           for f in *.exe *.cdx.json; do sha256sum "$f" | tr -d '\n' > "$f.sha256"; done
           cat *.sha256; echo
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: keyjutsu-installer
           path: out/
@@ -207,9 +207,9 @@ jobs:
     timeout-minutes: 15
     needs: installer
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: keyjutsu-installer
           path: out
@@ -287,7 +287,7 @@ jobs:
           Pop-Location
           "Ran $said from the portable build, which says it cannot run Administrator steps."
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: keyjutsu-portable
           path: portable/
@@ -306,14 +306,14 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: keyjutsu-installer
           path: out
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: keyjutsu-portable
           path: out
@@ -351,7 +351,7 @@ jobs:
           version="${{ needs.installer.outputs.version }}"
           node scripts/winget.mjs "$version" "out/KeyJutsu_${version}_x64-setup.exe" winget
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: winget-manifests
           path: winget/
