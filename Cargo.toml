@@ -28,7 +28,7 @@ default-members = [
 [workspace.package]
 version = "0.1.16"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.90"
 license = "GPL-3.0-only"
 publish = false
 
@@ -43,7 +43,7 @@ keyjutsu-broker = { path = "crates/keyjutsu-broker" }
 
 # The history store's record encryption (AES-256-GCM); its key is protected
 # with Windows DPAPI (ADR 0016).
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 clap = { version = "4.5", features = ["derive"] }
 crossterm = "0.29"
 getrandom = "0.4"
