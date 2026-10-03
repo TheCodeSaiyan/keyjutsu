@@ -25,7 +25,8 @@ const RECORD: &str = "4b4a4531a0a1a2a3a4a5a6a7a8a9aaab9d3a124231ae20854012f5ba73
 
 /// `a recovery copy\n` sealed as the copy of `C:/Users/Public/notes.txt`,
 /// nonce b0..bb.
-const COPY: &str = "4b4a4331b0b1b2b3b4b5b6b7b8b9babbf87528ce8fa2cd3a3581b7c1a22df1c8b0e8223754fffbaf9e05220224d34bfc";
+const COPY: &str =
+    "4b4a4331b0b1b2b3b4b5b6b7b8b9babbf87528ce8fa2cd3a3581b7c1a22df1c8b0e8223754fffbaf9e05220224d34bfc";
 
 fn bytes(hex: &str) -> Vec<u8> {
     (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect()
@@ -58,8 +59,7 @@ fn a_copy_sealed_before_still_unseals() {
 fn the_record_is_still_bound_to_its_name() {
     let store = store_with_the_fixed_key("store-format-bound");
     let root = store.root().to_owned();
-    std::fs::copy(root.join("note").join("known-answer.kje"), root.join("note").join("other.kje"))
-        .unwrap();
+    std::fs::copy(root.join("note").join("known-answer.kje"), root.join("note").join("other.kje")).unwrap();
     let err = store.get::<serde_json::Value>("note", "other").unwrap_err();
     assert!(err.contains("could not be decrypted"), "{err}");
 }
