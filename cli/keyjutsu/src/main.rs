@@ -363,17 +363,39 @@ struct AgentArgs {
 
 #[derive(clap::Args)]
 struct ProfileArg {
-    /// The work profile the plan is for, such as it-operations: its rules
-    /// are given to the agent and enforced by validation. `keyjutsu profile
-    /// list` shows them.
+    /// The work profile the plan is for, such as it-operations, instead of
+    /// the one the folder or this machine sets: its rules are given to the
+    /// agent and enforced by validation. `keyjutsu profile list` shows them.
     #[arg(long = "profile", value_name = "NAME")]
     name: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum ProfileCommand {
-    /// List the work profiles.
-    List,
+    /// List the work profiles: the built-ins, this machine's and the folder's.
+    List {
+        /// The folder whose profiles to include; here otherwise.
+        #[arg(long)]
+        folder: Option<std::path::PathBuf>,
+    },
+    /// Show this machine's default work profile, or set it.
+    Default {
+        /// The profile to make the default.
+        name: Option<String>,
+    },
+    /// Say which work profile applies to plans made here, and why.
+    Which {
+        /// The folder a shell would start in; here otherwise.
+        #[arg(long)]
+        folder: Option<std::path::PathBuf>,
+    },
+    /// Accept a folder's default when it is less strict than this machine's,
+    /// for its .keyjutsu files as they are now.
+    Confirm {
+        /// The folder; here otherwise.
+        #[arg(long)]
+        folder: Option<std::path::PathBuf>,
+    },
     /// Show what a work profile enforces and what the agents are told.
     Show {
         /// The profile's name, such as it-operations.
@@ -705,10 +727,17 @@ fn main() -> ExitCode {
         Command::Update { channel, install } => update(channel, install),
         Command::Agents { action: None, json } => agent_cli::list(json),
         Command::Agents { action: Some(AgentsCommand::Check { live }), .. } => agent_cli::check(live),
-        Command::Profile(ProfileCommand::List) => profile_cli::list(),
+        Command::Profile(ProfileCommand::List { folder }) => profile_cli::list(folder.as_deref()),
+        Command::Profile(ProfileCommand::Default { name }) => profile_cli::default(name.as_deref()),
+        Command::Profile(ProfileCommand::Which { folder }) => profile_cli::which(folder.as_deref()),
+        Command::Profile(ProfileCommand::Confirm { folder }) => profile_cli::confirm(folder.as_deref()),
         Command::Profile(ProfileCommand::Show { name }) => profile_cli::show(&name),
         Command::Plan(PlanCommand::Propose { task, agent, files, folder, out }) => {
-            match profile_cli::chosen(agent.profile.name.as_deref()) {
+            match profile_cli::chosen(
+                agent.profile.name.as_deref(),
+                folder.as_deref(),
+                profile_cli::Purpose::Planning,
+            ) {
                 Ok(profile) => agent_cli::propose(
                     &task,
                     &agent.agent,
@@ -722,7 +751,11 @@ fn main() -> ExitCode {
             }
         }
         Command::Plan(PlanCommand::Revise { file, step, guidance, task, session, agent, out }) => {
-            let profile = match profile_cli::chosen(agent.profile.name.as_deref()) {
+            let profile = match profile_cli::chosen(
+                agent.profile.name.as_deref(),
+                None,
+                profile_cli::Purpose::Planning,
+            ) {
                 Ok(p) => p,
                 Err(c) => return c,
             };
@@ -750,7 +783,7 @@ fn main() -> ExitCode {
             })
         }
         Command::Plan(PlanCommand::Review { file, task, agent, record }) => {
-            match profile_cli::chosen(agent.profile.name.as_deref()) {
+            match profile_cli::chosen(agent.profile.name.as_deref(), None, profile_cli::Purpose::Checking) {
                 Ok(profile) => agent_cli::review(
                     &file,
                     task.as_deref(),
@@ -829,13 +862,13 @@ fn main() -> ExitCode {
         Command::Plan(PlanCommand::Check { file, stored }) => plan_check(&file, stored),
         Command::Plan(PlanCommand::Hash { file }) => plans::hash(&file),
         Command::Plan(PlanCommand::Validate { file, no_dry_run, json, profile }) => {
-            match profile_cli::chosen(profile.name.as_deref()) {
+            match profile_cli::chosen(profile.name.as_deref(), None, profile_cli::Purpose::Checking) {
                 Ok(profile) => plans::validate(&file, !no_dry_run, json, profile),
                 Err(c) => c,
             }
         }
         Command::Plan(PlanCommand::Approve { file, out, confirmations, force, no_dry_run, profile }) => {
-            match profile_cli::chosen(profile.name.as_deref()) {
+            match profile_cli::chosen(profile.name.as_deref(), None, profile_cli::Purpose::Checking) {
                 Ok(profile) => plans::approve(&file, &out, &confirmations, force, !no_dry_run, profile),
                 Err(c) => c,
             }

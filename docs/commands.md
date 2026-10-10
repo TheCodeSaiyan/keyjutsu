@@ -98,7 +98,7 @@ it shows exactly what would be sent and stops.
 | `--send` | actually send it |
 | `--file FILE` | a file to include, redacted; repeatable |
 | `--folder DIR` | a folder the agent may investigate; it's started there |
-| `--profile NAME` | the [work profile](guides/work-profiles.md) the plan is for: its rules go to the agent |
+| `--profile NAME` | a [work profile](guides/work-profiles.md) instead of the one the folder or machine sets |
 | `--out FILE` | where to write the plan |
 
 ### `keyjutsu plan revise FILE --step STEP --guidance TEXT --agent AGENT --out FILE`
@@ -141,7 +141,7 @@ run. Nothing the plan names is run.
 | --- | --- |
 | `--no-dry-run` | skip `-WhatIf` dry runs |
 | `--json` | the full report as JSON |
-| `--profile NAME` | also check it against a [work profile](guides/work-profiles.md) |
+| `--profile NAME` | a [work profile](guides/work-profiles.md) instead of the one the folder or machine sets |
 
 ### `keyjutsu plan approve FILE --out SNAPSHOT`
 
@@ -156,7 +156,7 @@ what it runs and why it's critical.
 | `--confirm STEP=PHRASE` | approve a critical step with its phrase; repeatable |
 | `--force` | replace an existing file at `--out` |
 | `--no-dry-run` | skip `-WhatIf` dry runs in the validation before sealing |
-| `--profile NAME` | validate against a [work profile](guides/work-profiles.md) before sealing |
+| `--profile NAME` | a [work profile](guides/work-profiles.md) instead of the one the folder or machine sets |
 
 ### `keyjutsu plan stage FILE`
 
@@ -183,7 +183,24 @@ to validation.
 
 ### `keyjutsu profile list`
 
-The [work profiles](guides/work-profiles.md), each with the one it extends.
+The [work profiles](guides/work-profiles.md), each with the one it extends:
+the built-ins, this machine's, and the folder's. `--folder DIR` lists a
+folder's other than this one.
+
+### `keyjutsu profile default [NAME]`
+
+Shows this machine's default work profile, or sets it.
+
+### `keyjutsu profile which`
+
+Which work profile applies to plans made here, and why: the folder that
+chose it, the machine's default, or what stops one being chosen.
+`--folder DIR` asks about another folder.
+
+### `keyjutsu profile confirm`
+
+Accepts a folder's default when it's less strict than this machine's, for
+its `.keyjutsu` files as they are now. `--folder DIR` as above.
 
 ### `keyjutsu profile show NAME`
 

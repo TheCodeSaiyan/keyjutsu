@@ -1534,3 +1534,59 @@ button.destructive:disabled {
 .page .eyebrow {
   color: var(--accent);
 }
+
+/* The work profile the next plan is made under. One line when one applies;
+   a banner with the choice to make when one does not. */
+.work-profile {
+  margin-top: var(--sp-3);
+}
+
+.work-profile-line {
+  margin: 0;
+}
+
+.work-profile-line .eyebrow {
+  display: inline;
+  margin-right: var(--sp-1);
+}
+
+.work-profile-needs p {
+  margin: 0 0 var(--sp-2);
+}
+
+.profile-picker {
+  width: min(560px, 92vw);
+  max-height: calc(100vh - 2 * var(--sp-4));
+  overflow: auto;
+  background: var(--surface-1);
+}
+
+.profile-choices {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The whole row picks the profile, not only the radio button. */
+label.profile-choice {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-2);
+  margin: 0;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+label.profile-choice:hover,
+label.profile-choice:has(input:checked) {
+  background: var(--surface-2);
+}
+
+label.profile-choice input {
+  margin-top: 0.3em;
+}
+
+.block {
+  display: block;
+}

@@ -24,6 +24,10 @@ fn keyjutsu(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
         .args(args)
         .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env(
+            "KEYJUTSU_PROFILE_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+        )
         .output()
         .unwrap()
 }
@@ -148,6 +152,10 @@ fn run_refuses_a_snapshot_this_account_did_not_approve() {
         let refused = Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
             .args(command)
             .env("KEYJUTSU_STORE", dir.join("another-account"))
+            .env(
+                "KEYJUTSU_PROFILE_HOME",
+                std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+            )
             .output()
             .unwrap();
         assert_eq!(refused.status.code(), Some(1), "{command:?}: {}", text(&refused));
@@ -169,6 +177,10 @@ fn a_second_run_is_refused_while_one_changes_the_machine() {
     let refused = Command::new(env!("CARGO_BIN_EXE_keyjutsu"))
         .args(["run", snap.to_str().unwrap()])
         .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env(
+            "KEYJUTSU_PROFILE_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+        )
         .env("KEYJUTSU_RUN_LOCK", &name)
         .output()
         .unwrap();
@@ -247,6 +259,8 @@ fn a_revision_takes_its_failure_from_the_recorded_session() {
             session,
             "--agent",
             "codex",
+            "--profile",
+            "developer",
             "--out",
             "unused.json",
         ])

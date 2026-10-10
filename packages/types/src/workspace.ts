@@ -5,5 +5,8 @@ export type { AskFrom } from "./generated/workspace/AskFrom";
 export type { Choice } from "./generated/workspace/Choice";
 export type { Note } from "./generated/workspace/Note";
 export type { Overall } from "./generated/workspace/Overall";
+export type { ProfileChoice } from "./generated/workspace/ProfileChoice";
+export type { ProfileState } from "./generated/workspace/ProfileState";
+export type { ProfileView } from "./generated/workspace/ProfileView";
 export type { StepSummary } from "./generated/workspace/StepSummary";
 export type { WorkspaceView } from "./generated/workspace/WorkspaceView";
