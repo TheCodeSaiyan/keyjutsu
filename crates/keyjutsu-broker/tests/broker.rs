@@ -54,7 +54,7 @@ fn snapshot(dir: &Path, value: &str) -> ApprovedSnapshot {
         .to_string(),
     )
     .unwrap();
-    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let report = validate(&draft, Options { dry_run: false, broker_available: true, ..Options::default() });
     assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
     let v = ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
     let mut book = ApprovalBook::new();
@@ -327,7 +327,7 @@ fn the_broker_restores_only_its_own_capture_of_what_the_step_declared() {
         .to_string(),
     )
     .unwrap();
-    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let report = validate(&draft, Options { dry_run: false, broker_available: true, ..Options::default() });
     let v = ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
     let mut book = ApprovalBook::new();
     book.approve_all_except_critical(&v, AT);

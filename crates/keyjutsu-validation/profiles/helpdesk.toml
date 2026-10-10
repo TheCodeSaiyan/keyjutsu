@@ -1,0 +1,22 @@
+name = "helpdesk"
+title = "Helpdesk"
+extends = "developer"
+summary = "Fixing one person's machine: careful with their data and their account."
+instructions = """
+Work only on the machines and accounts the task names. Copy a file or
+setting before changing it. Do not touch disks, partitions or boot
+configuration, and do not delete anyone's data to fix a problem.
+"""
+
+[validation]
+require_recovery_from = "high"
+block_opaque_code = true
+
+[[validation.raise]]
+commands = ["*-LocalUser", "*-LocalGroupMember", "net user*", "net localgroup*"]
+to = "high"
+reason = "changes local accounts or group membership"
+
+[[validation.deny]]
+commands = ["Format-Volume", "Clear-Disk", "Initialize-Disk", "Remove-Partition", "Resize-Partition", "format", "diskpart", "bcdedit"]
+reason = "changes disks or boot configuration, which helpdesk work never needs"

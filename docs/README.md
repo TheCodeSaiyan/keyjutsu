@@ -14,6 +14,7 @@ should see.
 - [Installing](guides/installing.md) — install, check the machine, and what the installer changes
 - [Your first performance](guides/first-performance.md) — the safe demo, the keys, and getting the terminal back
 - [Getting a plan from an agent](guides/planning.md) — ask, read what comes back, edit, validate, approve
+- [Work profiles](guides/work-profiles.md) — stricter checks for a kind of work: IT Operations, Helpdesk, Audit only and the rest
 - [Running a plan](guides/running-a-plan.md) — arm it, perform it, and what it asks you along the way
 - [When a run stops](guides/when-a-run-stops.md) — a failed step, a restart in the middle, recovering, resuming
 - [Reusing a plan that worked](guides/techniques.md) — the history, Techniques, and sharing one

@@ -78,6 +78,19 @@ a real one; there's a test that tries exactly that.
 keyjutsu plan validate spooler.json
 ```
 
+## Stricter checks for a kind of work
+
+Six work profiles, from Developer to Audit only, each tighten the one before.
+IT Operations wants a recovery for every change; Helpdesk refuses anything
+that touches a disk; Audit only refuses anything that changes the machine.
+The agent is told the rules, and validation enforces them on commands as
+PowerShell parses them, so wrapping one in `cmd /c` or `-EncodedCommand`
+doesn't get it past. See [Work profiles](guides/work-profiles.md).
+
+```powershell
+keyjutsu plan validate disable.json --profile it-operations
+```
+
 ## Approval that's sealed to what it approved
 
 Approving seals the plan into a snapshot: each step bound to a hash of what

@@ -117,7 +117,7 @@ fn main() -> ExitCode {
     println!("HKLM key before: {}", key_exists());
 
     let draft = parse_plan(&plan("approved")).unwrap();
-    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let report = validate(&draft, Options { dry_run: false, broker_available: true, ..Options::default() });
     for (id, s) in &report.steps {
         println!("validated {id}: {:?}", s.readiness);
     }

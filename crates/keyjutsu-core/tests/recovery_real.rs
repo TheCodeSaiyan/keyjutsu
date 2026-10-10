@@ -370,7 +370,7 @@ fn recovery_commands_run_in_the_terminal_and_are_validated() {
 /// Approved as a machine with the elevation broker installed approves it.
 fn approve_with_broker(v: &Value) -> ApprovedSnapshot {
     let draft = parse_plan(&v.to_string()).unwrap();
-    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let report = validate(&draft, Options { dry_run: false, broker_available: true, ..Options::default() });
     assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
     let validated =
         keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();

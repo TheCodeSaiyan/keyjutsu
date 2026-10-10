@@ -9,6 +9,7 @@ mod console;
 mod git_cli;
 mod history_cli;
 mod plans;
+mod profile_cli;
 mod recover_cli;
 mod run_cli;
 mod setup_cli;
@@ -320,6 +321,9 @@ enum Command {
     /// Work with plan files.
     #[command(subcommand)]
     Plan(PlanCommand),
+    /// The work profiles a plan can be made and checked under.
+    #[command(subcommand)]
+    Profile(ProfileCommand),
     /// Perform commands you supply. They are yours: no plan, no validation and
     /// no approval, and they run exactly as if you had typed them.
     Perform {
@@ -353,6 +357,28 @@ struct AgentArgs {
     /// sent and stops.
     #[arg(long)]
     send: bool,
+    #[command(flatten)]
+    profile: ProfileArg,
+}
+
+#[derive(clap::Args)]
+struct ProfileArg {
+    /// The work profile the plan is for, such as it-operations: its rules
+    /// are given to the agent and enforced by validation. `keyjutsu profile
+    /// list` shows them.
+    #[arg(long = "profile", value_name = "NAME")]
+    name: Option<String>,
+}
+
+#[derive(Subcommand)]
+enum ProfileCommand {
+    /// List the work profiles.
+    List,
+    /// Show what a work profile enforces and what the agents are told.
+    Show {
+        /// The profile's name, such as it-operations.
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -457,6 +483,8 @@ enum PlanCommand {
         /// Print the full report as JSON.
         #[arg(long)]
         json: bool,
+        #[command(flatten)]
+        profile: ProfileArg,
     },
     /// Print each step's hash: what an approval of that step binds to.
     Hash {
@@ -481,6 +509,8 @@ enum PlanCommand {
         /// Skip -WhatIf dry runs during the validation that precedes sealing.
         #[arg(long)]
         no_dry_run: bool,
+        #[command(flatten)]
+        profile: ProfileArg,
     },
     /// Download every artifact the plan needs, check it against its pinned
     /// hash, and keep it for the run. Nothing is downloaded while a plan runs.
@@ -675,10 +705,27 @@ fn main() -> ExitCode {
         Command::Update { channel, install } => update(channel, install),
         Command::Agents { action: None, json } => agent_cli::list(json),
         Command::Agents { action: Some(AgentsCommand::Check { live }), .. } => agent_cli::check(live),
+        Command::Profile(ProfileCommand::List) => profile_cli::list(),
+        Command::Profile(ProfileCommand::Show { name }) => profile_cli::show(&name),
         Command::Plan(PlanCommand::Propose { task, agent, files, folder, out }) => {
-            agent_cli::propose(&task, &agent.agent, agent.send, &files, folder.as_deref(), &out)
+            match profile_cli::chosen(agent.profile.name.as_deref()) {
+                Ok(profile) => agent_cli::propose(
+                    &task,
+                    &agent.agent,
+                    agent.send,
+                    &files,
+                    folder.as_deref(),
+                    &out,
+                    profile,
+                ),
+                Err(c) => c,
+            }
         }
         Command::Plan(PlanCommand::Revise { file, step, guidance, task, session, agent, out }) => {
+            let profile = match profile_cli::chosen(agent.profile.name.as_deref()) {
+                Ok(p) => p,
+                Err(c) => return c,
+            };
             agent_cli::revise(agent_cli::Revise {
                 file: &file,
                 step: &step,
@@ -688,6 +735,7 @@ fn main() -> ExitCode {
                 agent: &agent.agent,
                 send: agent.send,
                 out: &out,
+                profile,
             })
         }
         Command::Plan(PlanCommand::Answer { file, question, answer, carry_on, agent, send, out }) => {
@@ -702,7 +750,17 @@ fn main() -> ExitCode {
             })
         }
         Command::Plan(PlanCommand::Review { file, task, agent, record }) => {
-            agent_cli::review(&file, task.as_deref(), &agent.agent, agent.send, record.as_deref())
+            match profile_cli::chosen(agent.profile.name.as_deref()) {
+                Ok(profile) => agent_cli::review(
+                    &file,
+                    task.as_deref(),
+                    &agent.agent,
+                    agent.send,
+                    record.as_deref(),
+                    profile,
+                ),
+                Err(c) => c,
+            }
         }
         Command::Recover { snapshot, from, steps, confirm, clean } => {
             recover_cli::run(recover_cli::RecoverArgs {
@@ -770,11 +828,17 @@ fn main() -> ExitCode {
         }
         Command::Plan(PlanCommand::Check { file, stored }) => plan_check(&file, stored),
         Command::Plan(PlanCommand::Hash { file }) => plans::hash(&file),
-        Command::Plan(PlanCommand::Validate { file, no_dry_run, json }) => {
-            plans::validate(&file, !no_dry_run, json)
+        Command::Plan(PlanCommand::Validate { file, no_dry_run, json, profile }) => {
+            match profile_cli::chosen(profile.name.as_deref()) {
+                Ok(profile) => plans::validate(&file, !no_dry_run, json, profile),
+                Err(c) => c,
+            }
         }
-        Command::Plan(PlanCommand::Approve { file, out, confirmations, force, no_dry_run }) => {
-            plans::approve(&file, &out, &confirmations, force, !no_dry_run)
+        Command::Plan(PlanCommand::Approve { file, out, confirmations, force, no_dry_run, profile }) => {
+            match profile_cli::chosen(profile.name.as_deref()) {
+                Ok(profile) => plans::approve(&file, &out, &confirmations, force, !no_dry_run, profile),
+                Err(c) => c,
+            }
         }
         Command::Plan(PlanCommand::Stage { file, pin }) => plans::stage(&file, pin.as_deref()),
         Command::Plan(PlanCommand::Verify { snapshot, environment }) => plans::verify(&snapshot, environment),

@@ -197,7 +197,7 @@ fn claude() -> AgentHandle {
 fn an_agent_proposal_becomes_a_workspace_with_the_conversation_beside_it() {
     let runner =
         Replay(RefCell::new(vec![claude_says(&chain(), "Four read-only looks.")]), RefCell::default());
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     let w = Workspace::propose(&agents, &claude(), "Look around", &prepare(&[]).unwrap(), AT).unwrap();
     let v = w.view();
     assert_eq!(v.steps.len(), 4);
@@ -212,7 +212,7 @@ fn retrying_a_step_gives_the_agent_the_findings_and_discards_validation() {
     revised["steps"][1]["commands"][0]["text"] = json!("Get-Location | Format-List");
     let runner =
         Replay(RefCell::new(vec![claude_says(&revised["steps"][1], "Formatted.")]), RefCell::default());
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     let change = w.retry_step(&agents, &claude(), "b", "Show it as a list.", None, AT).unwrap();
 
     assert_eq!(w.plan().step("b").unwrap().commands[0].text, "Get-Location | Format-List");
@@ -236,7 +236,7 @@ fn fixing_a_failed_step_shows_the_agent_what_it_printed() {
         RefCell::new(vec![claude_says(&revised["steps"][1], "It needed a list.")]),
         RefCell::default(),
     );
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     let failure = keyjutsu_core::agent::RunFailure {
         expected: "exit code 0".into(),
         actual: "a command exited with 1".into(),
@@ -268,7 +268,7 @@ fn a_review_adds_concerns_but_changes_no_step() {
         }]),
         RefCell::default(),
     );
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     w.review(&agents, &claude(), AT).unwrap();
     assert_eq!(w.plan().steps, before);
     let v = w.view();
@@ -308,7 +308,7 @@ fn reviewed(concern: &str) -> Workspace {
         }]),
         RefCell::default(),
     );
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     w.review(&agents, &claude(), AT).unwrap();
     w
 }
@@ -419,7 +419,7 @@ fn answering_a_question_asks_the_agent_and_closes_it() {
     let mut revised = asking(); // the agent asks again: it is closed all the same
     revised["steps"][1]["commands"][0]["text"] = json!("Get-Service -Name Spooler");
     let runner = Replay(RefCell::new(vec![claude_says(&revised, "Looking at Spooler.")]), RefCell::default());
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     let change = w.answer(&agents, &claude(), "which-service", "Spooler", AT).unwrap();
 
     let prompt = &runner.1.borrow()[0].stdin;
@@ -461,7 +461,7 @@ fn carrying_on_closes_a_question_and_keeps_validation() {
 fn a_long_answer_keeps_the_plan_valid() {
     let mut w = validated(&asking());
     let runner = Replay(RefCell::new(vec![claude_says(&chain(), "Done.")]), RefCell::default());
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     w.answer(&agents, &claude(), "which-service", &"z".repeat(5000), AT).unwrap();
     assert!(parse_plan(&serde_json::to_string(w.plan()).unwrap()).is_ok());
 }
@@ -471,7 +471,7 @@ fn a_long_answer_keeps_the_plan_valid() {
 fn an_empty_answer_is_not_sent() {
     let mut w = validated(&asking());
     let runner = Replay(RefCell::new(vec![claude_says(&chain(), "Done.")]), RefCell::default());
-    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1 };
+    let agents = Agents { runner: &runner, scratch: std::env::temp_dir(), max_repairs: 1, profile: None };
     assert!(w.answer(&agents, &claude(), "which-service", "  ", AT).is_err());
     assert!(runner.1.borrow().is_empty(), "the agent was asked");
     assert_eq!(w.plan().questions.len(), 1, "the question is still open");

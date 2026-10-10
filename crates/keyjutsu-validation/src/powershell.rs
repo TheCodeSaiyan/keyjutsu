@@ -43,6 +43,9 @@ pub struct CommandUse {
     #[serde(rename = "type")]
     pub kind: Option<String>,
     pub module: Option<String>,
+    /// For an alias, the command it stands for.
+    #[serde(default)]
+    pub resolved: Option<String>,
     pub path: Option<String>,
     pub file_version: Option<String>,
     #[serde(default)]

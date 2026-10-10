@@ -12,6 +12,7 @@ use keyjutsu_core::plan::model::{EvidenceResult, Readiness};
 use keyjutsu_core::plan::{
     ApprovalBook, ApprovedSnapshot, ValidPlan, diff as plan_diff, parse_plan, seal, step_hashes,
 };
+use keyjutsu_core::validation::profile::Profile;
 use keyjutsu_core::validation::{self, Options, Report};
 
 fn read(path: &Path) -> Result<String, ExitCode> {
@@ -79,14 +80,18 @@ fn print_report(plan: &ValidPlan, report: &Report) {
     }
 }
 
-pub fn validate(file: &Path, dry_run: bool, json: bool) -> ExitCode {
+pub fn validate(file: &Path, dry_run: bool, json: bool, profile: Option<Profile>) -> ExitCode {
     let plan = match load_plan(file) {
         Ok(p) => p,
         Err(c) => return c,
     };
     let report = validation::validate(
         &plan,
-        Options { dry_run, broker_available: keyjutsu_broker::broker_path().is_some() },
+        Options {
+            dry_run,
+            broker_available: keyjutsu_broker::broker_path().is_some(),
+            profile: profile.clone(),
+        },
     );
     if json {
         println!("{}", serde_json::to_string_pretty(&report).unwrap_or_default());
@@ -126,7 +131,14 @@ pub fn hash(file: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool, dry_run: bool) -> ExitCode {
+pub fn approve(
+    file: &Path,
+    out: &Path,
+    confirmations: &[String],
+    force: bool,
+    dry_run: bool,
+    profile: Option<Profile>,
+) -> ExitCode {
     if out.exists() && !force {
         eprintln!("keyjutsu: {} already exists; pass --force to replace it", out.display());
         return ExitCode::from(2);
@@ -139,7 +151,11 @@ pub fn approve(file: &Path, out: &Path, confirmations: &[String], force: bool, d
     // KeyJutsu's own risk assessment decides which steps are critical.
     let report = validation::validate(
         &draft,
-        Options { dry_run, broker_available: keyjutsu_broker::broker_path().is_some() },
+        Options {
+            dry_run,
+            broker_available: keyjutsu_broker::broker_path().is_some(),
+            profile: profile.clone(),
+        },
     );
     let not_ready = report.not_ready(&draft);
     if !not_ready.is_empty() || !report.problems.is_empty() {

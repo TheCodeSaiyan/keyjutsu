@@ -1,0 +1,12 @@
+name = "audit-only"
+title = "Audit only"
+extends = "security-response"
+summary = "Looking, not touching: a plan that reads and reports and changes nothing."
+instructions = """
+Change nothing, not even by writing a report to a file: every step reads,
+lists or measures, and what it finds is in its output. A step that would
+change the machine does not belong in this plan.
+"""
+
+[validation]
+max_risk = "low"

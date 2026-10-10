@@ -407,7 +407,7 @@ fn a_broker_that_dies_mid_step_leaves_the_step_in_doubt() {
     let mut admin = step("admin", "Get-Service -Name Winmgmt");
     admin["privilege"] = json!("administrator");
     let draft = parse_plan(&plan(json!([admin, step("after", "Get-Date")]), json!([])).to_string()).unwrap();
-    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let report = validate(&draft, Options { dry_run: false, broker_available: true, ..Options::default() });
     let validated =
         keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
     let mut book = ApprovalBook::new();
@@ -883,7 +883,7 @@ fn an_administrator_step_goes_to_the_broker_not_the_unelevated_shell() {
     s["privilege"] = json!("administrator");
     let v = plan(json!([s]), json!([]));
     let draft = parse_plan(&v.to_string()).unwrap();
-    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let report = validate(&draft, Options { dry_run: false, broker_available: true, ..Options::default() });
     assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
     let validated =
         keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();
@@ -958,7 +958,7 @@ fn an_administrator_steps_capture_is_the_brokers_not_the_profiles() {
     s["recovery"] =
         json!({"strategy": "restore_captured_state", "capture": [{"kind": "file", "target": target}]});
     let draft = parse_plan(&plan(json!([s]), json!([])).to_string()).unwrap();
-    let report = validate(&draft, Options { dry_run: false, broker_available: true });
+    let report = validate(&draft, Options { dry_run: false, broker_available: true, ..Options::default() });
     assert!(report.not_ready(&draft).is_empty(), "{:#?}", report.steps);
     let validated =
         keyjutsu_core::plan::ValidPlan::revalidate(report.record_in(draft.plan(), AT), false).unwrap();

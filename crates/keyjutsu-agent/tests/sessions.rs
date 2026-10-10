@@ -41,7 +41,7 @@ fn handle(kind: AgentKind) -> AgentHandle {
 }
 
 fn agents(runner: &Replay) -> Agents<'_, Replay> {
-    Agents { runner, scratch: std::env::temp_dir(), max_repairs: 2 }
+    Agents { runner, scratch: std::env::temp_dir(), max_repairs: 2, profile: None }
 }
 
 fn plan_doc() -> Value {

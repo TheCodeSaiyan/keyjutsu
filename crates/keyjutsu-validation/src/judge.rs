@@ -53,6 +53,8 @@ pub struct Gathered<'a> {
     pub dry_runs: Vec<(&'a str, WhatIf)>,
     pub dry_run_skipped: Vec<(&'a str, &'static str)>,
     pub risk: Option<Assessment>,
+    /// The work profile's title and where the step falls short of it.
+    pub profile: Option<(String, Vec<crate::profile::Breach>)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -525,6 +527,16 @@ pub fn judge(step: &Step, g: &Gathered<'_>) -> StepState {
                     }
                 ),
             );
+        }
+    }
+
+    // Work profile.
+    if let Some((title, breaches)) = &g.profile {
+        if breaches.is_empty() {
+            v.pass("work profile", format!("meets what {title} asks"));
+        }
+        for b in breaches {
+            v.fail("work profile", b.readiness, b.detail.clone());
         }
     }
 
