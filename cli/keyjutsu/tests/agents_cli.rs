@@ -48,7 +48,17 @@ fn without_send_nothing_leaves_the_machine_and_nothing_is_written() {
     let out_file = dir.join("plan.json");
     // Whichever agent is installed here, or none: the request is never sent.
     for agent in ["claude", "codex", "gemini", "copilot"] {
-        let out = keyjutsu(&["plan", "propose", "t", "--agent", agent, "--out", out_file.to_str().unwrap()]);
+        let out = keyjutsu(&[
+            "plan",
+            "propose",
+            "t",
+            "--agent",
+            agent,
+            "--profile",
+            "developer",
+            "--out",
+            out_file.to_str().unwrap(),
+        ]);
         let text =
             format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
         if out.status.success() {

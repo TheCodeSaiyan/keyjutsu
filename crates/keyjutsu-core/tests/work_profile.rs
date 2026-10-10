@@ -47,7 +47,12 @@ impl Scene {
 }
 
 fn junction(link: &Path, target: &Path) {
-    let out = std::process::Command::new("cmd").args(["/c", "mklink", "/J"]).arg(link).arg(target).output().unwrap();
+    let out = std::process::Command::new("cmd")
+        .args(["/c", "mklink", "/J"])
+        .arg(link)
+        .arg(target)
+        .output()
+        .unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
 }
 
@@ -113,7 +118,10 @@ fn a_confirmation_holds_for_every_route_to_the_same_folder() {
     junction(&via, &s.work());
     let Decision::NeedsConfirmation(u) = s.decide(&via) else { panic!("should ask") };
     assert_eq!(u.start.typed, via);
-    assert_eq!(Path::new(u.start.real.as_deref().unwrap()), s.work().canonicalize().unwrap().strip_prefix(r"\\?\").unwrap_or(&s.work()));
+    assert_eq!(
+        Path::new(u.start.real.as_deref().unwrap()),
+        s.work().canonicalize().unwrap().strip_prefix(r"\\?\").unwrap_or(&s.work())
+    );
     confirm(&s.store, &u, "2026-10-10T12:00:00Z").unwrap();
     assert!(matches!(chosen(&s.decide(&s.work())).1, Why::ConfirmedFolder { .. }));
 }
@@ -144,11 +152,15 @@ fn a_folder_can_define_profiles_that_extend_the_machines() {
 
 #[test]
 fn what_breaks_a_folder() {
-    let cases: [(&str, &dyn Fn(&Scene)); 5] = [
+    type Setup<'a> = &'a dyn Fn(&Scene);
+    let cases: [(&str, Setup); 5] = [
         ("stray", &|s: &Scene| s.write(".keyjutsu/notes.txt", "hello")),
         ("parse", &|s: &Scene| s.write(".keyjutsu/profiles/bad.toml", "name = ")),
         ("clash", &|s: &Scene| {
-            s.write(".keyjutsu/profiles/mine.toml", "name = \"helpdesk\"\ntitle = \"H\"\nextends = \"developer\"")
+            s.write(
+                ".keyjutsu/profiles/mine.toml",
+                "name = \"helpdesk\"\ntitle = \"H\"\nextends = \"developer\"",
+            )
         }),
         ("unknown", &|s: &Scene| s.write(".keyjutsu/profile.toml", "default = \"nobody\"\n")),
         ("link", &|s: &Scene| {

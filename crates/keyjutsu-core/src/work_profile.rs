@@ -131,9 +131,14 @@ pub enum Decision {
     NeedsConfirmation(Unconfirmed),
     /// The folder, or the machine's profiles, could not be used: planning
     /// stops until a profile is picked by hand.
-    Broken { start: Start, reason: String },
+    Broken {
+        start: Start,
+        reason: String,
+    },
     /// Nothing sets a default: ask, and keep the answer as the machine's.
-    NoDefault { start: Start },
+    NoDefault {
+        start: Start,
+    },
 }
 
 /// What a confirmation keeps in the encrypted store.
@@ -184,7 +189,12 @@ pub fn decide(places: &Places, store: Option<&Store>, start: &Path) -> Decision 
         return match machine_default {
             None => Decision::NoDefault { start: start_info },
             Some(name) => match catalogue.resolve(&name) {
-                Ok(profile) => Decision::Chosen(Chosen { profile, why: Why::Machine, start: start_info, leftovers: Vec::new() }),
+                Ok(profile) => Decision::Chosen(Chosen {
+                    profile,
+                    why: Why::Machine,
+                    start: start_info,
+                    leftovers: Vec::new(),
+                }),
                 Err(e) => broken(format!("this machine's default profile: {e}")),
             },
         };
@@ -197,7 +207,12 @@ pub fn decide(places: &Places, store: Option<&Store>, start: &Path) -> Decision 
     }
     let profile = match catalogue.resolve(&folder.default) {
         Ok(p) => p,
-        Err(e) => return broken(format!("{}: {e}", Path::new(&folder.dir).join(FOLDER).join(FOLDER_DEFAULT).display())),
+        Err(e) => {
+            return broken(format!(
+                "{}: {e}",
+                Path::new(&folder.dir).join(FOLDER).join(FOLDER_DEFAULT).display()
+            ));
+        }
     };
     let lower = match &machine_default {
         Some(m) => !profile.at_least_as_strict_as(m),
@@ -205,12 +220,22 @@ pub fn decide(places: &Places, store: Option<&Store>, start: &Path) -> Decision 
     };
     let (dir, hash, leftovers) = (folder.dir.clone(), folder.hash.clone(), folder.leftovers.clone());
     if !lower {
-        return Decision::Chosen(Chosen { profile, why: Why::Folder { dir, hash }, start: start_info, leftovers });
+        return Decision::Chosen(Chosen {
+            profile,
+            why: Why::Folder { dir, hash },
+            start: start_info,
+            leftovers,
+        });
     }
     let machine_profile = machine_default.unwrap_or_default();
     match store.map(|s| s.get::<Confirmation>(CONFIRMATIONS, &confirmation_id(&dir, &hash))) {
         Some(Ok(Some(c))) if c.folder == dir && c.hash == hash && c.profile == profile.name() => {
-            Decision::Chosen(Chosen { profile, why: Why::ConfirmedFolder { dir, hash }, start: start_info, leftovers })
+            Decision::Chosen(Chosen {
+                profile,
+                why: Why::ConfirmedFolder { dir, hash },
+                start: start_info,
+                leftovers,
+            })
         }
         Some(Err(e)) => broken(format!("the folder's earlier confirmation cannot be read: {e}")),
         _ => Decision::NeedsConfirmation(Unconfirmed {
@@ -265,14 +290,18 @@ pub fn catalogue(places: &Places, start: &Path) -> Result<Catalogue, String> {
 pub fn hand_pick(places: &Places, decision: &Decision, name: &str) -> Result<Chosen, String> {
     let (start, instead_of, reason) = match decision {
         Decision::Chosen(c) if c.profile.name() == name => return Ok(c.clone()),
-        Decision::Chosen(c) => (c.start.clone(), Some(c.profile.name().to_owned()), "chosen by hand".to_owned()),
+        Decision::Chosen(c) => {
+            (c.start.clone(), Some(c.profile.name().to_owned()), "chosen by hand".to_owned())
+        }
         Decision::NeedsConfirmation(u) => (
             u.start.clone(),
             Some(u.machine_profile.clone()),
             format!("chosen by hand instead of confirming the folder's {}", u.folder_profile.name()),
         ),
         Decision::Broken { start, reason } => (start.clone(), None, format!("chosen by hand: {reason}")),
-        Decision::NoDefault { start } => (start.clone(), None, "chosen by hand; no default was set".to_owned()),
+        Decision::NoDefault { start } => {
+            (start.clone(), None, "chosen by hand; no default was set".to_owned())
+        }
     };
     let profile = catalogue(places, &start.typed)?.resolve(name).map_err(|e| e.to_string())?;
     Ok(Chosen { profile, why: Why::HandPicked { instead_of, reason }, start, leftovers: Vec::new() })
@@ -423,7 +452,8 @@ fn read_folder(dir: &Path, kj: &Path) -> Result<FolderFiles, String> {
         digest.update(&normal);
         let text = String::from_utf8(normal).map_err(|_| format!("{}/{rel} is not UTF-8", kj.display()))?;
         if rel == FOLDER_DEFAULT {
-            let d: DefaultFile = toml::from_str(&text).map_err(|e| format!("{}/{rel}: {}", kj.display(), e.message()))?;
+            let d: DefaultFile =
+                toml::from_str(&text).map_err(|e| format!("{}/{rel}: {}", kj.display(), e.message()))?;
             default = Some(d.default);
         } else {
             profiles.push((rel.clone(), text));

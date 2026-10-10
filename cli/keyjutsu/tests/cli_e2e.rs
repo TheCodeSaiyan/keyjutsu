@@ -75,6 +75,10 @@ fn own_lock() -> String {
 fn test_command() -> std::process::Command {
     let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_keyjutsu"));
     c.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env(
+            "KEYJUTSU_PROFILE_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+        )
         .env("KEYJUTSU_RUN_LOCK", own_lock());
     c
 }
@@ -220,6 +224,10 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
         .unwrap();
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_keyjutsu"));
     cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
+    cmd.env(
+        "KEYJUTSU_PROFILE_HOME",
+        std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+    );
     cmd.env("KEYJUTSU_RUN_LOCK", own_lock());
     cmd.cwd(outside_any_repository());
     cmd.args(["run", snap.to_str().unwrap(), "--mode", "performance", "--clean", "--record"]);
@@ -279,6 +287,10 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     let listed = test_command()
         .args(["history", "list"])
         .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env(
+            "KEYJUTSU_PROFILE_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+        )
         .env("KEYJUTSU_RUN_LOCK", own_lock())
         .output()
         .unwrap();
@@ -298,6 +310,10 @@ fn run_executes_an_approved_snapshot_in_performance_mode() {
     let exported = test_command()
         .args(["history", "export", id, "--step", "hello", "--out", cast.to_str().unwrap()])
         .env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"))
+        .env(
+            "KEYJUTSU_PROFILE_HOME",
+            std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+        )
         .env("KEYJUTSU_RUN_LOCK", own_lock())
         .output()
         .unwrap();
@@ -361,6 +377,10 @@ fn launch_in(
     cmd.cwd(cwd.map(std::path::Path::to_path_buf).unwrap_or_else(outside_any_repository));
     // Sessions these tests run go to a history of their own, not the operator's.
     cmd.env("KEYJUTSU_STORE", std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("cli-store"));
+    cmd.env(
+        "KEYJUTSU_PROFILE_HOME",
+        std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-profile-home"),
+    );
     cmd.env("KEYJUTSU_RUN_LOCK", own_lock());
     let child = pair.slave.spawn_command(cmd).unwrap();
     drop(pair.slave);

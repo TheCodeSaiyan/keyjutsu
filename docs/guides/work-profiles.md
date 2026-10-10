@@ -7,9 +7,10 @@ nothing may change the machine at all. The agent is told the profile's rules
 before it writes a word, and validation enforces them, so a plan that breaks
 one is not ready, however it was written.
 
-There are six, built into KeyJutsu. Profiles of your own, and choosing one
-per folder or per machine, come in a later release; for now you name the
-profile on the command line.
+There are six built in, and you can write your own on top of them. Which
+one applies is set for the machine, or for a folder and everything in it, and
+you can always choose another by hand. The desktop app doesn't show profiles
+yet; this page uses the CLI.
 
 ## The six profiles
 
@@ -44,26 +45,130 @@ least what its parent means.
 `keyjutsu profile show NAME` prints every rule a profile enforces, which
 profile each one came from, and the exact text the agents are given.
 
-## Planning under a profile
+## Which profile applies
 
-Add `--profile` when you ask for the plan:
+1. **A folder's choice.** KeyJutsu looks for `.keyjutsu/profile.toml` in the
+   folder a command runs in, then in each folder above it, and the nearest
+   one wins. For `plan propose --folder DIR`, it looks from `DIR`.
+2. **This machine's default**, if no folder chooses.
+3. **Nothing set.** Making a plan stops and asks you to choose. Checking a
+   plan file that already exists goes ahead without a profile, as it did
+   before profiles existed, and says that none was applied.
+
+Set the machine's default once:
 
 ```powershell
-keyjutsu plan propose "Disable the departed user's account" --agent claude --profile it-operations --out disable.json --send
+keyjutsu profile default it-operations
+```
+
+A folder chooses with one line:
+
+```toml
+# .keyjutsu/profile.toml
+default = "security-response"
+```
+
+`keyjutsu profile which` says which profile applies where you are and why.
+Every plan command says it too, on one line, before it starts.
+
+### When a folder asks for less
+
+A folder can't lower strictness without you noticing. If its profile isn't
+the machine's default or one that extends it (Developer in a cloned
+repository on an IT Operations machine, say), planning stops until you
+confirm it:
+
+```powershell
+keyjutsu profile confirm
+```
+
+The confirmation covers the folder's `.keyjutsu` files exactly as they are.
+Change them and you're asked again. The one exception is a Git checkout
+turning LF into CRLF, which doesn't count as a change. Confirmations are kept
+in KeyJutsu's encrypted store, against the folder's real path: reach the same
+folder through a mapped drive, its UNC path or a junction, and the one
+confirmation holds. A different folder with the same files asks again.
+
+### When a folder can't be used
+
+A folder whose `.keyjutsu` can't be trusted stops planning in that folder
+until you choose a profile by hand. Any of these breaks it:
+
+- a file KeyJutsu doesn't read, such as `notes.txt`. Only `profile.toml` and
+  `profiles/*.toml` belong there;
+- a profile that doesn't parse, doesn't resolve, or reuses a name already
+  defined;
+- a link or junction inside `.keyjutsu`, or a `.keyjutsu` that is one;
+- a starting folder whose real path can't be found: an offline share, a
+  disconnected drive, a folder you can't open.
+
+Files an operating system, Git or an editor leaves behind (`desktop.ini`,
+`Thumbs.db`, `.DS_Store`, `.gitkeep`, editor swap and backup files) are
+ignored wherever they are, and kept out of the confirmation.
+`keyjutsu profile which` lists any it found.
+
+### Choosing by hand
+
+`--profile NAME` on any plan command uses that profile instead, whatever the
+folder or machine says, and the command says what it overrode. It lasts for
+that one command.
+
+## Profiles of your own
+
+A profile of your own extends exactly one other and can only tighten it. Put
+it in `%LOCALAPPDATA%\KeyJutsu\profiles\` to use it anywhere on this
+machine, or in a folder's `.keyjutsu\profiles\` for that folder alone:
+
+```toml
+# %LOCALAPPDATA%\KeyJutsu\profiles\client-x.toml
+name = "client-x"
+title = "Client X"
+extends = "it-operations"
+instructions = "Mail is the client's own team's: never change a mailbox."
+
+[[validation.deny]]
+commands = ["Set-Mailbox", "Remove-Mailbox"]
+reason = "changes a mailbox, which the client's team owns"
+```
+
+A folder's profile can extend one from the machine (`extends = "client-x"`).
+Names must be unique across the built-ins, the machine and the folder: a name
+defined twice breaks the folder, so nobody ends up under a profile that
+differs from the one they read.
+
+What a profile can set:
+
+| Key | What it does |
+| --- | --- |
+| `instructions` | text added to what the agents are told |
+| `validation.require_recovery_from` | `low`, `normal`, `high` or `critical`: steps at that risk or above need a recovery |
+| `validation.max_risk` | the highest risk a step may have |
+| `validation.block_opaque_code` | `true` refuses code KeyJutsu cannot see into |
+| `[[validation.raise]]` | `commands`, `to` and `reason`: those commands count as at least that risk |
+| `[[validation.deny]]` | `commands` and `reason`: those commands are refused |
+
+Any other key is refused, so a mistyped one is caught rather than ignored.
+
+## Planning under a profile
+
+Ask for the plan as usual; the profile that applies is named first:
+
+```powershell
+keyjutsu plan propose "Disable the departed user's account" --agent claude --out disable.json --send
 ```
 
 The profile's rules go to the agent after KeyJutsu's own ground rules, and to
-a reviewer too, with `keyjutsu plan review --profile`. An agent that knows a
-change needs a recovery usually writes one first time, rather than being sent
-back for it.
+a reviewer too, with `keyjutsu plan review`. An agent that knows a change
+needs a recovery usually writes one first time, rather than being sent back
+for it.
 
 ## Validating under a profile
 
-Validate and approve with the same profile:
+Validation and approval apply the same profile:
 
 ```powershell
-keyjutsu plan validate disable.json --profile it-operations
-keyjutsu plan approve disable.json --profile it-operations --out disable.snapshot.json
+keyjutsu plan validate disable.json
+keyjutsu plan approve disable.json --out disable.snapshot.json
 ```
 
 The profile's findings appear under the check `work profile`, beside

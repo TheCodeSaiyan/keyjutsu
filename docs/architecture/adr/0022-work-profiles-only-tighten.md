@@ -57,7 +57,12 @@ missing recovery INVALID, since the agent can fix the plan.
   not unpacked. The profiles that refuse opaque code catch the forms KeyJutsu
   recognises; the others cannot promise their deny lists hold against code
   written to evade them.
-- Profiles from the machine and from a folder, choosing one per folder, and
-  recording the profile with an approval are later work. The format and the
-  resolver already take profiles from any origin and refuse a name defined
-  twice.
+- Which profile applies comes from the nearest `.keyjutsu/profile.toml`
+  above the starting folder's real path, then the machine's default. A
+  folder default less strict than the machine's, judged by ancestry, waits
+  for a confirmation kept in the encrypted store per real path and hash of
+  the loaded files (CRLF read as LF). Anything unexpected in `.keyjutsu`, a
+  link or junction in or as it, or an unresolvable starting folder stops
+  planning until a profile is picked by hand. The machine's files are
+  trusted: changing one never asks about a folder again.
+- Recording the profile with an approval is later work.
