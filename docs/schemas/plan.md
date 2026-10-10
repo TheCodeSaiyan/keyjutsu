@@ -25,6 +25,9 @@ The proposal schema is the plan schema plus one rule: no `keyjutsu`. An agent
 cannot hand KeyJutsu a plan that says it is ready or approved, because such a
 plan does not parse. Risk shows the same idea at field level: the agent's view
 is `proposed_risk`, and KeyJutsu's view is `keyjutsu.steps.<id>.assessed_risk`.
+`keyjutsu.work_profile` records the [work profile](../guides/work-profiles.md)
+the plan was last validated under, and from which risk a step needs its own
+typed confirmation.
 
 ## Shape
 

@@ -22,6 +22,9 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, 
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   const matches = typed.trim() === c.phrase;
+  // A work profile can ask for a step's own confirmation below critical;
+  // such a step is not called critical.
+  const critical = c.reason === "critical";
   const why = c.impact.length > 0 && (
     <>
       <dt>Impact</dt>
@@ -60,12 +63,16 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, 
             !
           </span>
           <div>
-            <p className="eyebrow critical-text">Critical action</p>
+            <p className="eyebrow critical-text">
+              {critical ? "Critical action" : "Confirm this step"}
+            </p>
             <h1 id="critical-title">{c.title}</h1>
             <p id="critical-lede" className="muted">
               {purpose === "run"
                 ? "This approved step is next. Nothing runs until you confirm it again."
-                : "This step is validated, but its effects are serious. Approving the plan does not cover it on its own."}
+                : critical
+                  ? "This step is validated, but its effects are serious. Approving the plan does not cover it on its own."
+                  : `This step is validated. ${c.reason[0].toUpperCase()}${c.reason.slice(1)}, so approving the plan does not cover it on its own.`}
             </p>
           </div>
         </header>
@@ -102,7 +109,9 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, 
             validation behind that, are a click away. */}
         {discreet && (why || evidence) && (
           <details className="why">
-            <summary className="small">Why it&apos;s critical</summary>
+            <summary className="small">
+              {critical ? "Why it’s critical" : "Why it needs confirming"}
+            </summary>
             <dl>
               {why}
               {evidence}

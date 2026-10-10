@@ -228,7 +228,7 @@ export function outcomeLine(o: { kind: string } & Record<string, unknown>): stri
 }
 
 /**
- * The confirmation shown at approval for a critical step, built from the plan
+ * The confirmation shown at approval for a step that needs its own, built from the plan
  * and its validation. The same shape Rust sends before the step runs, so the
  * operator sees the same thing both times.
  */
@@ -260,6 +260,7 @@ export function confirmationFor(
     targets: step.expected_effects.map((e) => e.target),
     impact,
     recovery,
+    reason: summary.confirmation_reason ?? "critical",
     evidence: (state?.evidence ?? []).map((e) => `${e.check}: ${e.detail ?? ""}`),
     phrase: summary.confirmation_phrase,
   };

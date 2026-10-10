@@ -77,6 +77,23 @@ pub struct ProfileFile {
     pub instructions: Option<String>,
     #[serde(default)]
     pub validation: ValidationRules,
+    #[serde(default)]
+    pub approval: ApprovalRules,
+}
+
+/// What the operator must do before a step runs.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalRules {
+    /// A step at this risk or above needs its own typed confirmation, as a
+    /// critical step always does.
+    #[serde(default)]
+    pub confirm_each_from: Option<RiskLevel>,
+    /// Reserved for two-person approval, which KeyJutsu does not have yet.
+    /// Any value is refused rather than ignored, so nobody believes a second
+    /// person is being asked when nobody is.
+    #[serde(default)]
+    pub second_person: Option<toml::Value>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -140,6 +157,8 @@ pub enum ProfileError {
     Loosens { name: String, parent: String, what: String },
     #[error("the profile \"{name}\" has an empty pattern in {rule}")]
     EmptyPattern { name: String, rule: String },
+    #[error("the profile \"{0}\" sets approval.second_person, but KeyJutsu cannot ask a second person yet")]
+    SecondPerson(String),
 }
 
 /// Every profile KeyJutsu knows about, wherever it was defined.
@@ -275,6 +294,9 @@ pub struct Profile {
     pub block_opaque_code: bool,
     pub raise: Vec<Sourced<RaiseRule>>,
     pub deny: Vec<Sourced<DenyRule>>,
+    /// From this risk, a step needs its own typed confirmation; only
+    /// critical steps otherwise.
+    pub confirm_each_from: Option<RiskLevel>,
 }
 
 impl Profile {
@@ -301,6 +323,7 @@ impl Profile {
             block_opaque_code: false,
             raise: Vec::new(),
             deny: Vec::new(),
+            confirm_each_from: None,
         };
         empty.tighten(origin, file)
     }
@@ -343,6 +366,21 @@ impl Profile {
             }
             Some(b) => self.block_opaque_code = b,
             None => {}
+        }
+        if file.approval.second_person.is_some() {
+            return Err(ProfileError::SecondPerson(file.name.clone()));
+        }
+        if let Some(from) = file.approval.confirm_each_from {
+            match self.confirm_each_from {
+                Some(was) if from > was => {
+                    return Err(loosens(format!(
+                        "it asks for each step's own confirmation only from {} risk, where \"{parent}\" asks from {}",
+                        level(from),
+                        level(was)
+                    )));
+                }
+                _ => self.confirm_each_from = Some(from),
+            }
         }
         for (i, r) in v.raise.iter().enumerate() {
             if r.commands.is_empty() || r.commands.iter().any(|c| c.trim().is_empty()) {
@@ -751,6 +789,38 @@ mod tests {
         let err = c.add(Origin::Machine("m".into()), "name = \"e\"\ntitle = \"E\"\nextends = \"developer\"\n[[validation.deny]]\ncommands = [\" \"]\nreason = \"r\"");
         assert!(err.is_ok());
         assert!(matches!(c.resolve("e"), Err(ProfileError::EmptyPattern { .. })));
+    }
+
+    #[test]
+    fn approval_settings_only_tighten_and_a_second_person_is_refused() {
+        let c = Catalogue::built_in();
+        assert_eq!(c.resolve("it-operations").unwrap().confirm_each_from, Some(RiskLevel::High));
+        assert_eq!(c.resolve("audit-only").unwrap().confirm_each_from, Some(RiskLevel::High));
+        assert_eq!(c.resolve("helpdesk").unwrap().confirm_each_from, None);
+        let c = with(&[
+            "name = \"looser\"
+title = \"L\"
+extends = \"it-operations\"
+[approval]
+confirm_each_from = \"critical\"",
+            "name = \"tighter\"
+title = \"T\"
+extends = \"it-operations\"
+[approval]
+confirm_each_from = \"normal\"",
+            "name = \"pair\"
+title = \"P\"
+extends = \"developer\"
+[approval.second_person]
+from = \"high\"",
+        ]);
+        assert!(
+            matches!(c.resolve("looser"), Err(ProfileError::Loosens { .. })),
+            "{:?}",
+            c.resolve("looser")
+        );
+        assert_eq!(c.resolve("tighter").unwrap().confirm_each_from, Some(RiskLevel::Normal));
+        assert_eq!(c.resolve("pair"), Err(ProfileError::SecondPerson("pair".into())));
     }
 
     #[test]

@@ -942,6 +942,43 @@
           "items": {
             "$ref": "#/$defs/provenance_event"
           }
+        },
+        "work_profile": {
+          "description": "The work profile the plan was last validated under: its chain, why it applied, and from which risk a step needs its own typed confirmation.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "title", "chain"],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/text"
+            },
+            "title": {
+              "$ref": "#/$defs/text"
+            },
+            "chain": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "origin"],
+                "properties": {
+                  "name": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "origin": {
+                    "$ref": "#/$defs/text"
+                  }
+                }
+              }
+            },
+            "why": {
+              "$ref": "#/$defs/text"
+            },
+            "confirm_each_from": {
+              "$ref": "#/$defs/risk_level"
+            }
+          }
         }
       }
     },

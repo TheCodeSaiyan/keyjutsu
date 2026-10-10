@@ -23,4 +23,9 @@ evidence: Array<string>,
 /**
  * The phrase to type.
  */
-phrase: string, };
+phrase: string, 
+/**
+ * Why it needs its own confirmation: "critical", or the work profile
+ * that asks for one at this risk.
+ */
+reason: string, };

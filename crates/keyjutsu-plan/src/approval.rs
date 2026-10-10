@@ -6,7 +6,9 @@
 //! invalidated, never silently kept.
 //!
 //! Critical steps cannot be approved wholesale. Each needs its own typed
-//! confirmation phrase: "approve everything" skips them and says so.
+//! confirmation phrase: "approve everything" skips them and says so. A work
+//! profile can ask for the same from a lower risk, through the profile
+//! recorded in the plan's own state, and sealing holds every step to it.
 //!
 //! Sealing turns a fully approved draft into an [`ApprovedSnapshot`]. A
 //! snapshot has no mutating methods. Loading one from JSON re-checks every
@@ -56,25 +58,58 @@ pub enum StepApproval {
 pub enum ApprovalError {
     #[error("there is no step `{0}`")]
     UnknownStep(String),
-    #[error("step `{step}` is critical and needs the typed confirmation `{phrase}`")]
+    #[error("step `{step}` needs its own typed confirmation: `{phrase}`")]
     ConfirmationRequired { step: String, phrase: String },
     #[error("the confirmation for step `{step}` does not match `{phrase}`")]
     ConfirmationMismatch { step: String, phrase: String },
 }
 
-/// Whether a step needs its own typed confirmation. Today that is the agent's
-/// proposed risk or KeyJutsu's own assessment saying critical; KeyJutsu's
-/// independent risk rules arrive with validation, so an agent
-/// that under-states risk is not yet caught here.
+/// The risk from which a step needs its own typed confirmation: critical,
+/// or lower where the work profile the plan was validated under says so.
+pub fn confirm_each_from(plan: &Plan) -> RiskLevel {
+    plan.keyjutsu
+        .as_ref()
+        .and_then(|k| k.work_profile.as_ref())
+        .and_then(|p| p.confirm_each_from)
+        .map_or(RiskLevel::Critical, |r| r.min(RiskLevel::Critical))
+}
+
+/// Whether a step needs its own typed confirmation: the agent's proposed
+/// risk or KeyJutsu's own assessment reaching [`confirm_each_from`].
 pub fn is_critical(plan: &Plan, step: &Step) -> bool {
-    let proposed = step.proposed_risk.as_ref().is_some_and(|r| r.level == RiskLevel::Critical);
+    let from = confirm_each_from(plan);
+    let proposed = step.proposed_risk.as_ref().is_some_and(|r| r.level >= from);
     let assessed = plan
         .keyjutsu
         .as_ref()
         .and_then(|k| k.steps.get(&step.id))
         .and_then(|s| s.assessed_risk)
-        .is_some_and(|r| r == RiskLevel::Critical);
+        .is_some_and(|r| r >= from);
     proposed || assessed
+}
+
+/// Why a step needs its own confirmation, in a few words: "critical", or the
+/// work profile that asks for it at this risk. `None` when it does not.
+pub fn confirmation_reason(plan: &Plan, step: &Step) -> Option<String> {
+    if !is_critical(plan, step) {
+        return None;
+    }
+    let assessed = plan.keyjutsu.as_ref().and_then(|k| k.steps.get(&step.id)).and_then(|s| s.assessed_risk);
+    let proposed = step.proposed_risk.as_ref().map(|r| r.level);
+    if assessed == Some(RiskLevel::Critical) || proposed == Some(RiskLevel::Critical) {
+        return Some("critical".into());
+    }
+    let profile = plan.keyjutsu.as_ref().and_then(|k| k.work_profile.as_ref());
+    let level = match confirm_each_from(plan) {
+        RiskLevel::Low => "low",
+        RiskLevel::Normal => "normal",
+        RiskLevel::High => "high",
+        RiskLevel::Critical => "critical",
+    };
+    Some(match profile {
+        Some(p) => format!("{} asks for its own confirmation from {level} risk", p.title),
+        None => "critical".into(),
+    })
 }
 
 /// The phrase an operator types to approve a critical step: its title in
@@ -223,6 +258,21 @@ pub fn seal(
         .collect();
     if !missing.is_empty() {
         return Err(SealError::NotApproved(missing));
+    }
+    // Every step that needs its own confirmation under the plan as it is
+    // sealed has one: approving first and validating under a stricter
+    // profile afterwards does not carry a step through without it.
+    let unconfirmed: Vec<String> = draft
+        .graph()
+        .topological_order()
+        .filter(|id| {
+            draft.plan().step(id).is_some_and(|s| is_critical(draft.plan(), s))
+                && book.approvals.get(*id).is_none_or(|a| a.confirmation.is_none())
+        })
+        .map(str::to_owned)
+        .collect();
+    if !unconfirmed.is_empty() {
+        return Err(SealError::NotApproved(unconfirmed));
     }
     if let Some(state) = &draft.plan().keyjutsu {
         let not_ready: Vec<String> = draft

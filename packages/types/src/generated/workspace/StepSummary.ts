@@ -19,6 +19,11 @@ readiness?: Readiness, risk?: RiskLevel, critical: boolean,
  */
 confirmation_phrase?: string, 
 /**
+ * Why it needs its own confirmation, when it does: "critical", or the
+ * work profile that asks for one at this risk.
+ */
+confirmation_reason?: string, 
+/**
  * Review findings about this step that are warnings or worse.
  */
 concerns: number, };

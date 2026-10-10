@@ -396,3 +396,57 @@ proptest! {
         }
     }
 }
+
+/// The chain, validated as READY with s5 rated high, under a work profile
+/// that asks for each step's own confirmation from `from`.
+fn under_profile(from: Option<&str>) -> Value {
+    let rows: Vec<(&str, &str, &str)> = ["s1", "s2", "s3", "s4", "s5", "s6", "s7"]
+        .iter()
+        .map(|s| (*s, "READY", if *s == "s5" { "high" } else { "low" }))
+        .collect();
+    let mut v = with_validation(chain(), &rows);
+    let mut profile = json!({
+        "name": "it-operations", "title": "IT Operations",
+        "chain": [{"name": "it-operations", "origin": "built into KeyJutsu"}]
+    });
+    if let Some(from) = from {
+        profile["confirm_each_from"] = json!(from);
+    }
+    v["keyjutsu"]["work_profile"] = profile;
+    v
+}
+
+#[test]
+fn a_work_profile_can_ask_for_each_steps_own_confirmation_below_critical() {
+    use keyjutsu_plan::approval::confirmation_reason;
+    // Without the setting, a high step goes through with the plan.
+    let p = plan(&under_profile(None));
+    assert!(ApprovalBook::new().approve_all_except_critical(&p, AT).is_empty());
+
+    let p = plan(&under_profile(Some("high")));
+    let mut book = ApprovalBook::new();
+    assert_eq!(book.approve_all_except_critical(&p, AT), ["s5"]);
+    let s5 = p.plan().step("s5").unwrap();
+    assert_eq!(
+        confirmation_reason(p.plan(), s5).as_deref(),
+        Some("IT Operations asks for its own confirmation from high risk")
+    );
+    assert_eq!(confirmation_reason(p.plan(), p.plan().step("s4").unwrap()), None);
+    book.approve(&p, "s5", AT, Some("STEP 5")).unwrap();
+    let snap = seal(&p, &book, None, AT).unwrap();
+    // The profile is sealed with the plan: the snapshot says what it was approved under.
+    let loaded = ApprovedSnapshot::from_json(&snap.to_json()).unwrap();
+    assert_eq!(loaded.plan().keyjutsu.as_ref().unwrap().work_profile.as_ref().unwrap().name, "it-operations");
+}
+
+#[test]
+fn approving_first_and_tightening_afterwards_does_not_skip_a_confirmation() {
+    // Approved while the profile asked nothing extra...
+    let before = plan(&under_profile(None));
+    let mut book = ApprovalBook::new();
+    assert!(book.approve_all_except_critical(&before, AT).is_empty());
+    // ...then validated under one that asks for high steps' own confirmation.
+    // The steps are unchanged, so every approval still matches its hash.
+    let after = plan(&under_profile(Some("high")));
+    assert_eq!(seal(&after, &book, None, AT), Err(SealError::NotApproved(vec!["s5".into()])));
+}

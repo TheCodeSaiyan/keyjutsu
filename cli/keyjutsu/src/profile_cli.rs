@@ -32,6 +32,15 @@ pub fn chosen(
     folder: Option<&Path>,
     purpose: Purpose,
 ) -> Result<Option<Profile>, ExitCode> {
+    applied(name, folder, purpose).map(|o| o.map(|(p, _)| p))
+}
+
+/// As [`chosen`], with why the profile applies, for recording with the plan.
+pub fn applied(
+    name: Option<&str>,
+    folder: Option<&Path>,
+    purpose: Purpose,
+) -> Result<Option<(Profile, String)>, ExitCode> {
     let places = Places::default();
     let store = store();
     let decision = work_profile::decide(&places, store.as_ref(), &start(folder));
@@ -43,7 +52,7 @@ pub fn chosen(
         return match work_profile::hand_pick(&places, &decision, name) {
             Ok(c) => {
                 note(&c);
-                Ok(Some(c.profile))
+                Ok(Some((c.profile, describe(&c.why))))
             }
             Err(e) => fail(format!("{e}; `keyjutsu profile list` shows them")),
         };
@@ -51,7 +60,7 @@ pub fn chosen(
     match decision {
         Decision::Chosen(c) => {
             note(&c);
-            Ok(Some(c.profile))
+            Ok(Some((c.profile, describe(&c.why))))
         }
         Decision::NeedsConfirmation(u) => fail(format!(
             "{} sets the work profile {}, which is less strict than this machine's {}. \
@@ -138,6 +147,12 @@ pub fn show(name: &str) -> ExitCode {
     }
     if profile.block_opaque_code {
         println!("  no code KeyJutsu cannot see into");
+    }
+    match profile.confirm_each_from {
+        Some(r) if r < keyjutsu_core::plan::model::RiskLevel::Critical => {
+            println!("  its own typed confirmation for every step at {} risk or above", level(r))
+        }
+        _ => {}
     }
     for r in &profile.raise {
         println!(

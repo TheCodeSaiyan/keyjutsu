@@ -212,3 +212,27 @@ fn a_raise_rule_lifts_the_risk_and_says_why() {
         s.risk_reasons
     );
 }
+
+#[test]
+fn the_plan_records_the_profile_it_was_validated_under() {
+    let profile = Catalogue::built_in().resolve("it-operations").unwrap();
+    let p = plan(json!([step("look", "pwsh", "Get-Date")]));
+    let options = Options {
+        dry_run: false,
+        profile: Some(profile),
+        profile_why: Some("This machine's default.".into()),
+        ..Options::default()
+    };
+    let report = validate(&p, options);
+    let recorded = report.record_in(p.plan(), "2026-10-10T12:00:00Z");
+    let wp = recorded.keyjutsu.unwrap().work_profile.unwrap();
+    assert_eq!((wp.name.as_str(), wp.title.as_str()), ("it-operations", "IT Operations"));
+    let chain: Vec<&str> = wp.chain.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(chain, ["it-operations", "helpdesk", "developer"]);
+    assert_eq!(wp.why.as_deref(), Some("This machine's default."));
+    assert_eq!(wp.confirm_each_from, Some(RiskLevel::High));
+
+    // Validated again without one, the plan no longer claims one.
+    let again = validate(&p, Options { dry_run: false, ..Options::default() }).record_in(p.plan(), "x");
+    assert_eq!(again.keyjutsu.unwrap().work_profile, None);
+}

@@ -862,13 +862,13 @@ fn main() -> ExitCode {
         Command::Plan(PlanCommand::Check { file, stored }) => plan_check(&file, stored),
         Command::Plan(PlanCommand::Hash { file }) => plans::hash(&file),
         Command::Plan(PlanCommand::Validate { file, no_dry_run, json, profile }) => {
-            match profile_cli::chosen(profile.name.as_deref(), None, profile_cli::Purpose::Checking) {
+            match profile_cli::applied(profile.name.as_deref(), None, profile_cli::Purpose::Checking) {
                 Ok(profile) => plans::validate(&file, !no_dry_run, json, profile),
                 Err(c) => c,
             }
         }
         Command::Plan(PlanCommand::Approve { file, out, confirmations, force, no_dry_run, profile }) => {
-            match profile_cli::chosen(profile.name.as_deref(), None, profile_cli::Purpose::Checking) {
+            match profile_cli::applied(profile.name.as_deref(), None, profile_cli::Purpose::Checking) {
                 Ok(profile) => plans::approve(&file, &out, &confirmations, force, !no_dry_run, profile),
                 Err(c) => c,
             }

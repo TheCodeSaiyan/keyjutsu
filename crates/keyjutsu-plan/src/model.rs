@@ -742,6 +742,40 @@ pub struct KeyJutsuState {
     /// Who did what to which step, in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub provenance: Vec<ProvenanceEvent>,
+    /// The work profile the plan was last validated under, if any. Sealed
+    /// with the plan, so a snapshot says what it was approved under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub work_profile: Option<WorkProfileRecord>,
+}
+
+/// A work profile as a plan records it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "plan/")]
+pub struct WorkProfileRecord {
+    pub name: String,
+    pub title: String,
+    /// The profile and every one it extends, from itself to the root, each
+    /// with where it was defined.
+    pub chain: Vec<WorkProfileLink>,
+    /// Why it applied: a folder, the machine's default, or a hand pick.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub why: Option<String>,
+    /// Steps at this risk or above need their own typed confirmation.
+    /// Without it, only critical ones do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub confirm_each_from: Option<RiskLevel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "plan/")]
+pub struct WorkProfileLink {
+    pub name: String,
+    pub origin: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]

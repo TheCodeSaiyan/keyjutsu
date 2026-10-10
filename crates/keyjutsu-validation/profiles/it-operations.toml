@@ -12,6 +12,9 @@ finds.
 [validation]
 require_recovery_from = "normal"
 
+[approval]
+confirm_each_from = "high"
+
 [[validation.raise]]
 commands = ["Set-AD*", "New-AD*", "Add-AD*", "Enable-AD*", "Disable-AD*", "Move-AD*", "Rename-AD*", "Unlock-AD*", "Set-Mg*", "New-Mg*", "Update-Mg*", "Invoke-Mg*", "Set-Gp*", "New-Gp*", "Set-DnsServer*", "Add-DnsServer*", "Set-DhcpServer*", "Add-DhcpServer*"]
 to = "high"
