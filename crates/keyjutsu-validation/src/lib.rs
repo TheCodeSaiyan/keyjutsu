@@ -673,3 +673,163 @@ impl Found<'_> {
         }
     }
 }
+
+/// How deep KeyJutsu unpacks code nested in other code, such as a `cmd /c`
+/// running `pwsh -EncodedCommand` running `Invoke-Expression`. Anything
+/// deeper is opaque.
+const MAX_NESTING: usize = 4;
+
+/// PowerShell code still to parse: the step, how it was reached, the code.
+type Pending = Vec<(String, String, String)>;
+
+/// For each step, every command it would run and the code it could not see
+/// into, for a work profile to judge. Nested PowerShell is parsed in further
+/// rounds of analysis, one shell start per round, and only when there is any.
+fn profile_seen(
+    p: &Plan,
+    analyses: &BTreeMap<&'static str, Analysis>,
+    programs: &BTreeMap<&'static str, std::path::PathBuf>,
+    problems: &mut Vec<String>,
+) -> BTreeMap<String, profile::Seen> {
+    let mut seen: BTreeMap<String, profile::Seen> = BTreeMap::new();
+    let mut pending: Pending = Vec::new();
+    for s in &p.steps {
+        let entry = seen.entry(s.id.clone()).or_default();
+        let texts = s
+            .commands
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (format!("{}#c{i}", s.id), &c.text))
+            .chain(s.visible_validation.iter().enumerate().map(|(i, c)| (format!("{}#v{i}", s.id), &c.text)))
+            .chain(s.recovery.iter().flat_map(|r| {
+                r.commands.iter().enumerate().map(|(i, c)| (format!("{}#r{i}", s.id), &c.text))
+            }));
+        let edition = match s.shell.as_ref().map(|sh| sh.kind) {
+            Some(ShellName::Pwsh) => Some("pwsh"),
+            Some(ShellName::WindowsPowershell) => Some("windows_powershell"),
+            _ => None,
+        };
+        for (id, text) in texts {
+            match edition {
+                None => {
+                    let mut at = Found { entry: &mut *entry, pending: &mut pending, step: &s.id };
+                    for (name, args) in nested::cmd_segments(text) {
+                        at.cmd_use(&name, args, None, 0);
+                    }
+                }
+                Some(edition) => match analyses.get(edition).and_then(|a| a.line(&id)) {
+                    Some(line) => {
+                        Found { entry: &mut *entry, pending: &mut pending, step: &s.id }.line(line, None, 0)
+                    }
+                    None => entry.opaque.push(format!("{} could not be parsed", judge::quote(text))),
+                },
+            }
+        }
+    }
+
+    // Nested PowerShell is parsed by PowerShell 7 where it is installed.
+    let shell = programs.get("pwsh").or_else(|| programs.values().next()).cloned();
+    let mut depth = 1;
+    while !pending.is_empty() {
+        let batch = std::mem::take(&mut pending);
+        let lines: Vec<(String, &str)> =
+            batch.iter().enumerate().map(|(i, (_, _, code))| (format!("n{i}"), code.as_str())).collect();
+        let analysis = match &shell {
+            Some(shell) if depth <= MAX_NESTING => match analyse(shell, &lines, &[], &[]) {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    problems.push(format!("analysing nested code: {e}"));
+                    None
+                }
+            },
+            _ => None,
+        };
+        for (i, (step, via, code)) in batch.iter().enumerate() {
+            let entry = seen.entry(step.clone()).or_default();
+            match analysis.as_ref().and_then(|a| a.line(&format!("n{i}"))) {
+                Some(line) => Found { entry, pending: &mut pending, step }.line(line, Some(via), depth),
+                None if depth > MAX_NESTING => entry
+                    .opaque
+                    .push(format!("{} is nested more than {MAX_NESTING} deep, {via}", judge::quote(code))),
+                None => entry.opaque.push(format!("{}, {via}, could not be parsed", judge::quote(code))),
+            }
+        }
+        depth += 1;
+    }
+    seen
+}
+
+/// Where the commands of one step are being collected.
+struct Found<'a> {
+    entry: &'a mut profile::Seen,
+    pending: &'a mut Pending,
+    step: &'a str,
+}
+
+impl Found<'_> {
+    fn line(&mut self, line: &powershell::LineAnalysis, via: Option<&str>, depth: usize) {
+        for c in &line.commands {
+            let Some(name) = &c.name else {
+                self.entry.opaque.push(match via {
+                    Some(via) => format!("a command's name is computed when it runs, {via}"),
+                    None => "a command's name is computed when the line runs".to_owned(),
+                });
+                continue;
+            };
+            let (name, written_as) = match c.resolved.as_deref().filter(|r| !r.is_empty()) {
+                Some(target) => (target, Some(name.as_str())),
+                None => (name.as_str(), None),
+            };
+            self.add(name, written_as, c.arguments.clone(), via, depth, c.static_arguments, c.from_pipeline);
+        }
+    }
+
+    fn cmd_use(&mut self, name: &str, arguments: Vec<String>, via: Option<&str>, depth: usize) {
+        // cmd expands %VARIABLES% when the line runs.
+        let static_arguments = !arguments.iter().any(|a| a.contains('%'));
+        self.add(name, None, arguments, via, depth, static_arguments, false);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn add(
+        &mut self,
+        name: &str,
+        written_as: Option<&str>,
+        arguments: Vec<String>,
+        via: Option<&str>,
+        depth: usize,
+        static_arguments: bool,
+        from_pipeline: bool,
+    ) {
+        let identity = profile::identity(name);
+        let inner = nested::inner(&identity, &arguments, static_arguments, from_pipeline);
+        let here = format!(
+            "inside `{}`{}",
+            written_as.unwrap_or(name),
+            via.map(|v| format!(", {v}")).unwrap_or_default()
+        );
+        self.entry.uses.push(profile::Use {
+            name: identity,
+            written_as: written_as.map(profile::identity),
+            arguments,
+            via: via.map(str::to_owned),
+        });
+        match inner {
+            None => {}
+            Some(nested::Inner::Opaque(why)) => self.entry.opaque.push(match via {
+                Some(via) => format!("{why}, {via}"),
+                None => why,
+            }),
+            Some(nested::Inner::PowerShell(code)) => self.pending.push((self.step.to_owned(), here, code)),
+            Some(nested::Inner::Cmd(text)) if depth < MAX_NESTING => {
+                for (name, args) in nested::cmd_segments(&text) {
+                    self.cmd_use(&name, args, Some(&here), depth + 1);
+                }
+            }
+            Some(nested::Inner::Program(file, args)) if depth < MAX_NESTING => {
+                self.cmd_use(&file, args, Some(&here), depth + 1);
+            }
+            Some(_) => self.entry.opaque.push(format!("code is nested more than {MAX_NESTING} deep, {here}")),
+        }
+    }
+}
