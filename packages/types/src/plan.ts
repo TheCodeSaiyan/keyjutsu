@@ -69,3 +69,5 @@ export type { Target } from "./generated/plan/Target";
 export type { TargetKind } from "./generated/plan/TargetKind";
 export type { ToolRequirement } from "./generated/plan/ToolRequirement";
 export type { ValidationDisplay } from "./generated/plan/ValidationDisplay";
+export type { WorkProfileLink } from "./generated/plan/WorkProfileLink";
+export type { WorkProfileRecord } from "./generated/plan/WorkProfileRecord";

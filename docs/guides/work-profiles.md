@@ -43,7 +43,7 @@ least what its parent means.
 | Developer | your own machine and code | a recovery for critical steps; `git push` counts as high risk |
 | Packaging | building and installing software | a recovery from high risk; installers and package managers count as high risk |
 | Helpdesk | fixing someone's machine | a recovery from high risk; no code KeyJutsu cannot see into; local account changes count as high risk; disks, partitions and boot configuration refused |
-| IT Operations | servers, directories, fleets | a recovery for every change (normal risk and above); Active Directory, Entra and Intune, Group Policy, DNS and DHCP changes count as high risk, removals as critical |
+| IT Operations | servers, directories, fleets | a recovery for every change (normal risk and above); each high-risk step approved on its own, with its typed phrase; Active Directory, Entra and Intune, Group Policy, DNS and DHCP changes count as high risk, removals as critical |
 | Security response | an incident | log clearing and secure deletion refused; killing processes and deleting files count as high risk, since both destroy evidence |
 | Audit only | looking, not touching | nothing above low risk: a step that changes anything is refused |
 
@@ -153,8 +153,12 @@ What a profile can set:
 | `validation.block_opaque_code` | `true` refuses code KeyJutsu cannot see into |
 | `[[validation.raise]]` | `commands`, `to` and `reason`: those commands count as at least that risk |
 | `[[validation.deny]]` | `commands` and `reason`: those commands are refused |
+| `approval.confirm_each_from` | steps at that risk or above need their own typed phrase to be approved, as critical steps always do |
 
 Any other key is refused, so a mistyped one is caught rather than ignored.
+`approval.second_person` is reserved for two-person approval, which KeyJutsu
+doesn't have yet: setting it is refused, so nobody believes a second person
+is being asked when nobody is.
 
 ## Planning under a profile
 
@@ -213,6 +217,34 @@ What each kind of finding does to a step:
 A step that meets the profile records that it did, so the report shows the
 profile was applied rather than leaving you to assume it.
 
+## Approving under a profile
+
+The plan records the profile it was validated under: its name, the chain it
+extends, where each came from, and why it applied. That record is sealed into
+the snapshot with everything else, so a snapshot says what it was approved
+under, and altering the record afterwards breaks the seal.
+
+Approving the plan normally covers every step except critical ones, which
+each need their own typed phrase. A profile can ask for the same from a lower
+risk. IT Operations does it from high risk:
+
+```text
+Not sealed: these steps need their own typed confirmation.
+
+  CONFIRM          stop-spooler: Stop the spooler (IT Operations asks for its own confirmation from high risk)
+```
+
+In the desktop app the step's confirmation opens as it does for a critical
+step, headed "Confirm this step" rather than "Critical action", and it shows
+what the step runs, what it acts on and how it would be undone before the
+phrase. The same step is confirmed again just before it runs if its approval
+is over an hour old, exactly as a critical step is.
+
+Validating under a stricter profile after approving doesn't get round it:
+sealing checks every step against the profile recorded in the plan as it is
+sealed, so a step approved without its phrase under the old profile has to be
+confirmed under the new one.
+
 ## What a deny rule matches
 
 Rules match commands as PowerShell parses them, never by searching the text
@@ -251,6 +283,7 @@ clearing an event log but not querying one.
   no recovery under any profile: KeyJutsu cannot run one for it.
 - **cmd.exe lines** are split on `&` and `|` outside quotes, not parsed by
   cmd itself, as everywhere else in validation.
-- **The profile is not yet part of the approval.** A snapshot approved under
-  IT Operations does not record that it was; that comes with the change
-  record.
+- **No change record yet.** The snapshot records the profile, but there is
+  no report of a run to attach to a ticket.
+- **One person approves.** Two-person approval is reserved in the format and
+  refused until it exists.

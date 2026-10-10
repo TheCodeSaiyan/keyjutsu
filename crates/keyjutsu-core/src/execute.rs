@@ -247,6 +247,9 @@ pub struct CriticalConfirmation {
     pub evidence: Vec<String>,
     /// The phrase to type.
     pub phrase: String,
+    /// Why it needs its own confirmation: "critical", or the work profile
+    /// that asks for one at this risk.
+    pub reason: String,
 }
 
 /// How long an approval of a critical step stands on its own. After this, or
@@ -375,6 +378,7 @@ pub fn critical_confirmation(plan: &keyjutsu_plan::model::Plan, step: &Step) -> 
             })
             .unwrap_or_default(),
         phrase: keyjutsu_plan::approval::confirmation_phrase(step),
+        reason: keyjutsu_plan::approval::confirmation_reason(plan, step).unwrap_or_else(|| "critical".into()),
     }
 }
 

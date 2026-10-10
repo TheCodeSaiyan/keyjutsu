@@ -155,3 +155,46 @@ fn a_broken_folder_stops_planning_until_a_profile_is_picked() {
     assert_eq!(code, 2, "{err}");
     assert!(err.contains("--profile NAME chooses one by hand"), "{err}");
 }
+
+#[cfg(windows)]
+#[test]
+fn it_operations_asks_for_a_high_risk_steps_own_confirmation() {
+    let m = Machine::new("approve");
+    let plan = serde_json::json!({
+        "schema_version": "1.0", "plan_id": "spooler", "task_id": "t",
+        "target": {"id": "local", "kind": "local_windows"},
+        "agent": {"name": "codex", "version": "1"},
+        "steps": [{
+            "id": "stop-spooler", "title": "Stop the spooler", "objective": "The spooler is stopped.",
+            "kind": "command", "shell": {"kind": "pwsh"},
+            "commands": [{"text": "Stop-Service -Name Spooler"}],
+            "recovery": {"strategy": "commands", "commands": [{"text": "Start-Service -Name Spooler"}]}
+        }]
+    });
+    let file = m.work().join("spooler.json");
+    std::fs::write(&file, plan.to_string()).unwrap();
+    let file = file.display().to_string();
+    let out = m.work().join("spooler.snapshot.json").display().to_string();
+    let approve = |extra: &[&str]| {
+        let mut args =
+            vec!["plan", "approve", &file, "--out", &out, "--no-dry-run", "--profile", "it-operations"];
+        args.extend_from_slice(extra);
+        m.run(&args)
+    };
+
+    let (code, _, err) = approve(&[]);
+    assert_eq!(code, 1, "{err}");
+    assert!(err.contains("need their own typed confirmation"), "{err}");
+    assert!(
+        err.contains("CONFIRM          stop-spooler: Stop the spooler (IT Operations asks for its own confirmation from high risk)"),
+        "{err}"
+    );
+    assert!(!Path::new(&out).exists());
+
+    let (code, stdout, err) = approve(&["--confirm", "stop-spooler=STOP THE SPOOLER"]);
+    assert_eq!(code, 0, "{stdout}{err}");
+    let sealed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+    let recorded = sealed.pointer("/plan/keyjutsu/work_profile").unwrap_or(&serde_json::Value::Null);
+    assert_eq!(recorded["name"], "it-operations", "{sealed:#}");
+    assert_eq!(recorded["why"], "chosen by hand; no default was set");
+}

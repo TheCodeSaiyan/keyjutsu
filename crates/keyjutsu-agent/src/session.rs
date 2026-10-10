@@ -237,6 +237,7 @@ fn carry_provenance(from: &Plan, into: &mut Plan, extra: Vec<ProvenanceEvent>) {
         steps: Default::default(),
         snapshot_hash: None,
         provenance,
+        work_profile: None,
     });
 }
 
@@ -441,6 +442,7 @@ pub fn record_review(plan: &Plan, reviewer: &AgentHandle, review: &Review, at: &
         steps: Default::default(),
         snapshot_hash: None,
         provenance: Vec::new(),
+        work_profile: None,
     });
     for f in &review.findings {
         state.provenance.push(event(

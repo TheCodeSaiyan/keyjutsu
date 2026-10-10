@@ -67,6 +67,11 @@ pub struct StepSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub confirmation_phrase: Option<String>,
+    /// Why it needs its own confirmation, when it does: "critical", or the
+    /// work profile that asks for one at this risk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub confirmation_reason: Option<String>,
     /// Review findings about this step that are warnings or worse.
     pub concerns: u32,
 }
@@ -320,6 +325,7 @@ impl Workspace {
             steps: BTreeMap::new(),
             snapshot_hash: None,
             provenance: Vec::new(),
+            work_profile: None,
         });
         let reason = reason.trim();
         state.provenance.push(ProvenanceEvent {
@@ -370,6 +376,7 @@ impl Workspace {
             steps: BTreeMap::new(),
             snapshot_hash: None,
             provenance: Vec::new(),
+            work_profile: None,
         });
         if let Some(incoming) = next.keyjutsu.take() {
             // An agent revision brings its own provenance and no validation.
@@ -656,6 +663,7 @@ impl Workspace {
                 steps: BTreeMap::new(),
                 snapshot_hash: None,
                 provenance: Vec::new(),
+                work_profile: None,
             })
             .provenance
             .push(answered(&question, answer, at));
@@ -827,6 +835,7 @@ impl Workspace {
                 risk,
                 critical,
                 confirmation_phrase: critical.then(|| confirmation_phrase(step)),
+                confirmation_reason: keyjutsu_plan::approval::confirmation_reason(plan, step),
                 concerns: u32::try_from(concerns).unwrap_or(u32::MAX),
             });
         }

@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use keyjutsu_core::fingerprint;
-use keyjutsu_core::plan::approval::{ApprovalError, confirmation_phrase, is_critical};
+use keyjutsu_core::plan::approval::{ApprovalError, confirmation_phrase, confirmation_reason};
 use keyjutsu_core::plan::hash::affected_by_drift;
 use keyjutsu_core::plan::model::{EvidenceResult, Readiness};
 use keyjutsu_core::plan::{
@@ -80,7 +80,7 @@ fn print_report(plan: &ValidPlan, report: &Report) {
     }
 }
 
-pub fn validate(file: &Path, dry_run: bool, json: bool, profile: Option<Profile>) -> ExitCode {
+pub fn validate(file: &Path, dry_run: bool, json: bool, profile: Option<(Profile, String)>) -> ExitCode {
     let plan = match load_plan(file) {
         Ok(p) => p,
         Err(c) => return c,
@@ -90,7 +90,8 @@ pub fn validate(file: &Path, dry_run: bool, json: bool, profile: Option<Profile>
         Options {
             dry_run,
             broker_available: keyjutsu_broker::broker_path().is_some(),
-            profile: profile.clone(),
+            profile: profile.as_ref().map(|(p, _)| p.clone()),
+            profile_why: profile.as_ref().map(|(_, why)| why.clone()),
         },
     );
     if json {
@@ -137,7 +138,7 @@ pub fn approve(
     confirmations: &[String],
     force: bool,
     dry_run: bool,
-    profile: Option<Profile>,
+    profile: Option<(Profile, String)>,
 ) -> ExitCode {
     if out.exists() && !force {
         eprintln!("keyjutsu: {} already exists; pass --force to replace it", out.display());
@@ -154,7 +155,8 @@ pub fn approve(
         Options {
             dry_run,
             broker_available: keyjutsu_broker::broker_path().is_some(),
-            profile: profile.clone(),
+            profile: profile.as_ref().map(|(p, _)| p.clone()),
+            profile_why: profile.as_ref().map(|(_, why)| why.clone()),
         },
     );
     let not_ready = report.not_ready(&draft);
@@ -198,14 +200,18 @@ pub fn approve(
     let snapshot = match seal(&plan, &book, Some(fp), &at) {
         Ok(s) => s,
         Err(_) => {
-            eprintln!("Not sealed: these critical steps need their own typed confirmation.");
+            eprintln!("Not sealed: these steps need their own typed confirmation.");
             eprintln!();
             for id in plan.graph().topological_order() {
                 let Some(step) = plan.plan().step(id) else { continue };
-                if is_critical(plan.plan(), step)
+                if let Some(reason) = confirmation_reason(plan.plan(), step)
                     && !confirmations.iter().any(|c| c.split('=').next() == Some(id))
                 {
-                    eprintln!("  CRITICAL ACTION  {id}: {}", step.title);
+                    if reason == "critical" {
+                        eprintln!("  CRITICAL ACTION  {id}: {}", step.title);
+                    } else {
+                        eprintln!("  CONFIRM          {id}: {} ({reason})", step.title);
+                    }
                     for command in &step.commands {
                         eprintln!("    runs:          {}", command.text);
                     }

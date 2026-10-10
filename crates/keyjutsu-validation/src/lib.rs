@@ -33,7 +33,7 @@ use keyjutsu_plan::ValidPlan;
 use keyjutsu_plan::condition::{Facts, StepResult, Truth, evaluate};
 use keyjutsu_plan::model::{
     Actor, ActorKind, Check, Condition, EffectKind, FactValue, KeyJutsuState, Plan, ProvenanceAction,
-    ProvenanceEvent, Readiness, ServiceState, ShellName, StepState,
+    ProvenanceEvent, Readiness, ServiceState, ShellName, StepState, WorkProfileLink, WorkProfileRecord,
 };
 use keyjutsu_plan::version::{Constraint, Version};
 use keyjutsu_terminal::{ShellKind, shell};
@@ -50,11 +50,13 @@ pub struct Options {
     pub broker_available: bool,
     /// The work profile the plan is checked under, if any.
     pub profile: Option<profile::Profile>,
+    /// Why that profile applies, recorded with it in the plan.
+    pub profile_why: Option<String>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { dry_run: true, broker_available: false, profile: None }
+        Self { dry_run: true, broker_available: false, profile: None, profile_why: None }
     }
 }
 
@@ -75,6 +77,8 @@ pub struct Report {
     /// Anything that stopped validation itself, such as a shell that could
     /// not be started to analyse the plan.
     pub problems: Vec<String>,
+    /// The work profile the plan was checked under, if any.
+    pub work_profile: Option<WorkProfileRecord>,
 }
 
 impl Report {
@@ -107,6 +111,7 @@ impl Report {
             steps: self.steps.clone(),
             snapshot_hash: None,
             provenance,
+            work_profile: self.work_profile.clone(),
         });
         out
     }
@@ -495,7 +500,18 @@ pub fn validate(plan: &ValidPlan, options: Options) -> Report {
         steps.insert(s.id.clone(), judge(s, &gathered));
     }
 
-    Report { steps, assumptions, problems }
+    let work_profile = options.profile.as_ref().map(|p| WorkProfileRecord {
+        name: p.name().to_owned(),
+        title: p.title().to_owned(),
+        chain: p
+            .chain
+            .iter()
+            .map(|l| WorkProfileLink { name: l.name.clone(), origin: l.origin.to_string() })
+            .collect(),
+        why: options.profile_why.clone(),
+        confirm_each_from: p.confirm_each_from,
+    });
+    Report { steps, assumptions, problems, work_profile }
 }
 
 /// How deep KeyJutsu unpacks code nested in other code, such as a `cmd /c`

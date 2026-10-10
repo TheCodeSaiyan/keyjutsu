@@ -615,9 +615,11 @@ async fn workspace_validate(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceVie
     let plans = plans.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         with_workspace(&plans, |w| {
+            let (profile, view) = current_profile(&plans);
             let options = Options {
                 broker_available: keyjutsu_broker::broker_path().is_some(),
-                profile: current_profile(&plans).0,
+                profile_why: profile.is_some().then_some(view.why),
+                profile,
                 ..Options::default()
             };
             w.validate(options, &fingerprint::now_rfc3339()).map_err(|e| e.to_string())

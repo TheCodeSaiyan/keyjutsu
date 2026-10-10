@@ -65,4 +65,10 @@ missing recovery INVALID, since the agent can fix the plan.
   link or junction in or as it, or an unresolvable starting folder stops
   planning until a profile is picked by hand. The machine's files are
   trusted: changing one never asks about a folder again.
-- Recording the profile with an approval is later work.
+- Validation records the profile in the plan's own state, which is sealed
+  with it. A profile's `approval.confirm_each_from` lowers the risk at which
+  a step needs its own typed phrase, read from that record by approval, by
+  sealing and by the check before a step runs, so all three agree. Sealing
+  also refuses a step that needs a phrase it was approved without, so
+  validating under a stricter profile after approving does not skip one.
+  `approval.second_person` is reserved and refused.
