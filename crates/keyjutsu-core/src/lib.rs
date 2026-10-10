@@ -9,6 +9,7 @@ pub mod approvals;
 pub mod artifacts;
 pub mod asks;
 pub mod boundary;
+pub mod change_record;
 pub mod demo;
 pub mod diagnostics;
 pub mod dpapi;

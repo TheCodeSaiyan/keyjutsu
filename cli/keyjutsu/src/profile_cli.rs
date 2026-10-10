@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use keyjutsu_core::store::{Store, default_root};
+use keyjutsu_core::validation::ProfileContext;
 use keyjutsu_core::validation::profile::Profile;
 use keyjutsu_core::work_profile::{self, Chosen, Decision, Places, Why};
 
@@ -40,7 +41,7 @@ pub fn applied(
     name: Option<&str>,
     folder: Option<&Path>,
     purpose: Purpose,
-) -> Result<Option<(Profile, String)>, ExitCode> {
+) -> Result<Option<(Profile, ProfileContext)>, ExitCode> {
     let places = Places::default();
     let store = store();
     let decision = work_profile::decide(&places, store.as_ref(), &start(folder));
@@ -52,7 +53,7 @@ pub fn applied(
         return match work_profile::hand_pick(&places, &decision, name) {
             Ok(c) => {
                 note(&c);
-                Ok(Some((c.profile, describe(&c.why))))
+                Ok(Some((c.profile.clone(), c.context())))
             }
             Err(e) => fail(format!("{e}; `keyjutsu profile list` shows them")),
         };
@@ -60,7 +61,7 @@ pub fn applied(
     match decision {
         Decision::Chosen(c) => {
             note(&c);
-            Ok(Some((c.profile, describe(&c.why))))
+            Ok(Some((c.profile.clone(), c.context())))
         }
         Decision::NeedsConfirmation(u) => fail(format!(
             "{} sets the work profile {}, which is less strict than this machine's {}. \

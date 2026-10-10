@@ -237,6 +237,7 @@ fn a_revision_takes_its_failure_from_the_recorded_session() {
         checkpoint: None,
         outcome,
         git: Vec::new(),
+        identity: None,
     };
     let failed = |step: &str| Outcome::Failed {
         step: step.into(),

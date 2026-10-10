@@ -220,7 +220,11 @@ fn the_plan_records_the_profile_it_was_validated_under() {
     let options = Options {
         dry_run: false,
         profile: Some(profile),
-        profile_why: Some("This machine's default.".into()),
+        profile_context: keyjutsu_validation::ProfileContext {
+            why: Some("This machine's default.".into()),
+            started_in: Some("D:/work".into()),
+            ..Default::default()
+        },
         ..Options::default()
     };
     let report = validate(&p, options);
@@ -231,6 +235,9 @@ fn the_plan_records_the_profile_it_was_validated_under() {
     assert_eq!(chain, ["it-operations", "helpdesk", "developer"]);
     assert_eq!(wp.why.as_deref(), Some("This machine's default."));
     assert_eq!(wp.confirm_each_from, Some(RiskLevel::High));
+    assert_eq!(wp.started_in.as_deref(), Some("D:/work"));
+    // Each profile's text is hashed as it was read.
+    assert!(wp.chain.iter().all(|l| l.hash.as_ref().is_some_and(|h| h.len() == 64)));
 
     // Validated again without one, the plan no longer claims one.
     let again = validate(&p, Options { dry_run: false, ..Options::default() }).record_in(p.plan(), "x");

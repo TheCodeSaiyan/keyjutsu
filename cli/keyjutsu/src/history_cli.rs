@@ -120,6 +120,52 @@ pub fn history_export(
     }
 }
 
+/// The change record for a session: Markdown on the screen or to a file,
+/// or JSON. It is built from the encrypted record each time and written out
+/// only where the operator says.
+pub fn history_change_record(id: &str, json: bool, out: Option<&Path>, force: bool) -> ExitCode {
+    let store = match open() {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    let record = match history::load(&store, id) {
+        Ok(r) => r,
+        Err(e) => return fail(e),
+    };
+    let recording = match history::load_recording(&store, id) {
+        Ok(r) => r,
+        Err(e) => return fail(e),
+    };
+    let change = match keyjutsu_core::change_record::build(&record, recording.as_ref()) {
+        Ok(c) => c,
+        Err(e) => return fail(e),
+    };
+    let text = if json {
+        serde_json::to_string_pretty(&change).unwrap_or_default()
+            + "
+"
+    } else {
+        change.markdown()
+    };
+    match out {
+        None => {
+            print!("{text}");
+            ExitCode::SUCCESS
+        }
+        Some(path) if path.exists() && !force => {
+            eprintln!("keyjutsu: {} already exists; pass --force to replace it", path.display());
+            ExitCode::from(2)
+        }
+        Some(path) => match std::fs::write(path, text) {
+            Ok(()) => {
+                println!("Wrote the change record for session {id} to {}.", path.display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => fail(format!("cannot write {}: {e}", path.display())),
+        },
+    }
+}
+
 pub fn history_show(id: &str) -> ExitCode {
     let store = match open() {
         Ok(s) => s,

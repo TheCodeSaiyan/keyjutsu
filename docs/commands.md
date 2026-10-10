@@ -253,6 +253,7 @@ changes left out.
 | `keyjutsu history list` | every recorded session, oldest first |
 | `keyjutsu history show ID` | one session: task, agent, outcome and steps |
 | `keyjutsu history recheck ID` | compare this machine with the one the session was approved on |
+| `keyjutsu history change-record ID` | the session's [change record](guides/work-profiles.md#the-change-record), to attach to a ticket: profile, approvals, what ran, how it ended; `--json` for JSON, `--out FILE` to write it, `--force` to replace one |
 | `keyjutsu history export ID --out FILE` | a recorded run as an asciicast (`.cast`), redacted, long pauses shortened; `--step`, or `--from` and `--to`, for part of it, or `--each FOLDER` for one file per step |
 | `keyjutsu technique promote SESSION --name NAME` | make a completed session a Technique; `--param NAME=VALUE` makes a value a parameter, `--description` says what it's for |
 | `keyjutsu technique list` | every Technique, with its revision and parameters |

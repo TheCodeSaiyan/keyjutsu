@@ -196,5 +196,49 @@ fn it_operations_asks_for_a_high_risk_steps_own_confirmation() {
     let sealed: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
     let recorded = sealed.pointer("/plan/keyjutsu/work_profile").unwrap_or(&serde_json::Value::Null);
     assert_eq!(recorded["name"], "it-operations", "{sealed:#}");
-    assert_eq!(recorded["why"], "chosen by hand; no default was set");
+    assert_eq!(recorded["why"], "Chosen by hand: no default was set.");
+    assert_eq!(recorded["started_in"], m.work().display().to_string());
+
+    // A session run from that snapshot has a change record naming all of it.
+    use keyjutsu_core::execute::Outcome;
+    use keyjutsu_core::history::{SessionRecord, save};
+    let snapshot = std::fs::read_to_string(&out).unwrap();
+    let record = SessionRecord {
+        id: "20261010-120000-cafe".into(),
+        started_at: "2026-10-10T12:00:00Z".into(),
+        finished_at: "2026-10-10T12:00:30Z".into(),
+        task: "Stop the spooler".into(),
+        agent: serde_json::from_value(serde_json::json!({"name": "codex", "version": "1"})).unwrap(),
+        snapshot,
+        checkpoint: None,
+        outcome: Outcome::Complete,
+        git: Vec::new(),
+        identity: Some("WORKGROUP\\tester".into()),
+    };
+    let store = keyjutsu_core::store::Store::open(&m.root.join("store")).unwrap();
+    save(&store, &record).unwrap();
+    let (code, md, err) = m.run(&["history", "change-record", "20261010-120000-cafe"]);
+    assert_eq!(code, 0, "{err}");
+    for expected in [
+        "# Change record: Stop the spooler",
+        "- **Run as:** WORKGROUP\\tester",
+        "**IT Operations** (`it-operations`): Chosen by hand: no default was set.",
+        "with its own typed confirmation (IT Operations asks for its own confirmation from high risk)",
+    ] {
+        assert!(md.contains(expected), "missing {expected:?} in\n{md}");
+    }
+    let json_file = m.work().join("change.json");
+    let (code, _, err) = m.run(&[
+        "history",
+        "change-record",
+        "20261010-120000-cafe",
+        "--json",
+        "--out",
+        &json_file.display().to_string(),
+    ]);
+    assert_eq!(code, 0, "{err}");
+    let change: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&json_file).unwrap()).unwrap();
+    assert_eq!(change["work_profile"]["name"], "it-operations");
+    assert_eq!(change["steps"][0]["result"], "not run");
 }

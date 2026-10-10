@@ -82,6 +82,22 @@ enum HistoryCommand {
         /// The session's id, from `keyjutsu history list`.
         id: String,
     },
+    /// The change record for a session, to attach to a ticket: the plan, the
+    /// work profile and why it applied, who approved what, what ran and how
+    /// it ended. Markdown unless --json.
+    ChangeRecord {
+        /// The session's id, from `keyjutsu history list`.
+        id: String,
+        /// Print it as JSON instead.
+        #[arg(long)]
+        json: bool,
+        /// Write it to this file rather than the screen.
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+        /// Replace an existing file at --out.
+        #[arg(long)]
+        force: bool,
+    },
     /// Compare this machine with the one the session was approved on.
     Recheck {
         /// The session's id, from `keyjutsu history list`.
@@ -810,6 +826,9 @@ fn main() -> ExitCode {
         Command::History(HistoryCommand::List) => history_cli::history_list(),
         Command::History(HistoryCommand::Show { id }) => history_cli::history_show(&id),
         Command::History(HistoryCommand::Recheck { id }) => history_cli::history_recheck(&id),
+        Command::History(HistoryCommand::ChangeRecord { id, json, out, force }) => {
+            history_cli::history_change_record(&id, json, out.as_deref(), force)
+        }
         Command::History(HistoryCommand::Export { id, step, from, to, out, each }) => {
             let (from, to) = match step {
                 Some(s) => (Some(s.clone()), Some(s)),

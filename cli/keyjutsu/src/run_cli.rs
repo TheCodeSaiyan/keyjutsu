@@ -458,6 +458,7 @@ pub fn run(args: RunArgs<'_>) -> ExitCode {
             checkpoint: Some(checkpoint.clone()),
             outcome: outcome.clone(),
             git: git_reports,
+            identity: keyjutsu_core::history::identity(),
         };
         match keyjutsu_core::store::Store::open(&keyjutsu_core::store::default_root())
             .and_then(|s| keyjutsu_core::history::save(&s, &record))

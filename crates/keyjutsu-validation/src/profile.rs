@@ -24,6 +24,7 @@ use std::path::PathBuf;
 
 use keyjutsu_plan::model::{Readiness, RecoveryStrategy, RiskLevel, Step, StepKind};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use crate::risk::Assessment;
 
@@ -164,7 +165,7 @@ pub enum ProfileError {
 /// Every profile KeyJutsu knows about, wherever it was defined.
 #[derive(Debug, Clone)]
 pub struct Catalogue {
-    entries: BTreeMap<String, (Origin, ProfileFile)>,
+    entries: BTreeMap<String, (Origin, ProfileFile, String)>,
 }
 
 impl Catalogue {
@@ -190,7 +191,7 @@ impl Catalogue {
         if !valid_name(&file.name) {
             return Err(ProfileError::BadName { origin: origin.to_string(), name: file.name });
         }
-        if let Some((first, _)) = self.entries.get(&file.name) {
+        if let Some((first, _, _)) = self.entries.get(&file.name) {
             return Err(ProfileError::Clash {
                 name: file.name.clone(),
                 first: first.to_string(),
@@ -200,7 +201,8 @@ impl Catalogue {
         if file.extends.is_none() && origin != Origin::BuiltIn {
             return Err(ProfileError::NoParent(file.name));
         }
-        self.entries.insert(file.name.clone(), (origin, file));
+        let hash = Sha256::digest(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+        self.entries.insert(file.name.clone(), (origin, file, hash));
         Ok(())
     }
 
@@ -209,13 +211,13 @@ impl Catalogue {
         let built: Vec<&str> = BUILT_IN.iter().map(|(n, _)| *n).collect();
         let mut out: Vec<(String, String)> = built
             .iter()
-            .filter_map(|n| self.entries.get(*n).map(|(_, f)| ((*n).to_owned(), f.title.clone())))
+            .filter_map(|n| self.entries.get(*n).map(|(_, f, _)| ((*n).to_owned(), f.title.clone())))
             .collect();
         out.extend(
             self.entries
                 .iter()
                 .filter(|(n, _)| !built.contains(&n.as_str()))
-                .map(|(n, (_, f))| (n.clone(), f.title.clone())),
+                .map(|(n, (_, f, _))| (n.clone(), f.title.clone())),
         );
         out
     }
@@ -234,7 +236,7 @@ impl Catalogue {
             if chain.len() >= MAX_DEPTH {
                 return Err(ProfileError::TooDeep { name: name.to_owned() });
             }
-            let Some((_, file)) = self.entries.get(at) else {
+            let Some((_, file, _)) = self.entries.get(at) else {
                 return Err(match chain.last() {
                     None => ProfileError::Unknown(at.to_owned()),
                     Some(child) => {
@@ -250,10 +252,10 @@ impl Catalogue {
         }
         let mut profile: Option<Profile> = None;
         for link in chain.iter().rev() {
-            let (origin, file) = &self.entries[*link];
+            let (origin, file, hash) = &self.entries[*link];
             profile = Some(match profile {
-                None => Profile::root(origin, file)?,
-                Some(parent) => parent.tighten(origin, file)?,
+                None => Profile::root(origin, file, hash)?,
+                Some(parent) => parent.tighten(origin, file, hash)?,
             });
         }
         // The loop ran at least once: `chain` holds `name` itself.
@@ -273,6 +275,8 @@ pub struct Link {
     pub title: String,
     pub summary: Option<String>,
     pub origin: Origin,
+    /// SHA-256 of the profile's text as it was read.
+    pub hash: String,
 }
 
 /// A rule with the profile it came from.
@@ -314,7 +318,7 @@ impl Profile {
         self.chain.iter().any(|l| l.name == other)
     }
 
-    fn root(origin: &Origin, file: &ProfileFile) -> Result<Self, ProfileError> {
+    fn root(origin: &Origin, file: &ProfileFile, hash: &str) -> Result<Self, ProfileError> {
         let empty = Self {
             chain: Vec::new(),
             instructions: Vec::new(),
@@ -325,11 +329,11 @@ impl Profile {
             deny: Vec::new(),
             confirm_each_from: None,
         };
-        empty.tighten(origin, file)
+        empty.tighten(origin, file, hash)
     }
 
     /// This profile with `file`, which extends it, applied on top.
-    fn tighten(mut self, origin: &Origin, file: &ProfileFile) -> Result<Self, ProfileError> {
+    fn tighten(mut self, origin: &Origin, file: &ProfileFile, hash: &str) -> Result<Self, ProfileError> {
         let parent = self.chain.first().map(|l| l.name.clone()).unwrap_or_default();
         let loosens =
             |what: String| ProfileError::Loosens { name: file.name.clone(), parent: parent.clone(), what };
@@ -410,6 +414,7 @@ impl Profile {
                 title: file.title.clone(),
                 summary: file.summary.clone(),
                 origin: origin.clone(),
+                hash: hash.to_owned(),
             },
         );
         Ok(self)
