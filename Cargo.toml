@@ -59,6 +59,8 @@ sha2 = "0.11"
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 thiserror = "2"
+# Work profiles and the files that choose them.
+toml = "1"
 ts-rs = { version = "12", features = ["serde-json-impl"] }
 # Renders what a shell printed as a terminal would show it, so a line the
 # shell redrew with cursor moves reads once, not twice.
