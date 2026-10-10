@@ -25,7 +25,7 @@ impl Assessment {
         Self { level: RiskLevel::Low, reasons: Vec::new() }
     }
 
-    fn raise(&mut self, level: RiskLevel, reason: impl Into<String>) {
+    pub(crate) fn raise(&mut self, level: RiskLevel, reason: impl Into<String>) {
         if level > self.level {
             self.level = level;
         }
@@ -154,7 +154,7 @@ fn changes_its_targets(lower: &str) -> bool {
         )
 }
 
-/// The first path pattern that is a wildcard: `*` or `?`, or `[…]`, which
+/// The first path pattern that is a wildcard: `*` or `?`, or `[â€¦]`, which
 /// `-Path` reads as a set of characters, not as brackets. Only what is read
 /// as a path counts: the value of `-Path`, `-Include` or `-Filter`, or the
 /// first positional argument; a `-Value` of `what?` is not a pattern. With

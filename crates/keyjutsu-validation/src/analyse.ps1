@@ -86,6 +86,7 @@ $results = foreach ($item in @($request.commands)) {
             name = $name
             type = if ($info) { [string]$info.CommandType } else { $null }
             module = if ($info -and $info.ModuleName) { [string]$info.ModuleName } else { $null }
+            resolved = if ($info -and $info.CommandType -eq 'Alias') { [string]$info.Definition } else { $null }
             path = $path
             file_version = $version
             arguments = @($arguments)

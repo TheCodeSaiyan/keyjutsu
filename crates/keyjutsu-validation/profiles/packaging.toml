@@ -1,0 +1,18 @@
+name = "packaging"
+title = "Packaging"
+extends = "developer"
+summary = "Building, signing and installing software packages."
+instructions = """
+Install exact versions, never "latest", and say which version in the step.
+Install silently with the installer's own switches and check the result by
+reading the installed version afterwards. Verify a download's hash or
+signature before running it.
+"""
+
+[validation]
+require_recovery_from = "high"
+
+[[validation.raise]]
+commands = ["msiexec", "winget install*", "winget upgrade*", "winget uninstall*", "choco", "Install-Package", "Uninstall-Package", "Install-Module", "Install-PSResource", "Add-AppxPackage", "Remove-AppxPackage"]
+to = "high"
+reason = "installs or removes software"

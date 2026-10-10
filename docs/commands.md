@@ -98,6 +98,7 @@ it shows exactly what would be sent and stops.
 | `--send` | actually send it |
 | `--file FILE` | a file to include, redacted; repeatable |
 | `--folder DIR` | a folder the agent may investigate; it's started there |
+| `--profile NAME` | the [work profile](guides/work-profiles.md) the plan is for: its rules go to the agent |
 | `--out FILE` | where to write the plan |
 
 ### `keyjutsu plan revise FILE --step STEP --guidance TEXT --agent AGENT --out FILE`
@@ -106,7 +107,7 @@ Asks an agent to redo one step, with your guidance and what validation found.
 No other step may change. `--session ID` names a recorded run in which that
 step failed: the agent is also shown what it printed, redacted, to diagnose
 from. `--task` gives the task if the plan's title doesn't say it well enough;
-`--send` as above.
+`--profile` and `--send` as above.
 
 ### `keyjutsu plan answer FILE`
 
@@ -120,8 +121,8 @@ Either way the decision is kept in the plan's provenance. `--send` as above.
 ### `keyjutsu plan review FILE --agent AGENT`
 
 Asks a second agent to challenge the plan. It can't change it. `--record FILE`
-writes the plan with the review recorded in its provenance; `--task` and
-`--send` as above.
+writes the plan with the review recorded in its provenance; `--task`,
+`--profile` and `--send` as above.
 
 ### `keyjutsu plan check FILE`
 
@@ -140,6 +141,7 @@ run. Nothing the plan names is run.
 | --- | --- |
 | `--no-dry-run` | skip `-WhatIf` dry runs |
 | `--json` | the full report as JSON |
+| `--profile NAME` | also check it against a [work profile](guides/work-profiles.md) |
 
 ### `keyjutsu plan approve FILE --out SNAPSHOT`
 
@@ -154,6 +156,7 @@ what it runs and why it's critical.
 | `--confirm STEP=PHRASE` | approve a critical step with its phrase; repeatable |
 | `--force` | replace an existing file at `--out` |
 | `--no-dry-run` | skip `-WhatIf` dry runs in the validation before sealing |
+| `--profile NAME` | validate against a [work profile](guides/work-profiles.md) before sealing |
 
 ### `keyjutsu plan stage FILE`
 
@@ -175,6 +178,17 @@ Prints each step's hash: what an approval of that step binds to.
 
 What changed between two versions of a plan, and which steps that sends back
 to validation.
+
+## Work profiles
+
+### `keyjutsu profile list`
+
+The [work profiles](guides/work-profiles.md), each with the one it extends.
+
+### `keyjutsu profile show NAME`
+
+Everything a profile enforces, which profile in its chain each rule comes
+from, and the exact text the agents are given.
 
 ## Running
 

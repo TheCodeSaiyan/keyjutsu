@@ -156,6 +156,8 @@ pub struct Agents<'r, R: Runner> {
     /// Where agents may write scratch output (Codex's final message).
     pub scratch: PathBuf,
     pub max_repairs: usize,
+    /// The work profile whose rules every prompt carries, if any.
+    pub profile: Option<keyjutsu_validation::profile::Profile>,
 }
 
 impl<R: Runner> std::fmt::Debug for Agents<'_, R> {
@@ -311,7 +313,7 @@ impl<R: Runner> Agents<'_, R> {
         at: &str,
     ) -> Result<Proposal, AgentError> {
         let full = agent.kind.capabilities().prompt_on_stdin;
-        let text = prompt::propose(task, context, full);
+        let text = prompt::propose(task, context, full, self.profile.as_ref());
         let cwd =
             context.working_directory.as_ref().map(PathBuf::from).unwrap_or_else(|| self.scratch.clone());
         let (plan, summary, attempts) = self.ask(agent, &text, &cwd, |doc| Self::accept_plan(agent, doc))?;
@@ -344,7 +346,15 @@ impl<R: Runner> Agents<'_, R> {
             .iter()
             .position(|s| s.id == step)
             .ok_or_else(|| AgentError::UnknownStep(step.to_owned()))?;
-        let text = prompt::revise_step(task, &public_json(plan), step, guidance, findings, failure);
+        let text = prompt::revise_step(
+            task,
+            &public_json(plan),
+            step,
+            guidance,
+            findings,
+            failure,
+            self.profile.as_ref(),
+        );
         let base = {
             let mut p = plan.clone();
             p.keyjutsu = None;
@@ -387,7 +397,7 @@ impl<R: Runner> Agents<'_, R> {
         at: &str,
     ) -> Result<Proposal, AgentError> {
         let full = agent.kind.capabilities().prompt_on_stdin;
-        let text = prompt::revise_plan(task, &public_json(plan), guidance, full);
+        let text = prompt::revise_plan(task, &public_json(plan), guidance, full, self.profile.as_ref());
         let (revised, summary, attempts) =
             self.ask(agent, &text, &self.scratch, |doc| Self::accept_plan(agent, doc))?;
         let mut stored = revised.plan().clone();
@@ -414,7 +424,7 @@ impl<R: Runner> Agents<'_, R> {
     /// Ask a second agent to challenge the plan. It cannot change anything.
     pub fn review(&self, reviewer: &AgentHandle, task: &str, plan: &Plan) -> Result<Review, AgentError> {
         let ids: Vec<&str> = plan.steps.iter().map(|s| s.id.as_str()).collect();
-        let text = prompt::review(task, &public_json(plan));
+        let text = prompt::review(task, &public_json(plan), self.profile.as_ref());
         let (r, _, _) = self.ask(reviewer, &text, &self.scratch, |doc| {
             review::parse(doc, &ids).map_err(|e| vec![e.to_string()])
         })?;

@@ -15,6 +15,7 @@ use keyjutsu_core::agent::{AgentHandle, AgentKind, Agents, ProcessRunner, StepRe
 use keyjutsu_core::fingerprint;
 use keyjutsu_core::plan::model::EvidenceResult;
 use keyjutsu_core::plan::{Plan, parse_plan};
+use keyjutsu_core::validation::profile::Profile;
 use keyjutsu_core::validation::{self, Options};
 
 fn scratch() -> PathBuf {
@@ -125,6 +126,7 @@ pub fn propose(
     files: &[PathBuf],
     folder: Option<&Path>,
     out: &Path,
+    profile: Option<Profile>,
 ) -> ExitCode {
     let agent = match handle(agent) {
         Ok(a) => a,
@@ -153,7 +155,7 @@ pub fn propose(
         return ExitCode::SUCCESS;
     }
     let runner = ProcessRunner::default();
-    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2 };
+    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2, profile };
     println!();
     println!("Waiting for {}…", agent.kind.display_name());
     match agents.propose(&agent, task, &context, &fingerprint::now_rfc3339()) {
@@ -304,7 +306,7 @@ pub fn answer(args: Answer<'_>) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let runner = ProcessRunner::default();
-    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2 };
+    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2, profile: None };
     match w.answer(&agents, &agent, id, answer, &at) {
         Ok(_) => {
             println!("Revised; written to {}. Validate it again before approving.", out.display());
@@ -327,6 +329,7 @@ pub struct Revise<'a> {
     pub agent: &'a str,
     pub send: bool,
     pub out: &'a Path,
+    pub profile: Option<Profile>,
 }
 
 /// The failure of `step` in recorded session `id`, for the agent to read.
@@ -347,7 +350,7 @@ fn recorded_failure(id: &str, step: &str) -> Result<keyjutsu_core::agent::RunFai
 }
 
 pub fn revise(args: Revise<'_>) -> ExitCode {
-    let Revise { file, step, guidance, task, session, agent, send, out } = args;
+    let Revise { file, step, guidance, task, session, agent, send, out, profile } = args;
     let failure = match session.map(|id| recorded_failure(id, step)).transpose() {
         Ok(f) => f,
         Err(e) => {
@@ -367,17 +370,20 @@ pub fn revise(args: Revise<'_>) -> ExitCode {
     // What validation says about the step now, so the agent revises against
     // evidence rather than only the operator's words.
     let findings: Vec<String> = match keyjutsu_core::plan::ValidPlan::revalidate(plan.clone(), false) {
-        Ok(valid) => validation::validate(&valid, Options { dry_run: false, ..Options::default() })
-            .steps
-            .get(step)
-            .map(|s| {
-                s.evidence
-                    .iter()
-                    .filter(|e| e.result == EvidenceResult::Failed)
-                    .map(|e| format!("{}: {}", e.check, e.detail.clone().unwrap_or_default()))
-                    .collect()
-            })
-            .unwrap_or_default(),
+        Ok(valid) => validation::validate(
+            &valid,
+            Options { dry_run: false, profile: profile.clone(), ..Options::default() },
+        )
+        .steps
+        .get(step)
+        .map(|s| {
+            s.evidence
+                .iter()
+                .filter(|e| e.result == EvidenceResult::Failed)
+                .map(|e| format!("{}: {}", e.check, e.detail.clone().unwrap_or_default()))
+                .collect()
+        })
+        .unwrap_or_default(),
         Err(_) => Vec::new(),
     };
     println!("Revising step `{step}` with {} {}.", agent.kind.display_name(), agent.version);
@@ -395,7 +401,7 @@ pub fn revise(args: Revise<'_>) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let runner = ProcessRunner::default();
-    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2 };
+    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2, profile };
     match agents.revise_step(
         &agent,
         &task,
@@ -414,7 +420,14 @@ pub fn revise(args: Revise<'_>) -> ExitCode {
     }
 }
 
-pub fn review(file: &Path, task: Option<&str>, agent: &str, send: bool, record: Option<&Path>) -> ExitCode {
+pub fn review(
+    file: &Path,
+    task: Option<&str>,
+    agent: &str,
+    send: bool,
+    record: Option<&Path>,
+    profile: Option<Profile>,
+) -> ExitCode {
     let plan = match load(file) {
         Ok(p) => p,
         Err(c) => return c,
@@ -435,7 +448,7 @@ pub fn review(file: &Path, task: Option<&str>, agent: &str, send: bool, record: 
         return ExitCode::SUCCESS;
     }
     let runner = ProcessRunner::default();
-    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2 };
+    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 2, profile };
     match agents.review(&reviewer, &task, &plan) {
         Ok(r) => {
             if !r.summary.is_empty() {
@@ -476,7 +489,7 @@ pub fn check(live: bool) -> ExitCode {
         return ExitCode::from(2);
     }
     let runner = ProcessRunner { timeout: std::time::Duration::from_secs(180), ..ProcessRunner::default() };
-    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 0 };
+    let agents = Agents { runner: &runner, scratch: scratch(), max_repairs: 0, profile: None };
     let mut failures = 0;
     for info in detect_all().into_iter().filter(|a| a.installed()) {
         let handle = AgentHandle {

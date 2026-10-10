@@ -1,0 +1,17 @@
+# KeyJutsu's root work profile. Every other profile extends this one, or one
+# that does, so it holds only what is true of any work KeyJutsu plans.
+name = "developer"
+title = "Developer"
+summary = "Work on your own machine and your own code: the least KeyJutsu asks."
+instructions = """
+Keep changes inside the folders and tools the task names. Prefer what can be
+undone: a branch, a copy, a package version that can be pinned back.
+"""
+
+[validation]
+require_recovery_from = "critical"
+
+[[validation.raise]]
+commands = ["git push"]
+to = "high"
+reason = "publishes commits to a remote"

@@ -207,6 +207,10 @@ one that counts, and the step says so. Where KeyJutsu rates it high or
 critical, the step waits for your review; **Use KeyJutsu's rating**, under
 **What needs you**, accepts it, or **Ask the agent why**.
 
+For some work you'll want more than that: a recovery for every change, or
+nothing that touches a disk. A [work profile](work-profiles.md) asks for it,
+from the CLI with `--profile`.
+
 Validation looks at the machine as it is now, before anything has run. A step
 that needs a file an earlier step makes (step one prints `Cat.pdf`, step two
 opens it) would fail that check, so when the earlier step declares it creates

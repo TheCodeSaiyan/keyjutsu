@@ -1,0 +1,23 @@
+name = "it-operations"
+title = "IT Operations"
+extends = "helpdesk"
+summary = "Servers, directories and fleets: every change can be recovered from."
+instructions = """
+Every change says how to recover from it. Read the current state of what a
+step changes before changing it, in a step of its own, so the operator can see
+it. Name each target explicitly; do not act on everything a filter or wildcard
+finds.
+"""
+
+[validation]
+require_recovery_from = "normal"
+
+[[validation.raise]]
+commands = ["Set-AD*", "New-AD*", "Add-AD*", "Enable-AD*", "Disable-AD*", "Move-AD*", "Rename-AD*", "Unlock-AD*", "Set-Mg*", "New-Mg*", "Update-Mg*", "Invoke-Mg*", "Set-Gp*", "New-Gp*", "Set-DnsServer*", "Add-DnsServer*", "Set-DhcpServer*", "Add-DhcpServer*"]
+to = "high"
+reason = "changes a directory, Entra or Intune, Group Policy, DNS or DHCP"
+
+[[validation.raise]]
+commands = ["Remove-AD*", "Remove-Mg*", "Remove-Gp*", "Remove-DnsServer*", "Remove-DhcpServer*"]
+to = "critical"
+reason = "removes something from a directory, Entra or Intune, Group Policy, DNS or DHCP"

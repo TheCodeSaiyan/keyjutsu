@@ -353,7 +353,7 @@ fn handle(kind: AgentKind) -> Result<AgentHandle, String> {
 }
 
 fn agents(runner: &ProcessRunner) -> Agents<'_, ProcessRunner> {
-    Agents { runner, scratch: std::env::temp_dir(), max_repairs: 2 }
+    Agents { runner, scratch: std::env::temp_dir(), max_repairs: 2, profile: None }
 }
 
 /// A runner for a new agent request, which [`agent_stop`] can stop. A stop

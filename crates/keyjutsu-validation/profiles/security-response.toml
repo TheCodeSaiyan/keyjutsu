@@ -1,0 +1,21 @@
+name = "security-response"
+title = "Security response"
+extends = "it-operations"
+summary = "Responding to an incident: keep the evidence, change as little as possible."
+instructions = """
+Preserve evidence before changing anything: export logs, list processes,
+sessions and connections, and copy files you will touch, in steps of their
+own. Contain rather than clean up: isolate, disable, block. Never clear a log.
+"""
+
+[validation]
+require_recovery_from = "normal"
+
+[[validation.raise]]
+commands = ["Stop-Process", "taskkill", "Remove-Item", "del", "erase", "rd", "rmdir"]
+to = "high"
+reason = "destroys what may be evidence"
+
+[[validation.deny]]
+commands = ["Clear-EventLog", "Remove-EventLog", "Limit-EventLog", "wevtutil cl*", "wevtutil clear-log*", "Clear-RecycleBin", "Clear-History", "cipher /w*", "sdelete"]
+reason = "destroys evidence"
