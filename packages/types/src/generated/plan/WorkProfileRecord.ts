@@ -19,4 +19,20 @@ why?: string,
  * Steps at this risk or above need their own typed confirmation.
  * Without it, only critical ones do.
  */
-confirm_each_from?: RiskLevel, };
+confirm_each_from?: RiskLevel, 
+/**
+ * The folder the shell started in, as given.
+ */
+started_in?: string, 
+/**
+ * Where that folder really is, links and mapped drives followed.
+ */
+real_path?: string, 
+/**
+ * The hash of the folder's `.keyjutsu` files, when a folder chose it.
+ */
+folder_hash?: string, 
+/**
+ * Files left in `.keyjutsu` by Windows, Git or an editor, and ignored.
+ */
+leftovers?: Array<string>, };

@@ -97,6 +97,7 @@ fn successful_session(store: &Store) -> SessionRecord {
         checkpoint: Some(checkpoint),
         outcome,
         git: Vec::new(),
+        identity: None,
     };
     history::save(store, &record).unwrap();
     record

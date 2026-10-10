@@ -270,6 +270,36 @@ Helpdesk exactly as `Format-Volume -DriveLetter Z` is.
 A rule can name the start of the arguments too: `wevtutil cl*` refuses
 clearing an event log but not querying one.
 
+## The change record
+
+Every run kept in the history has a change record: the record to attach to a
+ticket for the change you made.
+
+```powershell
+keyjutsu history list
+keyjutsu history change-record 20261010-120000-cafe --out change.md
+```
+
+It says, in Markdown, or JSON with `--json`:
+
+- the task, the agent that planned it, when it ran, and the Windows account
+  that ran it;
+- how it ended;
+- the work profile and why it applied, every profile in its chain with where
+  it came from and a hash of its text, the folder the shell started in and
+  where that really is, and any leftovers ignored in `.keyjutsu`;
+- each step: its risk, when it was approved and whether with its own typed
+  confirmation and why, how it would be undone, its result, exit code and
+  checks, and what it ran;
+- what each step printed, if the run was recorded. Otherwise only a failed
+  step's output, which is kept with the outcome either way. Secrets are
+  redacted from output as in every export; names are not, because saying who
+  did what is the point of the record;
+- the Git changes the run made.
+
+It's built from the encrypted history each time you ask, so nothing is
+written in plain text until you choose where.
+
 ## Limits
 
 - **Nested code costs a second look.** Each level of nested PowerShell is
@@ -283,7 +313,9 @@ clearing an event log but not querying one.
   no recovery under any profile: KeyJutsu cannot run one for it.
 - **cmd.exe lines** are split on `&` and `|` outside quotes, not parsed by
   cmd itself, as everywhere else in validation.
-- **No change record yet.** The snapshot records the profile, but there is
-  no report of a run to attach to a ticket.
+- **The change record comes from the CLI.** The desktop app keeps the same
+  history, so `keyjutsu history change-record` works for its runs too.
+- **Runs from before this release** have no account in their record, and
+  their change record says so.
 - **One person approves.** Two-person approval is reserved in the format and
   refused until it exists.

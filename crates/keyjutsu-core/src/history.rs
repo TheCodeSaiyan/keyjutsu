@@ -35,6 +35,20 @@ pub struct SessionRecord {
     pub outcome: Outcome,
     #[serde(default)]
     pub git: Vec<RepoReport>,
+    /// The Windows account the run used, as DOMAIN\\name. Older records have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub identity: Option<String>,
+}
+
+/// The Windows account KeyJutsu runs as, as DOMAIN\\name, for a session's
+/// record: a change record names who made the change.
+pub fn identity() -> Option<String> {
+    let user = std::env::var("USERNAME").ok().filter(|u| !u.is_empty())?;
+    Some(match std::env::var("USERDOMAIN").ok().filter(|d| !d.is_empty()) {
+        Some(domain) => format!("{domain}\\{user}"),
+        None => user,
+    })
 }
 
 /// One line of the history list.
@@ -157,6 +171,7 @@ mod tests {
             agent: serde_json::from_value(serde_json::json!({"name": "codex", "version": "1"})).unwrap(),
             snapshot: "{}".into(),
             checkpoint: None,
+            identity: None,
             outcome: Outcome::Failed {
                 step: "push".into(),
                 expected: "exit code 0".into(),

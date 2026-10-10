@@ -32,7 +32,9 @@ filtering them out on the way.
 All of it on this machine, under `%LOCALAPPDATA%\KeyJutsu`:
 
 - **`store`**: the encrypted history of plan runs (the approved plan, its
-  checkpoint, the outcome and the Git changes it made), saved Techniques,
+  checkpoint, the outcome, the Git changes it made and the Windows account
+  that ran it, for its change record), saved Techniques, confirmations of a
+  folder's less strict work profile,
   and a record of each plan you approved and each checkpoint KeyJutsu wrote,
   so an edited or copied file is refused. Encrypted with AES-256-GCM under a
   key that only your Windows account on this machine can unlock (DPAPI).
@@ -41,7 +43,10 @@ All of it on this machine, under `%LOCALAPPDATA%\KeyJutsu`:
   snapshots you approved still run. `keyjutsu run --ephemeral` records
   nothing in the history.
 - **`runs`**: plans approved in the app, as readable JSON, with their
-  checkpoints.
+  checkpoints. A plan validated under a work profile records the folder the
+  shell started in and where that really is.
+- **`work-profile.toml` and `profiles`**: this machine's default work
+  profile and any profiles you wrote, as readable TOML.
 - **`artifacts`**: staged downloads and where each came from.
 - **`diagnostics`**: diagnostic bundles saved from the app, as plain text.
   They exist only when you save one; see below.

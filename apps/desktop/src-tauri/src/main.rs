@@ -121,13 +121,19 @@ fn shell_start() -> PathBuf {
 
 /// The work profile that applies now, if one does, and the view of it.
 fn current_profile(plans: &Plans) -> (Option<Profile>, ProfileView) {
+    let (chosen, view) = current_choice(plans);
+    (chosen.map(|c| c.profile), view)
+}
+
+/// As [`current_profile`], with where and why it applies.
+fn current_choice(plans: &Plans) -> (Option<work_profile::Chosen>, ProfileView) {
     let places = Places::default();
     let store = Store::open(&keyjutsu_core::store::default_root()).ok();
     let mut guard = locked(&plans.profile);
     let shell = guard.get_or_insert_with(|| ShellProfile::new(shell_start()));
     let (_, chosen) = shell.current(&places, store.as_ref());
     let view = shell.view(&places, store.as_ref());
-    (chosen.map(|c| c.profile), view)
+    (chosen, view)
 }
 
 /// Change the profile state with `f`, then show it as it now stands.
@@ -615,11 +621,11 @@ async fn workspace_validate(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceVie
     let plans = plans.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         with_workspace(&plans, |w| {
-            let (profile, view) = current_profile(&plans);
+            let chosen = current_choice(&plans).0;
             let options = Options {
                 broker_available: keyjutsu_broker::broker_path().is_some(),
-                profile_why: profile.is_some().then_some(view.why),
-                profile,
+                profile_context: chosen.as_ref().map(|c| c.context()).unwrap_or_default(),
+                profile: chosen.map(|c| c.profile),
                 ..Options::default()
             };
             w.validate(options, &fingerprint::now_rfc3339()).map_err(|e| e.to_string())
@@ -959,6 +965,7 @@ fn plan_run(
             checkpoint: Some(finished_checkpoint),
             outcome: outcome.clone(),
             git: git.clone(),
+            identity: keyjutsu_core::history::identity(),
         };
         let session = open_store()
             .and_then(|s| {

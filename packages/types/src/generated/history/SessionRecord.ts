@@ -8,4 +8,8 @@ export type SessionRecord = { id: string, started_at: string, finished_at: strin
 /**
  * The sealed snapshot, exactly as approved.
  */
-snapshot: string, checkpoint?: Checkpoint, outcome: Outcome, git: Array<RepoReport>, };
+snapshot: string, checkpoint?: Checkpoint, outcome: Outcome, git: Array<RepoReport>, 
+/**
+ * The Windows account the run used, as DOMAIN\\name. Older records have none.
+ */
+identity?: string, };

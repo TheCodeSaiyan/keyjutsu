@@ -968,6 +968,10 @@
                   },
                   "origin": {
                     "$ref": "#/$defs/text"
+                  },
+                  "hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
                   }
                 }
               }
@@ -977,6 +981,22 @@
             },
             "confirm_each_from": {
               "$ref": "#/$defs/risk_level"
+            },
+            "started_in": {
+              "$ref": "#/$defs/text"
+            },
+            "real_path": {
+              "$ref": "#/$defs/text"
+            },
+            "folder_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "leftovers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/text"
+              }
             }
           }
         }

@@ -72,3 +72,8 @@ missing recovery INVALID, since the agent can fix the plan.
   also refuses a step that needs a phrase it was approved without, so
   validating under a stricter profile after approving does not skip one.
   `approval.second_person` is reserved and refused.
+- The record also keeps where the shell started and where that really is,
+  the folder's hash, ignored leftovers, and a hash of each profile's text, so
+  a change record built from the session's encrypted record can say exactly
+  what the plan was approved under. A session record now names the Windows
+  account that ran it.

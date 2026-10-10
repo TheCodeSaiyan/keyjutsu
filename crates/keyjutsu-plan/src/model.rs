@@ -768,6 +768,21 @@ pub struct WorkProfileRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub confirm_each_from: Option<RiskLevel>,
+    /// The folder the shell started in, as given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub started_in: Option<String>,
+    /// Where that folder really is, links and mapped drives followed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub real_path: Option<String>,
+    /// The hash of the folder's `.keyjutsu` files, when a folder chose it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub folder_hash: Option<String>,
+    /// Files left in `.keyjutsu` by Windows, Git or an editor, and ignored.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leftovers: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
@@ -776,6 +791,10 @@ pub struct WorkProfileRecord {
 pub struct WorkProfileLink {
     pub name: String,
     pub origin: String,
+    /// SHA-256 of the profile's text as KeyJutsu read it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]

@@ -12,6 +12,7 @@ use keyjutsu_core::plan::model::{EvidenceResult, Readiness};
 use keyjutsu_core::plan::{
     ApprovalBook, ApprovedSnapshot, ValidPlan, diff as plan_diff, parse_plan, seal, step_hashes,
 };
+use keyjutsu_core::validation::ProfileContext;
 use keyjutsu_core::validation::profile::Profile;
 use keyjutsu_core::validation::{self, Options, Report};
 
@@ -80,7 +81,12 @@ fn print_report(plan: &ValidPlan, report: &Report) {
     }
 }
 
-pub fn validate(file: &Path, dry_run: bool, json: bool, profile: Option<(Profile, String)>) -> ExitCode {
+pub fn validate(
+    file: &Path,
+    dry_run: bool,
+    json: bool,
+    profile: Option<(Profile, ProfileContext)>,
+) -> ExitCode {
     let plan = match load_plan(file) {
         Ok(p) => p,
         Err(c) => return c,
@@ -91,7 +97,7 @@ pub fn validate(file: &Path, dry_run: bool, json: bool, profile: Option<(Profile
             dry_run,
             broker_available: keyjutsu_broker::broker_path().is_some(),
             profile: profile.as_ref().map(|(p, _)| p.clone()),
-            profile_why: profile.as_ref().map(|(_, why)| why.clone()),
+            profile_context: profile.as_ref().map(|(_, c)| c.clone()).unwrap_or_default(),
         },
     );
     if json {
@@ -138,7 +144,7 @@ pub fn approve(
     confirmations: &[String],
     force: bool,
     dry_run: bool,
-    profile: Option<(Profile, String)>,
+    profile: Option<(Profile, ProfileContext)>,
 ) -> ExitCode {
     if out.exists() && !force {
         eprintln!("keyjutsu: {} already exists; pass --force to replace it", out.display());
@@ -156,7 +162,7 @@ pub fn approve(
             dry_run,
             broker_available: keyjutsu_broker::broker_path().is_some(),
             profile: profile.as_ref().map(|(p, _)| p.clone()),
-            profile_why: profile.as_ref().map(|(_, why)| why.clone()),
+            profile_context: profile.as_ref().map(|(_, c)| c.clone()).unwrap_or_default(),
         },
     );
     let not_ready = report.not_ready(&draft);

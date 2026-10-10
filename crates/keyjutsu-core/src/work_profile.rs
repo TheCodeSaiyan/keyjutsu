@@ -114,6 +114,23 @@ pub struct Chosen {
     pub leftovers: Vec<String>,
 }
 
+impl Chosen {
+    /// What the plan records about why this profile applies.
+    pub fn context(&self) -> keyjutsu_validation::ProfileContext {
+        let folder_hash = match &self.why {
+            Why::Folder { hash, .. } | Why::ConfirmedFolder { hash, .. } => Some(hash.clone()),
+            _ => None,
+        };
+        keyjutsu_validation::ProfileContext {
+            why: Some(describe(&self.why)),
+            started_in: Some(self.start.typed.display().to_string()),
+            real_path: self.start.real.clone(),
+            folder_hash,
+            leftovers: self.leftovers.clone(),
+        }
+    }
+}
+
 /// A folder's default that needs the operator's confirmation first.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unconfirmed {
@@ -701,9 +718,9 @@ pub fn describe(why: &Why) -> String {
                 .unwrap_or(reason)
                 .trim_start_matches([',', ':', ';', ' ']);
             if reason.is_empty() {
-                format!("Chosen by hand for this window, instead of {other}.")
+                format!("Chosen by hand, instead of {other}.")
             } else {
-                format!("Chosen by hand for this window, instead of {other}: {reason}.")
+                format!("Chosen by hand, instead of {other}: {reason}.")
             }
         }
         Why::HandPicked { instead_of: None, reason } => {
@@ -711,7 +728,7 @@ pub fn describe(why: &Why) -> String {
                 .strip_prefix("chosen by hand")
                 .unwrap_or(reason)
                 .trim_start_matches([',', ':', ';', ' ']);
-            format!("Chosen by hand for this window: {reason}.")
+            format!("Chosen by hand: {reason}.")
         }
     }
 }

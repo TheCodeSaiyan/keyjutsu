@@ -50,14 +50,30 @@ pub struct Options {
     pub broker_available: bool,
     /// The work profile the plan is checked under, if any.
     pub profile: Option<profile::Profile>,
-    /// Why that profile applies, recorded with it in the plan.
-    pub profile_why: Option<String>,
+    /// Where and why that profile applies, recorded with it in the plan.
+    pub profile_context: ProfileContext,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { dry_run: true, broker_available: false, profile: None, profile_why: None }
+        Self {
+            dry_run: true,
+            broker_available: false,
+            profile: None,
+            profile_context: ProfileContext::default(),
+        }
     }
+}
+
+/// What the caller knows about why a work profile applies, which the plan
+/// records with it: validation itself sees only the profile.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProfileContext {
+    pub why: Option<String>,
+    pub started_in: Option<String>,
+    pub real_path: Option<String>,
+    pub folder_hash: Option<String>,
+    pub leftovers: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, ts_rs::TS)]
@@ -506,10 +522,18 @@ pub fn validate(plan: &ValidPlan, options: Options) -> Report {
         chain: p
             .chain
             .iter()
-            .map(|l| WorkProfileLink { name: l.name.clone(), origin: l.origin.to_string() })
+            .map(|l| WorkProfileLink {
+                name: l.name.clone(),
+                origin: l.origin.to_string(),
+                hash: Some(l.hash.clone()),
+            })
             .collect(),
-        why: options.profile_why.clone(),
+        why: options.profile_context.why.clone(),
         confirm_each_from: p.confirm_each_from,
+        started_in: options.profile_context.started_in.clone(),
+        real_path: options.profile_context.real_path.clone(),
+        folder_hash: options.profile_context.folder_hash.clone(),
+        leftovers: options.profile_context.leftovers.clone(),
     });
     Report { steps, assumptions, problems, work_profile }
 }
