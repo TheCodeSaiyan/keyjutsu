@@ -30,9 +30,12 @@ use keyjutsu_core::plan::model::Step;
 use keyjutsu_core::readiness::{self, ReadinessReport};
 use keyjutsu_core::recovery::{RecoveryItem, RecoveryResult, plan_recovery, recover, recovery_dir};
 use keyjutsu_core::session::is_terminal_report;
+use keyjutsu_core::store::Store;
 use keyjutsu_core::terminal::profile::{self, TerminalProfile};
 use keyjutsu_core::terminal::{KeyChord, TerminalSize};
 use keyjutsu_core::validation::Options;
+use keyjutsu_core::validation::profile::Profile;
+use keyjutsu_core::work_profile::{self, Decision, Places, ProfileView, ShellProfile};
 use keyjutsu_core::workspace::{Workspace, WorkspaceView, run_folder};
 use keyjutsu_core::{CoreError, Session, SessionEvent, SessionOptions, SessionSink, demo};
 use keyjutsu_core::{fingerprint, git};
@@ -101,6 +104,87 @@ struct Plans {
     answer: Arc<(Mutex<Option<Option<String>>>, Condvar)>,
     /// Set to stop the agent request in progress. One runs at a time.
     agent_stop: Arc<AtomicBool>,
+    /// The work profile for this window's shell, with any profile picked by
+    /// hand in it. Decided again before every plan.
+    profile: Mutex<Option<ShellProfile>>,
+}
+
+/// The folder this window's shell starts in: the launch folder, or the
+/// user's home folder, where a shell starts without one.
+fn shell_start() -> PathBuf {
+    LAUNCH_FOLDER
+        .get()
+        .cloned()
+        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
+        .unwrap_or_else(std::env::temp_dir)
+}
+
+/// The work profile that applies now, if one does, and the view of it.
+fn current_profile(plans: &Plans) -> (Option<Profile>, ProfileView) {
+    let places = Places::default();
+    let store = Store::open(&keyjutsu_core::store::default_root()).ok();
+    let mut guard = locked(&plans.profile);
+    let shell = guard.get_or_insert_with(|| ShellProfile::new(shell_start()));
+    let (_, chosen) = shell.current(&places, store.as_ref());
+    let view = shell.view(&places, store.as_ref());
+    (chosen.map(|c| c.profile), view)
+}
+
+/// Change the profile state with `f`, then show it as it now stands.
+fn change_profile(
+    plans: &Plans,
+    f: impl FnOnce(&mut ShellProfile, &Places, Option<&Store>) -> Result<(), String>,
+) -> Result<ProfileView, String> {
+    let places = Places::default();
+    let store = Store::open(&keyjutsu_core::store::default_root()).ok();
+    {
+        let mut guard = locked(&plans.profile);
+        let shell = guard.get_or_insert_with(|| ShellProfile::new(shell_start()));
+        f(shell, &places, store.as_ref())?;
+    }
+    Ok(current_profile(plans).1)
+}
+
+/// Which work profile applies to plans made in this window, and why.
+#[tauri::command]
+fn profile_view(plans: State<'_, Arc<Plans>>) -> ProfileView {
+    current_profile(&plans).1
+}
+
+/// Make `name` this machine's default work profile.
+#[tauri::command]
+fn profile_set_default(name: String, plans: State<'_, Arc<Plans>>) -> Result<ProfileView, String> {
+    change_profile(&plans, |_, places, _| work_profile::set_machine_default(places, &name))
+}
+
+/// Accept the folder's less strict profile, for its files as they are now.
+#[tauri::command]
+fn profile_confirm(plans: State<'_, Arc<Plans>>) -> Result<ProfileView, String> {
+    change_profile(&plans, |shell, places, store| {
+        let store = store.ok_or("the encrypted store cannot be opened to keep the confirmation")?;
+        let (decision, _) = shell.current(places, Some(store));
+        match decision {
+            Decision::NeedsConfirmation(u) => {
+                work_profile::confirm(store, &u, &fingerprint::now_rfc3339()).map(|_| ())
+            }
+            _ => Err("there is nothing to confirm".into()),
+        }
+    })
+}
+
+/// Use `name` for this window, instead of what the folder or machine says.
+#[tauri::command]
+fn profile_pick(name: String, plans: State<'_, Arc<Plans>>) -> Result<ProfileView, String> {
+    change_profile(&plans, |shell, places, store| shell.pick(places, store, &name).map(|_| ()))
+}
+
+/// Go back to what the folder or machine says.
+#[tauri::command]
+fn profile_clear_pick(plans: State<'_, Arc<Plans>>) -> Result<ProfileView, String> {
+    change_profile(&plans, |shell, _, _| {
+        shell.clear_pick();
+        Ok(())
+    })
 }
 
 #[derive(Clone)]
@@ -352,8 +436,8 @@ fn handle(kind: AgentKind) -> Result<AgentHandle, String> {
     }
 }
 
-fn agents(runner: &ProcessRunner) -> Agents<'_, ProcessRunner> {
-    Agents { runner, scratch: std::env::temp_dir(), max_repairs: 2, profile: None }
+fn agents(runner: &ProcessRunner, profile: Option<Profile>) -> Agents<'_, ProcessRunner> {
+    Agents { runner, scratch: std::env::temp_dir(), max_repairs: 2, profile }
 }
 
 /// A runner for a new agent request, which [`agent_stop`] can stop. A stop
@@ -451,6 +535,9 @@ async fn workspace_propose(
     let plans = plans.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let handle = handle(agent)?;
+        // Making a plan needs a work profile: the agent is told its rules.
+        let (profile, view) = current_profile(&plans);
+        let profile = profile.ok_or_else(|| format!("Choose a work profile first. {}", view.why))?;
         // What the agent writes for: this machine's versions and folders.
         let mut items = vec![ContextItem::Text {
             label: "this machine".into(),
@@ -461,8 +548,14 @@ async fn workspace_propose(
         }
         let prepared = prepare(&items).map_err(|e| e.to_string())?;
         let runner = agent_runner(&plans);
-        let w = Workspace::propose(&agents(&runner), &handle, &task, &prepared, &fingerprint::now_rfc3339())
-            .map_err(|e| e.to_string())?;
+        let w = Workspace::propose(
+            &agents(&runner, Some(profile)),
+            &handle,
+            &task,
+            &prepared,
+            &fingerprint::now_rfc3339(),
+        )
+        .map_err(|e| e.to_string())?;
         let view = w.view();
         *locked(&plans.workspace) = Some(w);
         *locked(&plans.sealed) = None;
@@ -522,8 +615,11 @@ async fn workspace_validate(plans: State<'_, Arc<Plans>>) -> Result<WorkspaceVie
     let plans = plans.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         with_workspace(&plans, |w| {
-            let options =
-                Options { broker_available: keyjutsu_broker::broker_path().is_some(), ..Options::default() };
+            let options = Options {
+                broker_available: keyjutsu_broker::broker_path().is_some(),
+                profile: current_profile(&plans).0,
+                ..Options::default()
+            };
             w.validate(options, &fingerprint::now_rfc3339()).map_err(|e| e.to_string())
         })
     })
@@ -559,7 +655,7 @@ async fn agent_request(
     tauri::async_runtime::spawn_blocking(move || {
         let handle = handle(agent)?;
         let runner = agent_runner(&plans);
-        let a = agents(&runner);
+        let a = agents(&runner, current_profile(&plans).0);
         // Work on a copy so the draft stays usable while the agent thinks.
         let mut copy = locked(&plans.workspace).clone().ok_or("there is no plan open")?;
         f(&mut copy, &a, &handle, &fingerprint::now_rfc3339())?;
@@ -1213,6 +1309,11 @@ fn main() {
         .manage(Arc::new(Diagnostics::default()))
         .manage(Arc::new(Updates::default()))
         .invoke_handler(tauri::generate_handler![
+            profile_view,
+            profile_set_default,
+            profile_confirm,
+            profile_pick,
+            profile_clear_pick,
             readiness_scan,
             open_link,
             run_waiting,

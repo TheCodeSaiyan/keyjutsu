@@ -197,3 +197,33 @@ fn a_starting_folder_that_cannot_be_resolved_is_broken() {
     let Decision::Broken { start, .. } = &d else { unreachable!() };
     assert_eq!(start.real, None);
 }
+
+#[test]
+fn a_hand_pick_lasts_until_what_it_was_picked_against_changes() {
+    use keyjutsu_core::work_profile::{ProfileState, ShellProfile};
+    let s = Scene::new("pick");
+    set_machine_default(&s.places, "it-operations").unwrap();
+    s.write(".keyjutsu/profile.toml", "default = \"developer\"\n");
+    let mut shell = ShellProfile::new(s.work());
+    assert_eq!(shell.view(&s.places, Some(&s.store)).state, ProfileState::NeedsConfirmation);
+
+    shell.pick(&s.places, Some(&s.store), "audit-only").unwrap();
+    let v = shell.view(&s.places, Some(&s.store));
+    assert_eq!((v.state, v.name.as_deref(), v.hand_picked), (ProfileState::Chosen, Some("audit-only"), true));
+    assert!(
+        v.choices
+            .iter()
+            .any(|c| c.name == "security-response" && c.extends.as_deref() == Some("it-operations"))
+    );
+
+    // The folder's files change: the pick no longer stands.
+    s.write(".keyjutsu/profile.toml", "default = \"packaging\"\n");
+    let v = shell.view(&s.places, Some(&s.store));
+    assert_eq!(v.state, ProfileState::NeedsConfirmation, "{v:#?}");
+    assert!(!v.hand_picked);
+
+    // A new shell in the same folder starts with no pick.
+    let mut other = ShellProfile::new(s.work());
+    shell.pick(&s.places, Some(&s.store), "audit-only").unwrap();
+    assert_eq!(other.view(&s.places, Some(&s.store)).state, ProfileState::NeedsConfirmation);
+}

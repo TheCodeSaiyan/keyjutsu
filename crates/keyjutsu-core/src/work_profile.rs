@@ -491,6 +491,231 @@ fn confirmation_id(dir: &str, hash: &str) -> String {
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// How the profile stands for a shell, as the desktop app shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "workspace/")]
+pub enum ProfileState {
+    /// A profile applies, and plans can be made.
+    Chosen,
+    /// The folder asks for less than the machine; confirm it or pick another.
+    NeedsConfirmation,
+    /// The folder cannot be used; pick a profile by hand.
+    Broken,
+    /// Nothing is set; choose this machine's default.
+    NoDefault,
+}
+
+/// One profile the operator can choose.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "workspace/")]
+pub struct ProfileChoice {
+    pub name: String,
+    pub title: String,
+    pub summary: Option<String>,
+    pub extends: Option<String>,
+}
+
+/// Everything the desktop app shows about the work profile.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
+#[ts(export, export_to = "workspace/")]
+pub struct ProfileView {
+    pub state: ProfileState,
+    /// The profile that applies, when one does.
+    pub name: Option<String>,
+    pub title: Option<String>,
+    /// Why it applies, or what stops one applying, in a sentence.
+    pub why: String,
+    /// The folder's less strict profile awaiting confirmation, by title.
+    pub folder_profile: Option<String>,
+    pub machine_default: Option<String>,
+    pub hand_picked: bool,
+    pub started_in: String,
+    /// The real path, when it differs from where the shell started.
+    pub real_path: Option<String>,
+    pub leftovers: Vec<String>,
+    pub choices: Vec<ProfileChoice>,
+}
+
+/// A profile picked by hand, and what it was picked against: when that
+/// changes (the folder's files, the machine's default), the pick no longer
+/// stands and the operator is asked again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Pick {
+    name: String,
+    basis: String,
+}
+
+/// The work profile for one shell: where it started, and any profile picked
+/// by hand in it. A pick lasts as long as the shell, so a shell restored
+/// after a restart, being a new one, asks again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShellProfile {
+    start: PathBuf,
+    pick: Option<Pick>,
+}
+
+/// What a decision rested on, for telling whether a pick still stands.
+fn basis(d: &Decision) -> String {
+    match d {
+        Decision::Chosen(c) => match &c.why {
+            Why::Folder { hash, .. } | Why::ConfirmedFolder { hash, .. } => {
+                format!("folder {hash} {}", c.profile.name())
+            }
+            _ => format!("chosen {}", c.profile.name()),
+        },
+        Decision::NeedsConfirmation(u) => format!("confirm {} {}", u.hash, u.machine_profile),
+        Decision::Broken { reason, .. } => format!("broken {reason}"),
+        Decision::NoDefault { .. } => "none".into(),
+    }
+}
+
+impl ShellProfile {
+    pub fn new(start: PathBuf) -> Self {
+        Self { start, pick: None }
+    }
+
+    /// Decide again, as before every plan, keeping a hand pick only while
+    /// what it was picked against is unchanged.
+    pub fn current(&mut self, places: &Places, store: Option<&Store>) -> (Decision, Option<Chosen>) {
+        let decision = decide(places, store, &self.start);
+        if let Some(pick) = &self.pick {
+            if pick.basis == basis(&decision)
+                && let Ok(c) = hand_pick(places, &decision, &pick.name)
+            {
+                return (decision, Some(c));
+            }
+            self.pick = None;
+        }
+        let chosen = match &decision {
+            Decision::Chosen(c) => Some(c.clone()),
+            _ => None,
+        };
+        (decision, chosen)
+    }
+
+    /// Pick `name` by hand for this shell.
+    pub fn pick(&mut self, places: &Places, store: Option<&Store>, name: &str) -> Result<Chosen, String> {
+        let decision = decide(places, store, &self.start);
+        let chosen = hand_pick(places, &decision, name)?;
+        self.pick = Some(Pick { name: name.to_owned(), basis: basis(&decision) });
+        Ok(chosen)
+    }
+
+    /// Drop a hand pick, going back to what the folder or machine says.
+    pub fn clear_pick(&mut self) {
+        self.pick = None;
+    }
+
+    pub fn view(&mut self, places: &Places, store: Option<&Store>) -> ProfileView {
+        let (decision, chosen) = self.current(places, store);
+        let machine_default = machine_default(places).ok().flatten();
+        let choices = catalogue(places, &self.start)
+            .map(|c| {
+                c.names()
+                    .into_iter()
+                    .filter_map(|(name, title)| {
+                        let p = c.resolve(&name).ok()?;
+                        Some(ProfileChoice {
+                            summary: p.chain[0].summary.clone(),
+                            extends: p.chain.get(1).map(|l| l.name.clone()),
+                            name,
+                            title,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let start = match &decision {
+            Decision::Chosen(c) => c.start.clone(),
+            Decision::NeedsConfirmation(u) => u.start.clone(),
+            Decision::Broken { start, .. } | Decision::NoDefault { start } => start.clone(),
+        };
+        let started_in = start.typed.display().to_string();
+        let real_path = start.real.filter(|r| Path::new(r) != start.typed);
+        let base = ProfileView {
+            state: ProfileState::Chosen,
+            name: None,
+            title: None,
+            why: String::new(),
+            folder_profile: None,
+            machine_default,
+            hand_picked: false,
+            started_in,
+            real_path,
+            leftovers: Vec::new(),
+            choices,
+        };
+        if let Some(c) = chosen {
+            return ProfileView {
+                name: Some(c.profile.name().to_owned()),
+                title: Some(c.profile.title().to_owned()),
+                why: describe(&c.why),
+                hand_picked: matches!(c.why, Why::HandPicked { .. }),
+                leftovers: c.leftovers,
+                ..base
+            };
+        }
+        match decision {
+            Decision::NeedsConfirmation(u) => ProfileView {
+                state: ProfileState::NeedsConfirmation,
+                why: format!(
+                    "{} chooses {}, which asks for less than this machine's {}.",
+                    u.dir,
+                    u.folder_profile.title(),
+                    u.machine_profile
+                ),
+                folder_profile: Some(u.folder_profile.title().to_owned()),
+                ..base
+            },
+            Decision::Broken { reason, .. } => {
+                ProfileView { state: ProfileState::Broken, why: sentence(&reason), ..base }
+            }
+            Decision::NoDefault { .. } | Decision::Chosen(_) => ProfileView {
+                state: ProfileState::NoDefault,
+                why: "No work profile is set for this machine yet.".into(),
+                ..base
+            },
+        }
+    }
+}
+
+/// `text` as a sentence: a capital first letter and a full stop.
+fn sentence(text: &str) -> String {
+    let mut chars = text.chars();
+    let first = chars.next().map(|c| c.to_uppercase().collect::<String>()).unwrap_or_default();
+    let rest: String = chars.collect();
+    let end = if rest.ends_with('.') { "" } else { "." };
+    format!("{first}{rest}{end}")
+}
+
+/// Why a profile applies, in a sentence.
+pub fn describe(why: &Why) -> String {
+    match why {
+        Why::Folder { dir, .. } => format!("Set by {dir}."),
+        Why::ConfirmedFolder { dir, .. } => format!("Set by {dir}, which you confirmed."),
+        Why::Machine => "This machine's default.".into(),
+        Why::HandPicked { instead_of: Some(other), reason } => {
+            let reason = reason
+                .strip_prefix("chosen by hand")
+                .unwrap_or(reason)
+                .trim_start_matches([',', ':', ';', ' ']);
+            if reason.is_empty() {
+                format!("Chosen by hand for this window, instead of {other}.")
+            } else {
+                format!("Chosen by hand for this window, instead of {other}: {reason}.")
+            }
+        }
+        Why::HandPicked { instead_of: None, reason } => {
+            let reason = reason
+                .strip_prefix("chosen by hand")
+                .unwrap_or(reason)
+                .trim_start_matches([',', ':', ';', ' ']);
+            format!("Chosen by hand for this window: {reason}.")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

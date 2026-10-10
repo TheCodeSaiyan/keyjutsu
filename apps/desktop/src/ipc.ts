@@ -41,6 +41,15 @@ export const ipc = {
   /** Install the release last shown; the app closes once its installer starts. */
   updateInstall: () => invoke<void>("update_install"),
   terminalProfile: () => invoke<TerminalProfile>("terminal_profile"),
+  /** Which work profile applies to plans made in this window, and why. */
+  profileView: () => invoke<workspace.ProfileView>("profile_view"),
+  profileSetDefault: (name: string) =>
+    invoke<workspace.ProfileView>("profile_set_default", { name }),
+  /** Accept the folder's less strict profile, for its files as they are now. */
+  profileConfirm: () => invoke<workspace.ProfileView>("profile_confirm"),
+  /** Use a profile for this window instead of what the folder or machine says. */
+  profilePick: (name: string) => invoke<workspace.ProfileView>("profile_pick", { name }),
+  profileClearPick: () => invoke<workspace.ProfileView>("profile_clear_pick"),
 
   openTerminal: (request: OpenRequest, onMessage: (m: TerminalMessage) => void) => {
     const channel = new Channel<TerminalMessage>();

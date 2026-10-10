@@ -1,6 +1,7 @@
-import { useState } from "react";
-import type { agent, ReadinessReport } from "@keyjutsu/types";
+import { useEffect, useState } from "react";
+import type { agent, workspace, ReadinessReport } from "@keyjutsu/types";
 import { ipc } from "../ipc";
+import { WorkProfile } from "./WorkProfile";
 
 interface Props {
   agents: agent.AgentInfo[] | null;
@@ -21,6 +22,15 @@ export function NewTask({ agents, report, busy, onPlan, onOpen }: Props) {
   const [chosen, setChosen] = useState<agent.AgentKind | "">("");
   const [showContext, setShowContext] = useState(false);
   const [context, setContext] = useState("");
+  // Decided by Rust from the folder and the machine, asked for afresh each
+  // time the page opens, as it is again before the plan is made.
+  const [profile, setProfile] = useState<workspace.ProfileView | null>(null);
+  useEffect(() => {
+    ipc
+      .profileView()
+      .then(setProfile)
+      .catch(() => setProfile(null));
+  }, []);
   const agentKind = chosen || installed[0]?.kind;
   // The shell a new terminal opens: PowerShell 7 if it's installed,
   // otherwise the first one found, which on a clean Windows is Windows
@@ -89,13 +99,14 @@ export function NewTask({ agents, report, busy, onPlan, onOpen }: Props) {
           </label>
           <button
             className="primary"
-            disabled={busy || !task.trim() || !agentKind}
+            disabled={busy || !task.trim() || !agentKind || profile?.state !== "chosen"}
             onClick={() => agentKind && onPlan(task.trim(), agentKind, context)}
           >
             {busy ? "Planning…" : "Plan task →"}
           </button>
         </div>
       </div>
+      {profile && <WorkProfile view={profile} onChange={setProfile} />}
       {showContext && (
         <p className="muted small">
           Sent with the task:{" "}

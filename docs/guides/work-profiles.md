@@ -9,8 +9,13 @@ one is not ready, however it was written.
 
 There are six built in, and you can write your own on top of them. Which
 one applies is set for the machine, or for a folder and everything in it, and
-you can always choose another by hand. The desktop app doesn't show profiles
-yet; this page uses the CLI.
+you can always choose another by hand.
+
+In the desktop app, the profile is under the task box: its name, why it
+applies, and **Change…**. Plan stays unavailable until one applies. When a
+folder asks for less, can't be used, or nothing is set, the same place says
+so and offers the choice. A profile picked there with **Use for this window**
+lasts until the window closes. This page shows the CLI, which does the same.
 
 ## The six profiles
 
@@ -111,7 +116,9 @@ ignored wherever they are, and kept out of the confirmation.
 
 `--profile NAME` on any plan command uses that profile instead, whatever the
 folder or machine says, and the command says what it overrode. It lasts for
-that one command.
+that one command. In the desktop app a pick lasts for the window, and is
+dropped as soon as what it overrode changes: the folder's files, or the
+machine's default.
 
 ## Profiles of your own
 
