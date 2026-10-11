@@ -107,6 +107,10 @@ export const ipc = {
   /** Recorded runs, newest first. */
   history: () => invoke<history.SessionSummary[]>("history_list"),
   historyShow: (id: string) => invoke<history.SessionRecord>("history_show", { id }),
+  /** A run's change record, as Markdown, to attach to a ticket. */
+  changeRecord: (id: string) => invoke<string>("change_record_show", { id }),
+  /** Write a run's change record out and show it in Explorer; returns where. */
+  saveChangeRecord: (id: string) => invoke<string>("change_record_save", { id }),
   /** Make a completed run a Technique; each pair is a parameter and the value it stands for. */
   promote: (session: string, name: string, description: string, params: [string, string][]) =>
     invoke<technique.Technique>("technique_promote", { session, name, description, params }),

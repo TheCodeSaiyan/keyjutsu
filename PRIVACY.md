@@ -50,6 +50,9 @@ All of it on this machine, under `%LOCALAPPDATA%\KeyJutsu`:
 - **`artifacts`**: staged downloads and where each came from.
 - **`diagnostics`**: diagnostic bundles saved from the app, as plain text.
   They exist only when you save one; see below.
+- **`change-records`**: change records saved from History, as plain
+  Markdown. Each names the Windows account that ran the run and what each
+  step ran, with secrets redacted, and exists only when you save one.
 - **Recovery captures**, beside a run's checkpoint: copies of what a
   reversible step said it would change, taken just before it ran, so it can
   be put back.

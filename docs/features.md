@@ -198,6 +198,11 @@ worked can become a Technique, with parameters, to use again. A Technique
 never runs because it worked before: it makes a draft that's validated and
 approved here, with a note of which steps are on unfamiliar ground.
 
+Every run has a change record to attach to a ticket: the work profile it was
+approved under and why, who ran it, each step's approval, what ran and how it
+ended. **Change record…** in History shows it, copies it or saves it as
+Markdown; `keyjutsu history change-record` writes Markdown or JSON.
+
 A run can also be recorded, when you tick **Record**, and exported as a
 soundless video, a GIF, an asciicast or a step-by-step guide: the whole run,
 some of its steps, or each step on its own, with secrets taken out and a

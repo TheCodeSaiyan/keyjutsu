@@ -273,7 +273,10 @@ clearing an event log but not querying one.
 ## The change record
 
 Every run kept in the history has a change record: the record to attach to a
-ticket for the change you made.
+ticket for the change you made. In the app, choose the run in **History**
+and **Change record…**: it's shown first, then **Copy** puts it on the
+clipboard and **Save as Markdown** writes it to the `change-records` folder
+and shows it in Explorer. From the CLI:
 
 ```powershell
 keyjutsu history list
@@ -313,8 +316,9 @@ written in plain text until you choose where.
   no recovery under any profile: KeyJutsu cannot run one for it.
 - **cmd.exe lines** are split on `&` and `|` outside quotes, not parsed by
   cmd itself, as everywhere else in validation.
-- **The change record comes from the CLI.** The desktop app keeps the same
-  history, so `keyjutsu history change-record` works for its runs too.
+- **The app saves only Markdown.** JSON, and writing to a file of your
+  choosing, come from `keyjutsu history change-record`, which reads the
+  same history as the app.
 - **Runs from before this release** have no account in their record, and
   their change record says so.
 - **One person approves.** Two-person approval is reserved in the format and
