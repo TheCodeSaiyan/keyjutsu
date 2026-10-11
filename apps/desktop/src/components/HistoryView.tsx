@@ -10,6 +10,7 @@ import {
   stoppedBecause,
   when,
 } from "../history";
+import { ChangeRecord } from "./ChangeRecord";
 import { MakeTechnique } from "./MakeTechnique";
 
 interface Props {
@@ -23,13 +24,14 @@ interface Props {
 /**
  * Past runs, from the encrypted history on this machine, newest first: what
  * each did, step by step, when, for how long, and why it stopped if it did.
- * A recorded run can be exported; a run that completed can become a
- * Technique.
+ * Every run has a change record; a recorded run can be exported; a run
+ * that completed can become a Technique.
  */
 export function HistoryView({ busy, onPromoted, onExport }: Props) {
   const [runs, setRuns] = useState<history.SessionSummary[] | null>(null);
   const [selected, setSelected] = useState<history.SessionRecord | null>(null);
   const [promoting, setPromoting] = useState(false);
+  const [recordShown, setRecordShown] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The run the operator chose: a later answer for another run, such as the
@@ -40,6 +42,7 @@ export function HistoryView({ busy, onPromoted, onExport }: Props) {
     wanted.current = id;
     setError(null);
     setPromoting(false);
+    setRecordShown(false);
     try {
       const record = await ipc.historyShow(id);
       if (wanted.current === id) setSelected(record);
@@ -146,6 +149,9 @@ export function HistoryView({ busy, onPromoted, onExport }: Props) {
                 </ol>
 
                 <div className="row">
+                  {!recordShown && (
+                    <button onClick={() => setRecordShown(true)}>Change record…</button>
+                  )}
                   {summary?.recorded && (
                     <button onClick={() => onExport(selected.id)}>Export the recording…</button>
                   )}
@@ -153,6 +159,7 @@ export function HistoryView({ busy, onPromoted, onExport }: Props) {
                     <button onClick={() => setPromoting(true)}>Make it a Technique…</button>
                   )}
                 </div>
+                {recordShown && <ChangeRecord key={selected.id} session={selected.id} />}
                 {selected.outcome.kind === "complete" && promoting && (
                   <MakeTechnique
                     key={selected.id}

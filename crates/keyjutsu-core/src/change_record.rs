@@ -298,6 +298,24 @@ impl ChangeRecord {
     }
 }
 
+/// Where the desktop app saves change records: a folder beside the store.
+pub fn default_dir() -> std::path::PathBuf {
+    crate::store::default_root().with_file_name("change-records")
+}
+
+/// Write `markdown`, the change record of `session`, to `dir`, and say where.
+/// Saving the same session again replaces the file: it is built from the
+/// same history, so it says the same.
+pub fn save(session: &str, markdown: &str, dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    if session.is_empty() || !session.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(format!("{session:?} is not a session id"));
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    let file = dir.join(format!("change-record-{session}.md"));
+    std::fs::write(&file, markdown).map_err(|e| format!("could not write {}: {e}", file.display()))?;
+    Ok(file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

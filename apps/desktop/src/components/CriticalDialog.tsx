@@ -141,7 +141,7 @@ export function CriticalDialog({ confirmation: c, purpose, onConfirm, onCancel, 
               {purpose === "run" ? "Stop here" : "Cancel"}
             </button>
             <button type="submit" className="destructive" disabled={!matches}>
-              {purpose === "run" ? "Run critical step" : "Approve critical step"}
+              {`${purpose === "run" ? "Run" : "Approve"} ${critical ? "critical step" : "this step"}`}
             </button>
           </div>
         </form>

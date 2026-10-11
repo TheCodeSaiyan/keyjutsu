@@ -1156,6 +1156,38 @@ fn history_show(id: String) -> Result<keyjutsu_core::history::SessionRecord, Str
     keyjutsu_core::history::load(&open_store()?, &id)
 }
 
+/// The change record of run `id`, as Markdown, built from the encrypted
+/// history as the CLI builds it.
+fn change_record(id: &str) -> Result<String, String> {
+    let store = open_store()?;
+    let record = keyjutsu_core::history::load(&store, id)?;
+    let recording = keyjutsu_core::history::load_recording(&store, id)?;
+    Ok(keyjutsu_core::change_record::build(&record, recording.as_ref())?.markdown())
+}
+
+#[tauri::command]
+async fn change_record_show(id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || change_record(&id)).await.map_err(|e| e.to_string())?
+}
+
+/// Write run `id`'s change record out as Markdown and show it in Explorer.
+#[tauri::command]
+async fn change_record_save(id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = keyjutsu_core::change_record::save(
+            &id,
+            &change_record(&id)?,
+            &keyjutsu_core::change_record::default_dir(),
+        )?;
+        let mut select = std::ffi::OsString::from("/select,");
+        select.push(&file);
+        let _ = keyjutsu_core::terminal::shell::command("explorer.exe").arg(select).spawn();
+        Ok(file.display().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Make a completed run into a Technique. Each pair is a parameter's name and
 /// the value in the run's plan that it stands for.
 #[tauri::command]
@@ -1366,6 +1398,8 @@ fn main() {
             workspace_fix_failure,
             history_list,
             history_show,
+            change_record_show,
+            change_record_save,
             technique_promote,
             technique_list,
             technique_use,

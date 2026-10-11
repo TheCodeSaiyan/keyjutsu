@@ -3,7 +3,7 @@
 
 #![allow(clippy::unwrap_used)] // Helpers outside #[test] functions may unwrap too.
 
-use keyjutsu_core::change_record::build;
+use keyjutsu_core::change_record::{build, save};
 use keyjutsu_core::execute::{CheckResult, Checkpoint, Outcome, StepRun};
 use keyjutsu_core::history::SessionRecord;
 use keyjutsu_core::plan::{ApprovalBook, parse_plan, seal};
@@ -113,6 +113,21 @@ fn a_change_record_says_what_was_approved_under_what_and_what_happened() {
         "What the steps printed is not included, apart from a failed step's: the run was not recorded.",
     ] {
         assert!(md.contains(expected), "missing {expected:?} in\n{md}");
+    }
+}
+
+#[test]
+fn a_saved_change_record_is_named_after_its_session_and_replaced_by_the_next() {
+    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("change-record-save");
+    let _ = std::fs::remove_dir_all(&dir);
+    let md = build(&record(), None).unwrap().markdown();
+    let file = save("20261010-120000-abcd", "old", &dir).unwrap();
+    assert_eq!(save("20261010-120000-abcd", &md, &dir).unwrap(), file);
+    assert_eq!(file.file_name().unwrap(), "change-record-20261010-120000-abcd.md");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), md);
+    // Only a session id names a file: nothing can be written elsewhere.
+    for bad in ["", "..", "a/b", "..\\up"] {
+        assert!(save(bad, &md, &dir).is_err(), "{bad:?}");
     }
 }
 
